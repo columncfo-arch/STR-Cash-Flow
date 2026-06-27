@@ -18,8 +18,8 @@
       "id": "src-booking-1",
       "platform": "booking",
       "name": "Booking.com",
-      "url": "https://www.booking.com/Pulse-GGdy9l",
-      "enabled": false
+      "url": "https://ical.booking.com/v1/export?t=7922fa33-03ab-4c89-9ce1-fec6d5f99307",
+      "enabled": true
     }
   ],
   "defaultNightlyRate": 0,
