@@ -8,14 +8,12 @@ const REDIS_BOOKINGS_KEY = 'str:bookings';
 const REDIS_EXPENSES_KEY = 'str:expenses';
 
 const DEFAULT_SETTINGS: Settings = {
-  sources: [],
-  defaultNightlyRate: 0,
   currency: 'USD',
   propertyName: 'My STR Property',
   monthlyPITI: 0,
 };
 
-// ─── Redis backend (Vercel production) ────────────────────────────────────────
+// ─── Redis backend ─────────────────────────────────────────────────────────────
 
 let _redis: import('redis').RedisClientType | null = null;
 
@@ -43,7 +41,6 @@ async function redisSet(key: string, value: unknown): Promise<void> {
 
 const IS_VERCEL = Boolean(process.env.VERCEL);
 const DATA_DIR = IS_VERCEL ? '/tmp/str-data' : path.join(process.cwd(), 'data');
-const SEED_SETTINGS = path.join(process.cwd(), 'data', 'settings.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const BOOKINGS_FILE = path.join(DATA_DIR, 'bookings.json');
 const EXPENSES_FILE = path.join(DATA_DIR, 'expenses.json');
@@ -52,14 +49,11 @@ async function ensureDir() {
   if (!existsSync(DATA_DIR)) await mkdir(DATA_DIR, { recursive: true });
 }
 
-async function fileLoad<T>(file: string, fallback: T, seedFile?: string): Promise<T> {
+async function fileLoad<T>(file: string, fallback: T): Promise<T> {
   await ensureDir();
   try {
     return JSON.parse(await readFile(file, 'utf-8')) as T;
   } catch {
-    if (seedFile) {
-      try { return JSON.parse(await readFile(seedFile, 'utf-8')) as T; } catch { /* ignore */ }
-    }
     return fallback;
   }
 }
@@ -74,20 +68,10 @@ async function fileSave(file: string, value: unknown): Promise<void> {
 const useRedis = Boolean(process.env.REDIS_URL);
 
 export async function loadSettings(): Promise<Settings> {
-  if (!useRedis) {
-    const s = await fileLoad(SETTINGS_FILE, DEFAULT_SETTINGS, SEED_SETTINGS);
-    return { ...DEFAULT_SETTINGS, ...s };
-  }
-  const existing = await redisGet<Settings | null>(REDIS_SETTINGS_KEY, null);
-  if (existing) return { ...DEFAULT_SETTINGS, ...existing };
-  try {
-    const seed = JSON.parse(await readFile(SEED_SETTINGS, 'utf-8')) as Settings;
-    const merged = { ...DEFAULT_SETTINGS, ...seed };
-    await redisSet(REDIS_SETTINGS_KEY, merged);
-    return merged;
-  } catch {
-    return DEFAULT_SETTINGS;
-  }
+  const raw = useRedis
+    ? await redisGet<Partial<Settings> | null>(REDIS_SETTINGS_KEY, null)
+    : await fileLoad<Partial<Settings>>(SETTINGS_FILE, {});
+  return { ...DEFAULT_SETTINGS, ...(raw ?? {}) };
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
@@ -110,18 +94,14 @@ export async function saveBookings(bookings: Booking[]): Promise<void> {
 
 export async function upsertBooking(booking: Booking): Promise<void> {
   const bookings = await loadBookings();
-
-  // Match by uid+sourceId, or by confirmation code across all sources (prevents iCal/CSV duplicates)
   const idx = bookings.findIndex(b =>
     (b.uid === booking.uid && b.sourceId === booking.sourceId) ||
     (booking.confirmationCode && b.confirmationCode === booking.confirmationCode && b.platform === booking.platform)
   );
-
   if (idx >= 0) {
     const existing = bookings[idx];
     bookings[idx] = {
       ...booking,
-      // Never overwrite income that was already set (e.g. from CSV import)
       income: existing.income > 0 ? existing.income : booking.income,
       platformFee: existing.platformFee ?? booking.platformFee,
       isManual: existing.isManual,

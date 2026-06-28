@@ -13,15 +13,6 @@ export const EXPENSE_CATEGORIES: { value: ExpenseCategory; label: string }[] = [
 
 export const UTILITY_SUBCATEGORIES = ['Electric', 'Water', 'Internet', 'Lawn Care', 'Other'];
 
-export interface ICalSource {
-  id: string;
-  platform: Platform;
-  name: string;
-  url: string;
-  enabled: boolean;
-  lastSynced?: string;
-}
-
 export interface Booking {
   id: string;
   sourceId: string;
@@ -54,8 +45,6 @@ export interface Expense {
 }
 
 export interface Settings {
-  sources: ICalSource[];
-  defaultNightlyRate: number;
   currency: string;
   propertyName: string;
   monthlyPITI: number;
