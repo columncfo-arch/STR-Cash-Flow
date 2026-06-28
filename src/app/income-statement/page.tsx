@@ -41,6 +41,8 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
   let totalOperatingExpenses = 0;
   let piti = 0;
 
+  let fastPayFees = 0;
+  let taxRemitted = 0;
   const expensesByCategory = { utilities: 0, cleaning: 0, supplies: 0, maintenance: 0, refund: 0, other: 0 };
 
   for (const m of months) {
@@ -48,6 +50,8 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
     totalOccupancy += m.occupancyRate;
     grossRevenue += m.grossRevenue;
     platformFees += m.platformFees;
+    fastPayFees += m.fastPayFees;
+    taxRemitted += m.taxRemitted;
     refunds += m.refunds;
     totalOperatingExpenses += m.totalOperatingExpenses;
     piti += m.piti;
@@ -61,12 +65,12 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
     }
   }
 
-  const netRevenue = grossRevenue - platformFees - refunds;
+  const netRevenue = grossRevenue - platformFees - fastPayFees - refunds;
   const operatingIncome = netRevenue - totalOperatingExpenses;
   const netIncome = operatingIncome - piti;
 
   return {
-    grossRevenue, platformFees, refunds, netRevenue,
+    grossRevenue, platformFees, fastPayFees, taxRemitted, refunds, netRevenue,
     expensesByCategory, totalOperatingExpenses,
     operatingIncome, piti, netIncome,
     totalNights,
@@ -132,6 +136,8 @@ export default function IncomeStatementPage() {
   function PnLTable({ pnl, label, months: monthCount }: { pnl: ReturnType<typeof sumMonths>; label: string; months: number }) {
     const hasData = pnl.grossRevenue > 0 || pnl.totalOperatingExpenses > 0 || pnl.piti > 0;
     const hasFees = pnl.platformFees > 0;
+    const hasFastPayFees = pnl.fastPayFees > 0;
+    const hasTaxRemitted = pnl.taxRemitted > 0;
     const hasRefunds = pnl.refunds > 0;
     const hasExpenses = pnl.totalOperatingExpenses > 0;
     const hasPITI = pnl.piti > 0;
@@ -174,6 +180,7 @@ export default function IncomeStatementPage() {
             </tr>
             <Row label="Gross Revenue" value={pnl.grossRevenue} />
             {hasFees && <Row label="Platform Fees" value={pnl.platformFees} indent negative />}
+            {hasFastPayFees && <Row label="Fast Pay Fees" value={pnl.fastPayFees} indent negative />}
             {hasRefunds && <Row label="Guest Refunds" value={pnl.refunds} indent negative />}
             <Row label="Net Revenue" value={pnl.netRevenue} bold separator accent />
 

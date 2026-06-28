@@ -68,7 +68,9 @@ export interface Settings {
 
 export interface PnLSummary {
   grossRevenue: number;
-  platformFees: number;
+  platformFees: number;    // host service fee / commission
+  fastPayFees: number;     // instant payout fees
+  taxRemitted: number;     // platform-remitted occupancy tax (informational)
   refunds: number;
   netRevenue: number;
   expensesByCategory: Record<ExpenseCategory, number>;

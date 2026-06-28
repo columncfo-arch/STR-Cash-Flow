@@ -24,6 +24,8 @@ function buildPnL(
 ): PnLSummary {
   const grossRevenue = bookings.reduce((s, b) => s + b.income, 0);
   const platformFees = bookings.reduce((s, b) => s + (b.platformFee ?? 0), 0);
+  const fastPayFees = bookings.reduce((s, b) => s + (b.fastPayFee ?? 0), 0);
+  const taxRemitted = bookings.reduce((s, b) => s + (b.taxRemitted ?? 0), 0);
 
   const expensesByCategory = emptyExpensesByCategory();
   for (const e of expenses) {
@@ -31,7 +33,7 @@ function buildPnL(
   }
 
   const refunds = expensesByCategory.refund;
-  const netRevenue = grossRevenue - platformFees - refunds;
+  const netRevenue = grossRevenue - platformFees - fastPayFees - refunds;
 
   const totalOperatingExpenses =
     expensesByCategory.utilities +
@@ -47,6 +49,8 @@ function buildPnL(
   return {
     grossRevenue,
     platformFees,
+    fastPayFees,
+    taxRemitted,
     refunds,
     netRevenue,
     expensesByCategory,
