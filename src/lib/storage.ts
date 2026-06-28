@@ -38,9 +38,13 @@ async function redisSet(key: string, value: unknown): Promise<void> {
   await client.set(key, JSON.stringify(value));
 }
 
-// ─── File backend (local dev) ─────────────────────────────────────────────────
+// ─── File backend (local dev / Vercel without Redis) ──────────────────────────
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+// On Vercel, process.cwd() is read-only — use /tmp so writes don't fail.
+// Settings are still read from the repo's data/ dir as a seed.
+const IS_VERCEL = Boolean(process.env.VERCEL);
+const DATA_DIR = IS_VERCEL ? '/tmp/str-data' : path.join(process.cwd(), 'data');
+const SEED_SETTINGS = path.join(process.cwd(), 'data', 'settings.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const BOOKINGS_FILE = path.join(DATA_DIR, 'bookings.json');
 
@@ -48,11 +52,15 @@ async function ensureDir() {
   if (!existsSync(DATA_DIR)) await mkdir(DATA_DIR, { recursive: true });
 }
 
-async function fileLoad<T>(file: string, fallback: T): Promise<T> {
+async function fileLoad<T>(file: string, fallback: T, seedFile?: string): Promise<T> {
   await ensureDir();
   try {
     return JSON.parse(await readFile(file, 'utf-8')) as T;
   } catch {
+    // On Vercel first run, seed from the repo's committed settings file
+    if (seedFile) {
+      try { return JSON.parse(await readFile(seedFile, 'utf-8')) as T; } catch { /* ignore */ }
+    }
     return fallback;
   }
 }
@@ -69,7 +77,7 @@ const useRedis = Boolean(process.env.REDIS_URL);
 export async function loadSettings(): Promise<Settings> {
   return useRedis
     ? redisGet(REDIS_SETTINGS_KEY, DEFAULT_SETTINGS)
-    : fileLoad(SETTINGS_FILE, DEFAULT_SETTINGS);
+    : fileLoad(SETTINGS_FILE, DEFAULT_SETTINGS, SEED_SETTINGS);
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {

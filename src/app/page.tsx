@@ -37,7 +37,11 @@ export default function Dashboard() {
     try {
       const res = await fetch('/api/ical', { method: 'POST' });
       const data = await res.json();
-      setSyncMsg(`Synced ${data.synced} bookings${data.errors ? '. Errors: ' + data.errors.join('; ') : ''}`);
+      if (data.errors?.length) {
+        setSyncMsg(`Synced ${data.synced} bookings. Errors: ${data.errors.join(' | ')}`);
+      } else {
+        setSyncMsg(`Synced ${data.synced} bookings successfully`);
+      }
       // Reload statement
       const r2 = await fetch('/api/income-statement?year=' + year);
       const d2 = await r2.json();
