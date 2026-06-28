@@ -1,10 +1,10 @@
 import { NextResponse } from 'next/server';
-import { loadSettings, saveSettings, upsertBooking, loadBookings } from '@/lib/storage';
+import { loadSettings, saveSettings, upsertBooking } from '@/lib/storage';
 import { parseICalSource } from '@/lib/ical';
 
 export async function POST() {
   try {
-    const settings = loadSettings();
+    const settings = await loadSettings();
     const enabledSources = settings.sources.filter(s => s.enabled);
 
     if (enabledSources.length === 0) {
@@ -18,30 +18,22 @@ export async function POST() {
       try {
         const bookings = await parseICalSource(source, settings.defaultNightlyRate);
         for (const booking of bookings) {
-          upsertBooking(booking);
+          await upsertBooking(booking);
         }
         totalSynced += bookings.length;
-
-        // Update lastSynced
         source.lastSynced = new Date().toISOString();
       } catch (err) {
         errors.push(`${source.name}: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
     }
 
-    saveSettings({
+    await saveSettings({
       ...settings,
-      sources: settings.sources.map(s => {
-        const updated = enabledSources.find(e => e.id === s.id);
-        return updated ?? s;
-      }),
+      sources: settings.sources.map(s => enabledSources.find(e => e.id === s.id) ?? s),
     });
 
-    return NextResponse.json({
-      synced: totalSynced,
-      errors: errors.length > 0 ? errors : undefined,
-    });
-  } catch (err) {
+    return NextResponse.json({ synced: totalSynced, errors: errors.length ? errors : undefined });
+  } catch {
     return NextResponse.json({ error: 'Sync failed' }, { status: 500 });
   }
 }

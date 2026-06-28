@@ -8,11 +8,9 @@ export async function GET(req: Request) {
     const year = searchParams.get('year');
     const month = searchParams.get('month');
 
-    let bookings = loadBookings();
+    let bookings = await loadBookings();
 
-    if (year) {
-      bookings = bookings.filter(b => b.checkIn.startsWith(year));
-    }
+    if (year) bookings = bookings.filter(b => b.checkIn.startsWith(year));
     if (month && year) {
       const prefix = `${year}-${month.padStart(2, '0')}`;
       bookings = bookings.filter(b => b.checkIn.startsWith(prefix));
@@ -20,7 +18,7 @@ export async function GET(req: Request) {
 
     bookings.sort((a, b) => a.checkIn.localeCompare(b.checkIn));
     return NextResponse.json(bookings);
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: 'Failed to load bookings' }, { status: 500 });
   }
 }
@@ -32,12 +30,12 @@ export async function POST(req: Request) {
     body.updatedAt = new Date().toISOString();
     body.isManual = true;
 
-    const bookings = loadBookings();
+    const bookings = await loadBookings();
     bookings.push(body);
-    saveBookings(bookings);
+    await saveBookings(bookings);
 
     return NextResponse.json(body, { status: 201 });
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: 'Failed to create booking' }, { status: 500 });
   }
 }

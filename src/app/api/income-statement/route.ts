@@ -30,15 +30,13 @@ function buildMonthly(year: number, month: number, bookings: Booking[]): Monthly
   }
 
   const daysInMonth = getDaysInMonth(new Date(year, month - 1));
-  const occupancyRate = daysInMonth > 0 ? (totalNights / daysInMonth) * 100 : 0;
-
   return {
     year,
     month,
     bookings: monthBookings,
     totalIncome,
     totalNights,
-    occupancyRate: Math.min(occupancyRate, 100),
+    occupancyRate: Math.min((totalNights / daysInMonth) * 100, 100),
     byPlatform,
   };
 }
@@ -46,15 +44,12 @@ function buildMonthly(year: number, month: number, bookings: Booking[]): Monthly
 export async function GET(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
-    const yearParam = searchParams.get('year');
-    const year = yearParam ? parseInt(yearParam) : new Date().getFullYear();
+    const year = parseInt(searchParams.get('year') ?? String(new Date().getFullYear()));
 
-    const allBookings = loadBookings();
+    const allBookings = await loadBookings();
 
     const months: MonthlyStatement[] = [];
-    for (let m = 1; m <= 12; m++) {
-      months.push(buildMonthly(year, m, allBookings));
-    }
+    for (let m = 1; m <= 12; m++) months.push(buildMonthly(year, m, allBookings));
 
     const byPlatform = emptyPlatformBreakdown();
     let totalIncome = 0;
@@ -70,23 +65,18 @@ export async function GET(req: Request) {
       }
     }
 
-    const avgOccupancyRate =
-      months.reduce((sum, m) => sum + m.occupancyRate, 0) / 12;
-
     const statement: AnnualStatement = {
       year,
       months,
       totalIncome,
       totalNights,
-      avgOccupancyRate,
+      avgOccupancyRate: months.reduce((s, m) => s + m.occupancyRate, 0) / 12,
       byPlatform,
     };
 
-    // Also return available years
     const years = [...new Set(allBookings.map(b => getYear(new Date(b.checkIn))))].sort();
-
     return NextResponse.json({ statement, years });
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: 'Failed to build income statement' }, { status: 500 });
   }
 }

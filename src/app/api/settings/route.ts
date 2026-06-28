@@ -4,9 +4,9 @@ import { Settings } from '@/types';
 
 export async function GET() {
   try {
-    const settings = loadSettings();
+    const settings = await loadSettings();
     return NextResponse.json(settings);
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: 'Failed to load settings' }, { status: 500 });
   }
 }
@@ -14,9 +14,9 @@ export async function GET() {
 export async function PUT(req: Request) {
   try {
     const body: Settings = await req.json();
-    saveSettings(body);
+    await saveSettings(body);
     return NextResponse.json({ ok: true });
-  } catch (err) {
+  } catch {
     return NextResponse.json({ error: 'Failed to save settings' }, { status: 500 });
   }
 }
