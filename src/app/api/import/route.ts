@@ -74,13 +74,27 @@ interface ParsedRow {
   grossAmount: number;
   platformFee: number;
   netAmount: number;
+  paidOut?: number;
+  fastPayFee?: number;
+  cleaningFee?: number;
+  petFee?: number;
+  taxRemitted?: number;
+  amount?: number;
+  payoutDate?: string;
+  bookingDate?: string;
+  arrivingByDate?: string;
+  listing?: string;
+  details?: string;
+  referenceCode?: string;
+  currency?: string;
+  earningsYear?: number;
 }
 
 function parseAirbnb(rows: Record<string, string>[]): ParsedRow[] {
   return rows
     .filter(r => col(r, 'type').toLowerCase().includes('reservation'))
     .map(r => {
-      const gross = parseMoney(col(r, 'gross_earnings', 'amount'));
+      const gross = parseMoney(col(r, 'gross_earnings'));
       const fee = parseMoney(col(r, 'service_fee', 'host_fee'));
       const net = parseMoney(col(r, 'paid_out'));
       const nights = parseInt(col(r, 'nights')) || 0;
@@ -93,6 +107,20 @@ function parseAirbnb(rows: Record<string, string>[]): ParsedRow[] {
         grossAmount: gross,
         platformFee: fee,
         netAmount: net || (gross - fee),
+        paidOut: net,
+        fastPayFee: parseMoney(col(r, 'fast_pay_fee')),
+        cleaningFee: parseMoney(col(r, 'cleaning_fee')),
+        petFee: parseMoney(col(r, 'pet_fee')),
+        taxRemitted: parseMoney(col(r, 'airbnb_remitted_tax')),
+        amount: parseMoney(col(r, 'amount')),
+        payoutDate: normalizeDate(col(r, 'date')),
+        bookingDate: normalizeDate(col(r, 'booking_date')),
+        arrivingByDate: normalizeDate(col(r, 'arriving_by_date')),
+        listing: col(r, 'listing'),
+        details: col(r, 'details'),
+        referenceCode: col(r, 'reference_code'),
+        currency: col(r, 'currency'),
+        earningsYear: parseInt(col(r, 'earnings_year')) || undefined,
       };
     })
     .filter(r => r.grossAmount > 0 && r.checkIn);
@@ -184,17 +212,32 @@ export async function POST(req: Request) {
             )
           : -1;
 
+        const sharedFields = {
+          checkIn: row.checkIn,
+          checkOut: row.checkOut || '',
+          nights,
+          guestName: row.guestName || undefined,
+          income: row.grossAmount,
+          platformFee: row.platformFee || undefined,
+          paidOut: row.paidOut || undefined,
+          fastPayFee: row.fastPayFee || undefined,
+          cleaningFee: row.cleaningFee || undefined,
+          petFee: row.petFee || undefined,
+          taxRemitted: row.taxRemitted || undefined,
+          amount: row.amount || undefined,
+          payoutDate: row.payoutDate || undefined,
+          bookingDate: row.bookingDate || undefined,
+          arrivingByDate: row.arrivingByDate || undefined,
+          listing: row.listing || undefined,
+          details: row.details || undefined,
+          referenceCode: row.referenceCode || undefined,
+          currency: row.currency || undefined,
+          earningsYear: row.earningsYear || undefined,
+          updatedAt: now,
+        };
+
         if (existingIdx >= 0) {
-          existing[existingIdx] = {
-            ...existing[existingIdx],
-            checkIn: row.checkIn,
-            checkOut: row.checkOut || existing[existingIdx].checkOut,
-            nights,
-            guestName: row.guestName || existing[existingIdx].guestName,
-            income: row.grossAmount,
-            platformFee: row.platformFee,
-            updatedAt: now,
-          };
+          existing[existingIdx] = { ...existing[existingIdx], ...sharedFields };
           updated++;
         } else {
           const id = `csv-${platform}-${row.confirmationCode || row.checkIn}-${Math.random().toString(36).slice(2, 7)}`;
@@ -204,16 +247,10 @@ export async function POST(req: Request) {
             platform,
             uid: row.confirmationCode || id,
             summary: row.guestName ? `${platform} - ${row.guestName}` : platform,
-            checkIn: row.checkIn,
-            checkOut: row.checkOut || '',
-            nights,
-            guestName: row.guestName || undefined,
             confirmationCode: row.confirmationCode || undefined,
-            income: row.grossAmount,
-            platformFee: row.platformFee,
             isManual: false,
             createdAt: now,
-            updatedAt: now,
+            ...sharedFields,
           } as Booking);
           created++;
         }

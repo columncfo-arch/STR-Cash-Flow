@@ -24,8 +24,24 @@ export interface Booking {
   nights: number;
   guestName?: string;
   confirmationCode?: string;
-  income: number;        // gross booking revenue
-  platformFee?: number;  // platform's commission/fee (from CSV import)
+  income: number;         // gross earnings
+  platformFee?: number;   // service fee / host fee
+  paidOut?: number;       // net payout received
+  // Airbnb-specific fee fields
+  fastPayFee?: number;
+  cleaningFee?: number;
+  petFee?: number;
+  taxRemitted?: number;   // platform-remitted tax
+  amount?: number;        // raw "Amount" column
+  // Booking metadata
+  payoutDate?: string;    // date payout was processed
+  bookingDate?: string;   // date booking was made
+  arrivingByDate?: string;
+  listing?: string;
+  details?: string;
+  referenceCode?: string;
+  currency?: string;
+  earningsYear?: number;
   isManual?: boolean;
   notes?: string;
   createdAt: string;
