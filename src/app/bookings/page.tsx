@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Booking, Platform, Settings } from '@/types';
 import PlatformBadge from '@/components/PlatformBadge';
 import { format } from 'date-fns';
-import { Pencil, Trash2, Plus, X, Check } from 'lucide-react';
+import { Pencil, Trash2, Plus, X, Check, AlertTriangle } from 'lucide-react';
 
 const PLATFORM_OPTIONS: { value: Platform; label: string }[] = [
   { value: 'airbnb', label: 'Airbnb' },
@@ -79,6 +79,12 @@ export default function BookingsPage() {
     load();
   }
 
+  async function clearAll() {
+    if (!confirm(`Delete ALL ${bookings.length} bookings? This cannot be undone.`)) return;
+    await fetch('/api/bookings?all=true', { method: 'DELETE' });
+    load();
+  }
+
   async function addBooking() {
     const checkIn = newBooking.checkIn;
     const checkOut = newBooking.checkOut;
@@ -128,6 +134,14 @@ export default function BookingsPage() {
           >
             {years.map(y => <option key={y} value={y}>{y === 'all' ? 'All Years' : y}</option>)}
           </select>
+          {bookings.length > 0 && (
+            <button
+              onClick={clearAll}
+              className="flex items-center gap-2 border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm hover:bg-red-50 transition-colors"
+            >
+              <AlertTriangle className="w-4 h-4" /> Clear All
+            </button>
+          )}
           <button
             onClick={() => setShowAdd(true)}
             className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 transition-colors"

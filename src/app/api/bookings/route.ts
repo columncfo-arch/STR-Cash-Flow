@@ -23,6 +23,26 @@ export async function GET(req: Request) {
   }
 }
 
+export async function DELETE(req: Request) {
+  try {
+    const { searchParams } = new URL(req.url);
+    const platform = searchParams.get('platform');
+    const all = searchParams.get('all');
+
+    const bookings = await loadBookings();
+    const remaining = (all === 'true')
+      ? []
+      : platform
+        ? bookings.filter(b => b.platform !== platform)
+        : bookings;
+
+    await saveBookings(remaining);
+    return NextResponse.json({ deleted: bookings.length - remaining.length });
+  } catch {
+    return NextResponse.json({ error: 'Failed to delete bookings' }, { status: 500 });
+  }
+}
+
 export async function POST(req: Request) {
   try {
     const body: Booking = await req.json();
