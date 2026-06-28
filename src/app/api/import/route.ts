@@ -127,22 +127,30 @@ function parseAirbnb(rows: Record<string, string>[]): ParsedRow[] {
 }
 
 function parseVRBO(rows: Record<string, string>[]): ParsedRow[] {
-  return rows.map(r => {
-    const gross = parseMoney(col(r, 'gross_earnings', 'gross_amount', 'rental_amount', 'total_amount'));
-    const fee = parseMoney(col(r, 'service_fee', 'vrbo_fee', 'commission', 'host_fee'));
-    const net = parseMoney(col(r, 'net_amount', 'owner_payout', 'paid_out'));
-    const nights = parseInt(col(r, 'nights')) || 0;
-    return {
-      confirmationCode: col(r, 'confirmation_code', 'confirmation__', 'reservation_id'),
-      checkIn: normalizeDate(col(r, 'check_in', 'start_date', 'arrival')),
-      checkOut: normalizeDate(col(r, 'check_out', 'end_date', 'departure')),
-      nights,
-      guestName: col(r, 'guest_name', 'guest', 'traveler_name'),
-      grossAmount: gross || (net + fee),
-      platformFee: fee || Math.max(gross - net, 0),
-      netAmount: net || (gross - fee),
-    };
-  }).filter(r => r.grossAmount > 0 && r.checkIn);
+  // VRBO reservation report columns:
+  // Reservation ID, Listing Number, Property Name, Created On, Email,
+  // Inquirer, Phone, Check-in, Check-out, Nights Stay, Adults, Children, Status, Source
+  return rows
+    .filter(r => (col(r, 'status') || '').toLowerCase() !== 'cancelled')
+    .map(r => {
+      const nights = parseInt(col(r, 'nights_stay', 'nights')) || 0;
+      return {
+        confirmationCode: col(r, 'reservation_id'),
+        checkIn: normalizeDate(col(r, 'check_in')),
+        checkOut: normalizeDate(col(r, 'check_out')),
+        nights,
+        guestName: col(r, 'inquirer'),
+        grossAmount: 0, // reservation report has no financial data
+        platformFee: 0,
+        netAmount: 0,
+        bookingDate: normalizeDate(col(r, 'created_on')),
+        listing: col(r, 'property_name', 'listing_number'),
+        referenceCode: col(r, 'listing_number'),
+        details: [col(r, 'adults') && `Adults: ${col(r, 'adults')}`, col(r, 'children') && `Children: ${col(r, 'children')}`, col(r, 'source') && `Source: ${col(r, 'source')}`].filter(Boolean).join(', ') || undefined,
+        currency: undefined,
+      };
+    })
+    .filter(r => r.checkIn);
 }
 
 function parseBookingCom(rows: Record<string, string>[]): ParsedRow[] {
