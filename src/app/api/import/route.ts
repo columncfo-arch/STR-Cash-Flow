@@ -213,7 +213,7 @@ function parseBookingCom(rows: Record<string, string>[]): ParsedRow[] {
   // remarks, booker_country, travel_purpose, device, unit_type,
   // duration_nights, cancellation_date, address, phone_number
   return rows
-    .filter(r => (col(r, 'status') || '').toLowerCase() !== 'cancelled')
+    .filter(r => !col(r, 'status').toLowerCase().includes('cancel'))
     .map(r => {
       const gross = parseMoney(col(r, 'price'));
       const fee = parseMoney(col(r, 'commission_amount'));
