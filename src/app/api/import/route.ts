@@ -5,14 +5,19 @@ import { Booking, Platform } from '@/types';
 // ─── CSV parsing ──────────────────────────────────────────────────────────────
 
 function parseCSV(text: string): Record<string, string>[] {
-  const lines = text.trim().split(/\r?\n/);
+  // Strip BOM if present
+  const cleaned = text.replace(/^﻿/, '').trim();
+  const lines = cleaned.split(/\r?\n/);
   if (lines.length < 2) return [];
 
   const firstLine = lines[0];
-  const useTab = (firstLine.match(/\t/g) ?? []).length > (firstLine.match(/,/g) ?? []).length;
+  const tabs = (firstLine.match(/\t/g) ?? []).length;
+  const semis = (firstLine.match(/;/g) ?? []).length;
+  const commas = (firstLine.match(/,/g) ?? []).length;
+  const delim = tabs >= semis && tabs >= commas ? '\t' : semis > commas ? ';' : ',';
 
   function splitLine(line: string): string[] {
-    if (useTab) return line.split('\t').map(s => s.trim().replace(/^"|"$/g, ''));
+    if (delim === '\t') return line.split('\t').map(s => s.trim().replace(/^"|"$/g, ''));
     const fields: string[] = [];
     let cur = '';
     let inQuote = false;
@@ -21,7 +26,7 @@ function parseCSV(text: string): Record<string, string>[] {
       if (ch === '"') {
         if (inQuote && line[i + 1] === '"') { cur += '"'; i++; }
         else inQuote = !inQuote;
-      } else if (ch === ',' && !inQuote) {
+      } else if (ch === delim && !inQuote) {
         fields.push(cur.trim()); cur = '';
       } else {
         cur += ch;
@@ -43,7 +48,17 @@ function parseCSV(text: string): Record<string, string>[] {
 
 function parseMoney(s: string): number {
   if (!s) return 0;
-  const n = parseFloat(s.replace(/[$,\s]/g, ''));
+  // Strip currency symbols, letters, whitespace — keep digits, period, comma, minus
+  let v = s.replace(/[^0-9.,-]/g, '').trim();
+  if (!v) return 0;
+  // European format: period as thousands sep, comma as decimal (e.g. 1.234,56)
+  if (/\d\.\d{3},\d{1,2}$/.test(v)) {
+    v = v.replace(/\./g, '').replace(',', '.');
+  } else {
+    // US/standard: remove thousand commas
+    v = v.replace(/,/g, '');
+  }
+  const n = parseFloat(v);
   return isNaN(n) ? 0 : Math.abs(n);
 }
 
