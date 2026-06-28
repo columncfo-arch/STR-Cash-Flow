@@ -275,7 +275,9 @@ export async function POST(req: Request) {
       else if (platform === 'booking') rows = parseBookingCom(rawRows);
       else rows = parseAirbnb(rawRows);
 
-      return NextResponse.json({ rows, totalRows: rawRows.length });
+      const debugHeaders = rawRows[0] ? Object.keys(rawRows[0]) : [];
+      const debugFirstRow = rawRows[0] ?? {};
+      return NextResponse.json({ rows, totalRows: rawRows.length, debugHeaders, debugFirstRow });
     }
 
     if (body.action === 'apply') {
