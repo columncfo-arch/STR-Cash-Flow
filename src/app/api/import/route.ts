@@ -255,8 +255,41 @@ function parseBookingCom(rows: Record<string, string>[]): ParsedRow[] {
 
 // ─── Route ────────────────────────────────────────────────────────────────────
 
+async function fileToCSV(file: File): Promise<string> {
+  const isExcel = /\.(xlsx|xls|xlsm)$/i.test(file.name);
+  if (!isExcel) return file.text();
+  const buf = await file.arrayBuffer();
+  const XLSX = await import('xlsx');
+  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+  const ws = wb.Sheets[wb.SheetNames[0]];
+  return XLSX.utils.sheet_to_csv(ws);
+}
+
 export async function POST(req: Request) {
   try {
+    const contentType = req.headers.get('content-type') ?? '';
+
+    // ── Preview: accepts multipart/form-data with the raw file ──
+    if (contentType.includes('multipart/form-data')) {
+      const formData = await req.formData();
+      const platform = formData.get('platform') as Platform;
+      const file = formData.get('file') as File | null;
+      if (!file) return NextResponse.json({ error: 'file required' }, { status: 400 });
+
+      const csvText = await fileToCSV(file);
+      const rawRows = parseCSV(csvText);
+      let rows: ParsedRow[];
+      if (platform === 'airbnb') rows = parseAirbnb(rawRows);
+      else if (platform === 'vrbo') rows = parseVRBO(rawRows);
+      else if (platform === 'booking') rows = parseBookingCom(rawRows);
+      else rows = parseAirbnb(rawRows);
+
+      const debugHeaders = rawRows[0] ? Object.keys(rawRows[0]) : [];
+      const debugFirstRow = rawRows[0] ?? {};
+      return NextResponse.json({ rows, totalRows: rawRows.length, debugHeaders, debugFirstRow });
+    }
+
+    // ── Apply (and legacy preview): JSON body ──
     const body = await req.json() as {
       action: 'preview' | 'apply';
       platform: Platform;

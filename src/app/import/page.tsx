@@ -43,34 +43,22 @@ export default function ImportPage() {
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
-  async function toCSV(file: File): Promise<string> {
-    const isExcel = /\.(xlsx|xls|xlsm)$/i.test(file.name);
-    if (!isExcel) return file.text();
-    const buf = await file.arrayBuffer();
-    const XLSX = await import('xlsx');
-    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-    const ws = wb.Sheets[wb.SheetNames[0]];
-    return XLSX.utils.sheet_to_csv(ws);
-  }
-
   async function handleFile(file: File) {
     setError('');
     setRows(null);
     setResult(null);
     setLoading(true);
     try {
-      const csvText = await toCSV(file);
-      const res = await fetch('/api/import', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'preview', platform, csvText }),
-      });
+      const formData = new FormData();
+      formData.append('platform', platform);
+      formData.append('file', file);
+      const res = await fetch('/api/import', { method: 'POST', body: formData });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error ?? 'Failed to parse CSV');
+      if (!res.ok) throw new Error(data.error ?? 'Failed to parse file');
       setRows(data.rows);
       setTotalRows(data.totalRows);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to parse CSV');
+      setError(e instanceof Error ? e.message : 'Failed to parse file');
     } finally {
       setLoading(false);
     }
