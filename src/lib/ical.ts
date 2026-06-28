@@ -49,15 +49,13 @@ function detectPlatform(source: ICalSource, uid: string): Platform {
 }
 
 function isBlockedDate(summary: string): boolean {
-  const s = summary.toLowerCase();
-  // Skip owner-blocked dates that aren't actual guest reservations
+  const s = summary.toLowerCase().trim();
   return (
-    s === 'airbnb (not available)' ||
-    s === 'not available' ||
+    s.includes('not available') ||   // "Airbnb (Not available)", "CLOSED - Not available"
     s === 'blocked' ||
+    s.includes('owner block') ||
     s === 'unavailable' ||
     s === 'busy' ||
-    s === 'owner block' ||
     s === 'closed'
   );
 }
