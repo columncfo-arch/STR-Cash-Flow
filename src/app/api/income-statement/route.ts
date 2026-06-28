@@ -33,7 +33,7 @@ function buildPnL(
   }
 
   const refunds = expensesByCategory.refund;
-  const netRevenue = grossRevenue - platformFees - fastPayFees - refunds;
+  const netRevenue = grossRevenue - platformFees - fastPayFees - taxRemitted - refunds;
 
   const totalOperatingExpenses =
     expensesByCategory.utilities +

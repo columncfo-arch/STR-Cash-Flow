@@ -65,7 +65,7 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
     }
   }
 
-  const netRevenue = grossRevenue - platformFees - fastPayFees - refunds;
+  const netRevenue = grossRevenue - platformFees - fastPayFees - taxRemitted - refunds;
   const operatingIncome = netRevenue - totalOperatingExpenses;
   const netIncome = operatingIncome - piti;
 
@@ -181,6 +181,7 @@ export default function IncomeStatementPage() {
             <Row label="Gross Revenue" value={pnl.grossRevenue} />
             {hasFees && <Row label="Platform Fees" value={pnl.platformFees} indent negative />}
             {hasFastPayFees && <Row label="Fast Pay Fees" value={pnl.fastPayFees} indent negative />}
+            {hasTaxRemitted && <Row label="Tax Remitted by Platform" value={pnl.taxRemitted} indent negative />}
             {hasRefunds && <Row label="Guest Refunds" value={pnl.refunds} indent negative />}
             <Row label="Net Revenue" value={pnl.netRevenue} bold separator accent />
 
