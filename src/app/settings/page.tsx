@@ -152,6 +152,20 @@ export default function SettingsPage() {
             </select>
           </div>
           <div>
+            <label className="text-xs text-slate-500 block mb-1">Monthly PITI ($)</label>
+            <input
+              type="number"
+              value={settings.monthlyPITI ?? 0}
+              onChange={e => setSettings({ ...settings, monthlyPITI: parseFloat(e.target.value) || 0 })}
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
+              placeholder="0"
+              min="0"
+            />
+            <p className="text-xs text-slate-400 mt-1">
+              Combined monthly mortgage P&I + property tax + insurance. Applied automatically to P&L.
+            </p>
+          </div>
+          <div>
             <label className="text-xs text-slate-500 block mb-1">Default Nightly Rate ($)</label>
             <input
               type="number"
@@ -162,7 +176,7 @@ export default function SettingsPage() {
               min="0"
             />
             <p className="text-xs text-slate-400 mt-1">
-              Used to estimate income when syncing iCal (iCal feeds don't include prices).
+              Fallback estimate when iCal syncs bookings with no imported income yet.
             </p>
           </div>
         </div>

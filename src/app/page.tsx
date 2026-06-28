@@ -63,10 +63,10 @@ export default function Dashboard() {
     VRBO: m.byPlatform.vrbo.income,
     Direct: m.byPlatform.direct.income,
     Other: m.byPlatform.other.income,
-    total: m.totalIncome,
+    total: m.grossRevenue,
   })) ?? [];
 
-  const hasData = statement && statement.totalIncome > 0;
+  const hasData = statement && statement.grossRevenue > 0;
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -97,9 +97,14 @@ export default function Dashboard() {
       {/* Stat cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard
-          label="Total Income (YTD)"
-          value={fmt(statement?.totalIncome ?? 0)}
+          label="Gross Revenue (YTD)"
+          value={fmt(statement?.grossRevenue ?? 0)}
           color="text-emerald-700"
+        />
+        <StatCard
+          label="Net Income (YTD)"
+          value={fmt(statement?.netIncome ?? 0)}
+          color={(statement?.netIncome ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-600'}
         />
         <StatCard
           label="Total Nights Booked"
@@ -109,15 +114,6 @@ export default function Dashboard() {
         <StatCard
           label="Avg Occupancy Rate"
           value={`${(statement?.avgOccupancyRate ?? 0).toFixed(1)}%`}
-        />
-        <StatCard
-          label="Avg Nightly Rate"
-          value={
-            statement && statement.totalNights > 0
-              ? fmt(statement.totalIncome / statement.totalNights)
-              : '$0'
-          }
-          sub="per night"
         />
       </div>
 
@@ -179,7 +175,7 @@ export default function Dashboard() {
                     <td className="py-2 text-right text-slate-600">{data.nights}</td>
                     <td className="py-2 text-right font-semibold text-slate-800">{fmt(data.income)}</td>
                     <td className="py-2 text-right text-slate-500">
-                      {((data.income / statement.totalIncome) * 100).toFixed(1)}%
+                      {((data.income / statement.grossRevenue) * 100).toFixed(1)}%
                     </td>
                   </tr>
                 ))}

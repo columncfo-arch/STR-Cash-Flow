@@ -24,5 +24,6 @@
   ],
   "defaultNightlyRate": 0,
   "currency": "USD",
-  "propertyName": "My STR Property"
+  "propertyName": "My STR Property",
+  "monthlyPITI": 0
 }

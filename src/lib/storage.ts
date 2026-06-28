@@ -1,21 +1,22 @@
-import { Booking, Settings } from '@/types';
+import { Booking, Expense, Settings } from '@/types';
 import path from 'path';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 
 const REDIS_SETTINGS_KEY = 'str:settings';
 const REDIS_BOOKINGS_KEY = 'str:bookings';
+const REDIS_EXPENSES_KEY = 'str:expenses';
 
 const DEFAULT_SETTINGS: Settings = {
   sources: [],
   defaultNightlyRate: 0,
   currency: 'USD',
   propertyName: 'My STR Property',
+  monthlyPITI: 0,
 };
 
 // ─── Redis backend (Vercel production) ────────────────────────────────────────
 
-// Module-level singleton — reused across requests in the same serverless instance
 let _redis: import('redis').RedisClientType | null = null;
 
 async function getRedis() {
@@ -38,15 +39,14 @@ async function redisSet(key: string, value: unknown): Promise<void> {
   await client.set(key, JSON.stringify(value));
 }
 
-// ─── File backend (local dev / Vercel without Redis) ──────────────────────────
+// ─── File backend (local dev) ──────────────────────────────────────────────────
 
-// On Vercel, process.cwd() is read-only — use /tmp so writes don't fail.
-// Settings are still read from the repo's data/ dir as a seed.
 const IS_VERCEL = Boolean(process.env.VERCEL);
 const DATA_DIR = IS_VERCEL ? '/tmp/str-data' : path.join(process.cwd(), 'data');
 const SEED_SETTINGS = path.join(process.cwd(), 'data', 'settings.json');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const BOOKINGS_FILE = path.join(DATA_DIR, 'bookings.json');
+const EXPENSES_FILE = path.join(DATA_DIR, 'expenses.json');
 
 async function ensureDir() {
   if (!existsSync(DATA_DIR)) await mkdir(DATA_DIR, { recursive: true });
@@ -57,7 +57,6 @@ async function fileLoad<T>(file: string, fallback: T, seedFile?: string): Promis
   try {
     return JSON.parse(await readFile(file, 'utf-8')) as T;
   } catch {
-    // On Vercel first run, seed from the repo's committed settings file
     if (seedFile) {
       try { return JSON.parse(await readFile(seedFile, 'utf-8')) as T; } catch { /* ignore */ }
     }
@@ -76,15 +75,16 @@ const useRedis = Boolean(process.env.REDIS_URL);
 
 export async function loadSettings(): Promise<Settings> {
   if (!useRedis) {
-    return fileLoad(SETTINGS_FILE, DEFAULT_SETTINGS, SEED_SETTINGS);
+    const s = await fileLoad(SETTINGS_FILE, DEFAULT_SETTINGS, SEED_SETTINGS);
+    return { ...DEFAULT_SETTINGS, ...s };
   }
-  // Check Redis; if empty (first run), seed from the committed data/settings.json
   const existing = await redisGet<Settings | null>(REDIS_SETTINGS_KEY, null);
-  if (existing) return existing;
+  if (existing) return { ...DEFAULT_SETTINGS, ...existing };
   try {
     const seed = JSON.parse(await readFile(SEED_SETTINGS, 'utf-8')) as Settings;
-    await redisSet(REDIS_SETTINGS_KEY, seed);
-    return seed;
+    const merged = { ...DEFAULT_SETTINGS, ...seed };
+    await redisSet(REDIS_SETTINGS_KEY, merged);
+    return merged;
   } catch {
     return DEFAULT_SETTINGS;
   }
@@ -116,6 +116,7 @@ export async function upsertBooking(booking: Booking): Promise<void> {
     bookings[idx] = {
       ...booking,
       income: existing.isManual ? existing.income : booking.income,
+      platformFee: existing.platformFee ?? booking.platformFee,
       isManual: existing.isManual,
       notes: existing.notes ?? booking.notes,
     };
@@ -123,4 +124,32 @@ export async function upsertBooking(booking: Booking): Promise<void> {
     bookings.push(booking);
   }
   await saveBookings(bookings);
+}
+
+export async function loadExpenses(): Promise<Expense[]> {
+  return useRedis
+    ? redisGet<Expense[]>(REDIS_EXPENSES_KEY, [])
+    : fileLoad<Expense[]>(EXPENSES_FILE, []);
+}
+
+export async function saveExpenses(expenses: Expense[]): Promise<void> {
+  useRedis
+    ? await redisSet(REDIS_EXPENSES_KEY, expenses)
+    : await fileSave(EXPENSES_FILE, expenses);
+}
+
+export async function upsertExpense(expense: Expense): Promise<void> {
+  const expenses = await loadExpenses();
+  const idx = expenses.findIndex(e => e.id === expense.id);
+  if (idx >= 0) {
+    expenses[idx] = { ...expense, updatedAt: new Date().toISOString() };
+  } else {
+    expenses.push(expense);
+  }
+  await saveExpenses(expenses);
+}
+
+export async function deleteExpense(id: string): Promise<void> {
+  const expenses = await loadExpenses();
+  await saveExpenses(expenses.filter(e => e.id !== id));
 }
