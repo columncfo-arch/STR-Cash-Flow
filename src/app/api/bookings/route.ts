@@ -10,7 +10,7 @@ export async function GET(req: Request) {
 
     let bookings = await loadBookings();
 
-    if (year) bookings = bookings.filter(b => b.checkIn.startsWith(year));
+    if (year && year !== 'all') bookings = bookings.filter(b => b.checkIn.startsWith(year));
     if (month && year) {
       const prefix = `${year}-${month.padStart(2, '0')}`;
       bookings = bookings.filter(b => b.checkIn.startsWith(prefix));

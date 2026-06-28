@@ -111,14 +111,14 @@ export default function BookingsPage() {
     load();
   }
 
-  const years = Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i));
+  const years = ['all', ...Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i))];
 
   return (
     <div className="max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Bookings</h1>
-          <p className="text-slate-500 text-sm mt-1">{bookings.length} bookings in {filterYear}</p>
+          <p className="text-slate-500 text-sm mt-1">{bookings.length} bookings {filterYear === 'all' ? 'across all years' : `in ${filterYear}`}</p>
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -126,7 +126,7 @@ export default function BookingsPage() {
             onChange={e => setFilterYear(e.target.value)}
             className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white text-slate-700"
           >
-            {years.map(y => <option key={y}>{y}</option>)}
+            {years.map(y => <option key={y} value={y}>{y === 'all' ? 'All Years' : y}</option>)}
           </select>
           <button
             onClick={() => setShowAdd(true)}

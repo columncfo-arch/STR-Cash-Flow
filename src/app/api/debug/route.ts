@@ -7,14 +7,26 @@ const FETCH_HEADERS = {
   Accept: 'text/calendar,*/*',
 };
 
+function isBlockedDate(summary: string): boolean {
+  const s = summary.toLowerCase().trim();
+  return (
+    s.includes('not available') ||
+    s === 'blocked' ||
+    s.includes('owner block') ||
+    s === 'unavailable' ||
+    s === 'busy' ||
+    s === 'closed'
+  );
+}
+
 export async function GET() {
   const settings = await loadSettings();
-  const results: Record<string, unknown> = {
+  const out: Record<string, unknown> = {
     env: {
       REDIS_URL: process.env.REDIS_URL ? 'SET' : 'NOT SET',
       VERCEL: process.env.VERCEL ?? 'NOT SET',
     },
-    sources: settings.sources.map(s => ({ name: s.name, enabled: s.enabled, url: s.url.slice(0, 60) + '…' })),
+    sourceCount: settings.sources.filter(s => s.enabled).length,
     feeds: {} as Record<string, unknown>,
   };
 
@@ -22,27 +34,43 @@ export async function GET() {
     try {
       const res = await fetch(source.url, { headers: FETCH_HEADERS, redirect: 'follow' });
       if (!res.ok) {
-        (results.feeds as Record<string, unknown>)[source.name] = { error: `HTTP ${res.status}` };
+        (out.feeds as Record<string, unknown>)[source.name] = { error: `HTTP ${res.status}` };
         continue;
       }
       const text = await res.text();
       const data = ical.parseICS(text);
       const events = Object.values(data).filter(e => e?.type === 'VEVENT');
-      (results.feeds as Record<string, unknown>)[source.name] = {
-        totalEvents: events.length,
-        sample: events.slice(0, 3).map(e => ({
-          summary: e.summary,
+
+      const kept: unknown[] = [];
+      const filtered: unknown[] = [];
+
+      for (const e of events) {
+        const summary = (e.summary as string) ?? '';
+        const entry = {
+          summary,
           start: e.start,
           end: e.end,
-          uid: (e.uid as string)?.slice(0, 40),
-        })),
+        };
+        if (isBlockedDate(summary)) {
+          filtered.push(entry);
+        } else {
+          kept.push(entry);
+        }
+      }
+
+      (out.feeds as Record<string, unknown>)[source.name] = {
+        total: events.length,
+        kept: kept.length,
+        filteredOut: filtered.length,
+        bookings: kept,
+        blocked: filtered,
       };
     } catch (err) {
-      (results.feeds as Record<string, unknown>)[source.name] = {
+      (out.feeds as Record<string, unknown>)[source.name] = {
         error: err instanceof Error ? err.message : String(err),
       };
     }
   }
 
-  return NextResponse.json(results, { status: 200 });
+  return NextResponse.json(out, { status: 200 });
 }
