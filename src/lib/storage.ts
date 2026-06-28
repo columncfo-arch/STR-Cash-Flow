@@ -3,8 +3,8 @@ import path from 'path';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 
-const KV_SETTINGS_KEY = 'str:settings';
-const KV_BOOKINGS_KEY = 'str:bookings';
+const REDIS_SETTINGS_KEY = 'str:settings';
+const REDIS_BOOKINGS_KEY = 'str:bookings';
 
 const DEFAULT_SETTINGS: Settings = {
   sources: [],
@@ -13,17 +13,29 @@ const DEFAULT_SETTINGS: Settings = {
   propertyName: 'My STR Property',
 };
 
-// ─── KV backend (Vercel production) ───────────────────────────────────────────
+// ─── Redis backend (Vercel production) ────────────────────────────────────────
 
-async function kvGet<T>(key: string, fallback: T): Promise<T> {
-  const { kv } = await import('@vercel/kv');
-  const data = await kv.get<T>(key);
-  return data ?? fallback;
+// Module-level singleton — reused across requests in the same serverless instance
+let _redis: import('redis').RedisClientType | null = null;
+
+async function getRedis() {
+  if (_redis?.isReady) return _redis;
+  const { createClient } = await import('redis');
+  _redis = createClient({ url: process.env.REDIS_URL }) as import('redis').RedisClientType;
+  _redis.on('error', (err) => console.error('Redis error:', err));
+  await _redis.connect();
+  return _redis;
 }
 
-async function kvSet(key: string, value: unknown): Promise<void> {
-  const { kv } = await import('@vercel/kv');
-  await kv.set(key, value);
+async function redisGet<T>(key: string, fallback: T): Promise<T> {
+  const client = await getRedis();
+  const raw = await client.get(key);
+  return raw ? (JSON.parse(raw) as T) : fallback;
+}
+
+async function redisSet(key: string, value: unknown): Promise<void> {
+  const client = await getRedis();
+  await client.set(key, JSON.stringify(value));
 }
 
 // ─── File backend (local dev) ─────────────────────────────────────────────────
@@ -50,28 +62,32 @@ async function fileSave(file: string, value: unknown): Promise<void> {
   await writeFile(file, JSON.stringify(value, null, 2));
 }
 
-// ─── Public API (auto-selects backend) ────────────────────────────────────────
+// ─── Public API ───────────────────────────────────────────────────────────────
 
-const useKV = Boolean(process.env.KV_REST_API_URL);
+const useRedis = Boolean(process.env.REDIS_URL);
 
 export async function loadSettings(): Promise<Settings> {
-  return useKV
-    ? kvGet(KV_SETTINGS_KEY, DEFAULT_SETTINGS)
+  return useRedis
+    ? redisGet(REDIS_SETTINGS_KEY, DEFAULT_SETTINGS)
     : fileLoad(SETTINGS_FILE, DEFAULT_SETTINGS);
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
-  useKV ? await kvSet(KV_SETTINGS_KEY, settings) : await fileSave(SETTINGS_FILE, settings);
+  useRedis
+    ? await redisSet(REDIS_SETTINGS_KEY, settings)
+    : await fileSave(SETTINGS_FILE, settings);
 }
 
 export async function loadBookings(): Promise<Booking[]> {
-  return useKV
-    ? kvGet<Booking[]>(KV_BOOKINGS_KEY, [])
+  return useRedis
+    ? redisGet<Booking[]>(REDIS_BOOKINGS_KEY, [])
     : fileLoad<Booking[]>(BOOKINGS_FILE, []);
 }
 
 export async function saveBookings(bookings: Booking[]): Promise<void> {
-  useKV ? await kvSet(KV_BOOKINGS_KEY, bookings) : await fileSave(BOOKINGS_FILE, bookings);
+  useRedis
+    ? await redisSet(REDIS_BOOKINGS_KEY, bookings)
+    : await fileSave(BOOKINGS_FILE, bookings);
 }
 
 export async function upsertBooking(booking: Booking): Promise<void> {
