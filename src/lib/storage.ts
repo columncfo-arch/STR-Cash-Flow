@@ -110,12 +110,19 @@ export async function saveBookings(bookings: Booking[]): Promise<void> {
 
 export async function upsertBooking(booking: Booking): Promise<void> {
   const bookings = await loadBookings();
-  const idx = bookings.findIndex(b => b.uid === booking.uid && b.sourceId === booking.sourceId);
+
+  // Match by uid+sourceId, or by confirmation code across all sources (prevents iCal/CSV duplicates)
+  const idx = bookings.findIndex(b =>
+    (b.uid === booking.uid && b.sourceId === booking.sourceId) ||
+    (booking.confirmationCode && b.confirmationCode === booking.confirmationCode && b.platform === booking.platform)
+  );
+
   if (idx >= 0) {
     const existing = bookings[idx];
     bookings[idx] = {
       ...booking,
-      income: existing.isManual ? existing.income : booking.income,
+      // Never overwrite income that was already set (e.g. from CSV import)
+      income: existing.income > 0 ? existing.income : booking.income,
       platformFee: existing.platformFee ?? booking.platformFee,
       isManual: existing.isManual,
       notes: existing.notes ?? booking.notes,
