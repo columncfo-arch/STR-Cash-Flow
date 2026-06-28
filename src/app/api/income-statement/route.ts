@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import { loadBookings, loadExpenses, loadSettings } from '@/lib/storage';
 import { AnnualStatement, Booking, Expense, ExpenseCategory, MonthlyStatement, Platform, PnLSummary } from '@/types';
-import { getYear, getMonth, getDaysInMonth } from 'date-fns';
+import { getYear, getDaysInMonth } from 'date-fns';
 
 const PLATFORMS: Platform[] = ['airbnb', 'booking', 'vrbo', 'direct', 'other'];
 const EXPENSE_CATS: ExpenseCategory[] = ['cleaning', 'electric', 'water', 'internet', 'yard_care', 'supplies', 'refund', 'maintenance', 'other'];
@@ -74,13 +74,9 @@ function buildMonthly(
   expenses: Expense[],
   monthlyPITI: number,
 ): MonthlyStatement {
-  const monthBookings = bookings.filter(b => {
-    const d = new Date(b.checkIn);
-    return getYear(d) === year && getMonth(d) === month - 1;
-  });
-
-  // date prefix for this month
+  // Use string prefix to avoid timezone shifts from Date parsing
   const prefix = `${year}-${String(month).padStart(2, '0')}`;
+  const monthBookings = bookings.filter(b => b.checkIn.startsWith(prefix));
   const monthExpenses = expenses.filter(e => e.date.startsWith(prefix));
 
   const byPlatform = emptyPlatformBreakdown();
