@@ -2,8 +2,6 @@
 import { useRef, useState } from 'react';
 import { Platform } from '@/types';
 import { Upload, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
-import * as XLSX from 'xlsx';
-
 interface ParsedRow {
   confirmationCode: string;
   checkIn: string;
@@ -49,6 +47,7 @@ export default function ImportPage() {
     const isExcel = /\.(xlsx|xls|xlsm)$/i.test(file.name);
     if (!isExcel) return file.text();
     const buf = await file.arrayBuffer();
+    const XLSX = await import('xlsx');
     const wb = XLSX.read(buf, { type: 'array', cellDates: true });
     const ws = wb.Sheets[wb.SheetNames[0]];
     return XLSX.utils.sheet_to_csv(ws);
