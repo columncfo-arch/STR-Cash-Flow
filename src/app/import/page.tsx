@@ -14,16 +14,22 @@ interface MatchResult {
   matchedBy: 'confirmation_code' | 'check_in_date';
 }
 
-interface UnmatchedRow {
+interface NewBookingResult {
+  tempId: string;
   confirmationCode: string;
   checkIn: string;
+  checkOut: string;
+  nights: number;
+  guestName: string;
   grossAmount: number;
-  reason: string;
+  platformFee: number;
+  netAmount: number;
+  platform: Platform;
 }
 
 interface Preview {
   matched: MatchResult[];
-  unmatched: UnmatchedRow[];
+  toCreate: NewBookingResult[];
   totalRows: number;
 }
 
@@ -52,7 +58,7 @@ export default function ImportPage() {
   const [platform, setPlatform] = useState<Platform>('airbnb');
   const [preview, setPreview] = useState<Preview | null>(null);
   const [loading, setLoading] = useState(false);
-  const [applied, setApplied] = useState<number | null>(null);
+  const [result, setResult] = useState<{ updated: number; created: number } | null>(null);
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -61,7 +67,7 @@ export default function ImportPage() {
   async function handleFile(file: File) {
     setError('');
     setPreview(null);
-    setApplied(null);
+    setResult(null);
     setLoading(true);
     try {
       const csvText = await file.text();
@@ -88,11 +94,11 @@ export default function ImportPage() {
       const res = await fetch('/api/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'apply', matches: preview.matched }),
+        body: JSON.stringify({ action: 'apply', matched: preview.matched, toCreate: preview.toCreate }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Apply failed');
-      setApplied(data.updated);
+      setResult(data);
       setPreview(null);
       if (fileRef.current) fileRef.current.value = '';
     } catch (e) {
@@ -102,12 +108,14 @@ export default function ImportPage() {
     }
   }
 
+  const total = (preview?.matched.length ?? 0) + (preview?.toCreate.length ?? 0);
+
   return (
     <div className="max-w-3xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-slate-900">Import Earnings</h1>
         <p className="text-slate-500 text-sm mt-1">
-          Upload a CSV export from your booking platform to populate actual income and platform fees.
+          Upload a CSV export from your booking platform to import actual income and platform fees.
         </p>
       </div>
 
@@ -118,7 +126,7 @@ export default function ImportPage() {
           {PLATFORMS.map(p => (
             <button
               key={p.value}
-              onClick={() => { setPlatform(p.value); setPreview(null); setApplied(null); }}
+              onClick={() => { setPlatform(p.value); setPreview(null); setResult(null); }}
               className={`flex-1 py-2.5 px-4 rounded-lg border text-sm font-medium transition-colors ${
                 platform === p.value
                   ? 'bg-emerald-600 border-emerald-600 text-white'
@@ -152,12 +160,12 @@ export default function ImportPage() {
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,text/csv"
+            accept=".csv,.tsv,text/csv,text/tab-separated-values"
             className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
           />
         </label>
-        {loading && <p className="mt-3 text-sm text-slate-500 text-center">Parsing CSV…</p>}
+        {loading && <p className="mt-3 text-sm text-slate-500 text-center">Parsing…</p>}
         {error && (
           <div className="mt-3 flex items-start gap-2 text-sm text-red-600 bg-red-50 rounded-lg p-3">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
@@ -166,13 +174,16 @@ export default function ImportPage() {
         )}
       </section>
 
-      {/* Applied success */}
-      {applied !== null && (
+      {/* Success */}
+      {result && (
         <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-5 mb-6">
           <CheckCircle className="w-6 h-6 text-emerald-600 shrink-0" />
           <div>
             <p className="font-semibold text-emerald-800">Import complete</p>
-            <p className="text-sm text-emerald-700">{applied} booking{applied !== 1 ? 's' : ''} updated with income and platform fee data.</p>
+            <p className="text-sm text-emerald-700">
+              {result.updated > 0 && `${result.updated} booking${result.updated !== 1 ? 's' : ''} updated. `}
+              {result.created > 0 && `${result.created} new booking${result.created !== 1 ? 's' : ''} created from CSV.`}
+            </p>
           </div>
         </div>
       )}
@@ -182,104 +193,111 @@ export default function ImportPage() {
         <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-semibold text-slate-800">3. Review &amp; Confirm</h2>
-            <span className="text-xs text-slate-400">{preview.totalRows} rows parsed · {preview.matched.length} matched · {preview.unmatched.length} unmatched</span>
+            <span className="text-xs text-slate-400">
+              {preview.totalRows} rows parsed · {preview.matched.length} match existing · {preview.toCreate.length} new
+            </span>
           </div>
 
+          {/* Matched bookings */}
           {preview.matched.length > 0 && (
             <>
-              <p className="text-sm font-medium text-slate-700 mb-2">Bookings to update ({preview.matched.length})</p>
-              <div className="rounded-lg border border-slate-200 overflow-hidden mb-4">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="bg-slate-50 text-slate-500 text-left">
-                      <th className="px-3 py-2 font-medium">Check-in</th>
-                      <th className="px-3 py-2 font-medium">Guest</th>
-                      <th className="px-3 py-2 font-medium text-right">Gross</th>
-                      <th className="px-3 py-2 font-medium text-right">Platform Fee</th>
-                      <th className="px-3 py-2 font-medium text-right">Net</th>
-                      <th className="px-3 py-2 font-medium">Matched by</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.matched.map((m, i) => (
-                      <tr key={i} className="border-t border-slate-100">
-                        <td className="px-3 py-2 text-slate-600">{m.checkIn}</td>
-                        <td className="px-3 py-2 text-slate-700 max-w-[120px] truncate">{m.guestName || '—'}</td>
-                        <td className="px-3 py-2 text-right font-medium text-slate-800">{fmt(m.grossAmount)}</td>
-                        <td className="px-3 py-2 text-right text-red-500">({fmt(m.platformFee)})</td>
-                        <td className="px-3 py-2 text-right font-semibold text-emerald-700">{fmt(m.netAmount)}</td>
-                        <td className="px-3 py-2 text-xs text-slate-400">
-                          {m.matchedBy === 'confirmation_code' ? 'Conf. code' : 'Check-in date'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="bg-emerald-50 border-t-2 border-emerald-200 font-semibold text-sm">
-                      <td colSpan={2} className="px-3 py-2 text-slate-700">Total</td>
-                      <td className="px-3 py-2 text-right text-slate-700">
-                        {fmt(preview.matched.reduce((s, m) => s + m.grossAmount, 0))}
-                      </td>
-                      <td className="px-3 py-2 text-right text-red-500">
-                        ({fmt(preview.matched.reduce((s, m) => s + m.platformFee, 0))})
-                      </td>
-                      <td className="px-3 py-2 text-right text-emerald-700">
-                        {fmt(preview.matched.reduce((s, m) => s + m.netAmount, 0))}
-                      </td>
-                      <td />
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
+              <p className="text-sm font-medium text-slate-700 mb-2">
+                Updating existing bookings ({preview.matched.length})
+              </p>
+              <BookingTable rows={preview.matched.map(m => ({
+                confirmationCode: m.confirmationCode,
+                guestName: m.guestName,
+                checkIn: m.checkIn,
+                grossAmount: m.grossAmount,
+                platformFee: m.platformFee,
+                netAmount: m.netAmount,
+                note: m.matchedBy === 'confirmation_code' ? 'Matched by code' : 'Matched by date',
+              }))} />
             </>
           )}
 
-          {preview.unmatched.length > 0 && (
-            <>
-              <p className="text-sm font-medium text-slate-600 mb-2">
-                Unmatched rows ({preview.unmatched.length}) — not imported
+          {/* New bookings */}
+          {preview.toCreate.length > 0 && (
+            <div className={preview.matched.length > 0 ? 'mt-5' : ''}>
+              <p className="text-sm font-medium text-slate-700 mb-2">
+                Creating new bookings from CSV ({preview.toCreate.length})
               </p>
-              <div className="rounded-lg border border-amber-200 bg-amber-50 overflow-hidden mb-4">
-                <table className="w-full text-xs">
-                  <thead>
-                    <tr className="text-amber-700 text-left">
-                      <th className="px-3 py-2 font-medium">Confirmation</th>
-                      <th className="px-3 py-2 font-medium">Check-in</th>
-                      <th className="px-3 py-2 font-medium text-right">Amount</th>
-                      <th className="px-3 py-2 font-medium">Reason</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.unmatched.map((u, i) => (
-                      <tr key={i} className="border-t border-amber-100">
-                        <td className="px-3 py-2 text-amber-900">{u.confirmationCode || '—'}</td>
-                        <td className="px-3 py-2 text-amber-900">{u.checkIn || '—'}</td>
-                        <td className="px-3 py-2 text-right text-amber-900">{fmt(u.grossAmount)}</td>
-                        <td className="px-3 py-2 text-amber-700">{u.reason}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-              <p className="text-xs text-slate-400 mb-4">
-                Unmatched rows are usually bookings not yet synced via iCal, or date mismatches.
-                Sync iCal first, then re-import.
+              <p className="text-xs text-slate-400 mb-2">
+                These bookings aren&apos;t in your iCal history yet — they&apos;ll be added directly from the CSV.
               </p>
-            </>
+              <BookingTable rows={preview.toCreate.map(n => ({
+                confirmationCode: n.confirmationCode,
+                guestName: n.guestName,
+                checkIn: n.checkIn,
+                grossAmount: n.grossAmount,
+                platformFee: n.platformFee,
+                netAmount: n.netAmount,
+                note: 'New',
+              }))} />
+            </div>
           )}
 
-          {preview.matched.length > 0 && (
+          {total === 0 && (
+            <p className="text-sm text-slate-500 py-4">
+              No bookings found in this CSV. Make sure you&apos;re exporting Transaction History (not a summary report) and the correct platform is selected above.
+            </p>
+          )}
+
+          {total > 0 && (
             <button
               onClick={applyImport}
               disabled={loading}
-              className="flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 transition-colors"
+              className="mt-5 flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 transition-colors"
             >
               <ArrowRight className="w-4 h-4" />
-              {loading ? 'Importing…' : `Import ${preview.matched.length} booking${preview.matched.length !== 1 ? 's' : ''}`}
+              {loading ? 'Importing…' : `Import ${total} booking${total !== 1 ? 's' : ''}`}
             </button>
           )}
         </section>
       )}
+    </div>
+  );
+}
+
+function BookingTable({ rows }: {
+  rows: { confirmationCode: string; guestName: string; checkIn: string; grossAmount: number; platformFee: number; netAmount: number; note: string }[];
+}) {
+  const total = rows.reduce((s, r) => ({ gross: s.gross + r.grossAmount, fee: s.fee + r.platformFee, net: s.net + r.netAmount }), { gross: 0, fee: 0, net: 0 });
+  return (
+    <div className="rounded-lg border border-slate-200 overflow-hidden mb-2">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="bg-slate-50 text-slate-500 text-left">
+            <th className="px-3 py-2 font-medium">Check-in</th>
+            <th className="px-3 py-2 font-medium">Guest</th>
+            <th className="px-3 py-2 font-medium text-right">Gross</th>
+            <th className="px-3 py-2 font-medium text-right">Platform Fee</th>
+            <th className="px-3 py-2 font-medium text-right">Net</th>
+            <th className="px-3 py-2 font-medium"></th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((r, i) => (
+            <tr key={i} className="border-t border-slate-100">
+              <td className="px-3 py-2 text-slate-600">{r.checkIn}</td>
+              <td className="px-3 py-2 text-slate-700 max-w-[120px] truncate">{r.guestName || '—'}</td>
+              <td className="px-3 py-2 text-right font-medium text-slate-800">{fmt(r.grossAmount)}</td>
+              <td className="px-3 py-2 text-right text-red-500">{r.platformFee > 0 ? `(${fmt(r.platformFee)})` : '—'}</td>
+              <td className="px-3 py-2 text-right font-semibold text-emerald-700">{fmt(r.netAmount)}</td>
+              <td className="px-3 py-2 text-xs text-slate-400">{r.note}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr className="bg-emerald-50 border-t-2 border-emerald-200 font-semibold text-sm">
+            <td colSpan={2} className="px-3 py-2 text-slate-700">Total</td>
+            <td className="px-3 py-2 text-right text-slate-700">{fmt(total.gross)}</td>
+            <td className="px-3 py-2 text-right text-red-500">{total.fee > 0 ? `(${fmt(total.fee)})` : '—'}</td>
+            <td className="px-3 py-2 text-right text-emerald-700">{fmt(total.net)}</td>
+            <td />
+          </tr>
+        </tfoot>
+      </table>
     </div>
   );
 }
