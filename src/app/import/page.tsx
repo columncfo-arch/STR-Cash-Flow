@@ -2,6 +2,7 @@
 import { useRef, useState } from 'react';
 import { Platform } from '@/types';
 import { Upload, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface ParsedRow {
   confirmationCode: string;
@@ -44,13 +45,22 @@ export default function ImportPage() {
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
 
+  async function toCSV(file: File): Promise<string> {
+    const isExcel = /\.(xlsx|xls|xlsm)$/i.test(file.name);
+    if (!isExcel) return file.text();
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: true });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    return XLSX.utils.sheet_to_csv(ws);
+  }
+
   async function handleFile(file: File) {
     setError('');
     setRows(null);
     setResult(null);
     setLoading(true);
     try {
-      const csvText = await file.text();
+      const csvText = await toCSV(file);
       const res = await fetch('/api/import', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -135,12 +145,12 @@ export default function ImportPage() {
           onDrop={e => { e.preventDefault(); const f = e.dataTransfer.files[0]; if (f) handleFile(f); }}
         >
           <Upload className="w-8 h-8 text-slate-400 mb-2" />
-          <span className="text-sm text-slate-500">Drag &amp; drop CSV here, or</span>
+          <span className="text-sm text-slate-500">Drag &amp; drop CSV or Excel file here, or</span>
           <span className="mt-1 text-sm font-medium text-emerald-600 underline">browse files</span>
           <input
             ref={fileRef}
             type="file"
-            accept=".csv,.tsv,text/csv"
+            accept=".csv,.tsv,.xlsx,.xls,.xlsm,text/csv"
             className="hidden"
             onChange={e => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
           />
