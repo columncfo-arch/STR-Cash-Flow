@@ -40,6 +40,7 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saved, setSaved] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [clearing, setClearing] = useState(false);
   const [syncResult, setSyncResult] = useState('');
 
   useEffect(() => {
@@ -72,6 +73,25 @@ export default function SettingsPage() {
       setSyncResult('Sync failed — check your iCal URLs');
     } finally {
       setSyncing(false);
+    }
+  }
+
+  async function clearAndResync() {
+    if (!settings) return;
+    if (!confirm('This will delete all auto-synced bookings and re-import fresh from your iCal feeds. Manually added bookings are kept. Continue?')) return;
+    await save(settings);
+    setClearing(true);
+    setSyncResult('');
+    try {
+      const res = await fetch('/api/ical/clear', { method: 'POST' });
+      const data = await res.json();
+      setSyncResult(
+        `Cleared ${data.cleared} old bookings, synced ${data.synced} fresh${data.errors?.length ? '. Errors: ' + data.errors.join('; ') : ''}`,
+      );
+    } catch {
+      setSyncResult('Clear & re-sync failed');
+    } finally {
+      setClearing(false);
     }
   }
 
@@ -269,11 +289,19 @@ export default function SettingsPage() {
         </button>
         <button
           onClick={syncNow}
-          disabled={syncing}
+          disabled={syncing || clearing}
           className="flex items-center gap-2 border border-slate-200 bg-white text-slate-700 px-5 py-2.5 rounded-lg text-sm hover:bg-slate-50 disabled:opacity-60 transition-colors"
         >
           <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
           {syncing ? 'Syncing…' : 'Save & Sync Now'}
+        </button>
+        <button
+          onClick={clearAndResync}
+          disabled={syncing || clearing}
+          className="flex items-center gap-2 border border-red-200 bg-white text-red-600 px-5 py-2.5 rounded-lg text-sm hover:bg-red-50 disabled:opacity-60 transition-colors"
+        >
+          <RefreshCw className={`w-4 h-4 ${clearing ? 'animate-spin' : ''}`} />
+          {clearing ? 'Clearing…' : 'Clear & Re-sync'}
         </button>
         {syncResult && (
           <span className="text-sm text-slate-500">{syncResult}</span>
