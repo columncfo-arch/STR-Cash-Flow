@@ -60,6 +60,10 @@ export interface Booking {
   rooms?: number;
   people?: number;
   // VRBO fields
+  propertyId?: string;
+  unitId?: string;
+  lodgingTaxOwnerRemits?: number;
+  taxWithheld?: number;
   status?: string;
   isManual?: boolean;
   notes?: string;
@@ -87,12 +91,13 @@ export interface Settings {
 
 export interface PnLSummary {
   grossRevenue: number;
-  platformFees: number;    // host service fee / commission
-  fastPayFees: number;     // instant payout fees
-  taxRemitted: number;     // platform-remitted occupancy tax (informational)
+  platformFees: number;      // host service fee / commission
+  fastPayFees: number;       // instant payout fees (Airbnb)
+  taxRemitted: number;       // platform-remitted occupancy tax
   refunds: number;
   netRevenue: number;
   expensesByCategory: Record<ExpenseCategory, number>;
+  ownerTaxes: number;        // lodging tax owner must remit directly (VRBO)
   totalOperatingExpenses: number;
   operatingIncome: number;
   piti: number;

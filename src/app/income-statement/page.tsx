@@ -43,6 +43,7 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
 
   let fastPayFees = 0;
   let taxRemitted = 0;
+  let ownerTaxes = 0;
   const expensesByCategory = { utilities: 0, cleaning: 0, supplies: 0, maintenance: 0, refund: 0, other: 0 };
 
   for (const m of months) {
@@ -52,6 +53,7 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
     platformFees += m.platformFees;
     fastPayFees += m.fastPayFees;
     taxRemitted += m.taxRemitted;
+    ownerTaxes += m.ownerTaxes;
     refunds += m.refunds;
     totalOperatingExpenses += m.totalOperatingExpenses;
     piti += m.piti;
@@ -71,7 +73,7 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
 
   return {
     grossRevenue, platformFees, fastPayFees, taxRemitted, refunds, netRevenue,
-    expensesByCategory, totalOperatingExpenses,
+    expensesByCategory, ownerTaxes, totalOperatingExpenses,
     operatingIncome, piti, netIncome,
     totalNights,
     avgOccupancy: months.length ? totalOccupancy / months.length : 0,
@@ -196,6 +198,7 @@ export default function IncomeStatementPage() {
                 {pnl.expensesByCategory.supplies > 0 && <Row label="Supplies" value={pnl.expensesByCategory.supplies} indent negative />}
                 {pnl.expensesByCategory.maintenance > 0 && <Row label="Maintenance" value={pnl.expensesByCategory.maintenance} indent negative />}
                 {pnl.expensesByCategory.other > 0 && <Row label="Other" value={pnl.expensesByCategory.other} indent negative />}
+                {pnl.ownerTaxes > 0 && <Row label="Lodging Tax (Owner Remits)" value={pnl.ownerTaxes} indent negative />}
                 <Row label="Total Operating Expenses" value={pnl.totalOperatingExpenses} bold separator negative />
               </>
             )}

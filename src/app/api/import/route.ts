@@ -108,6 +108,11 @@ interface ParsedRow {
   childrenAges?: string;
   rooms?: number;
   people?: number;
+  // VRBO fields
+  propertyId?: string;
+  unitId?: string;
+  lodgingTaxOwnerRemits?: number;
+  taxWithheld?: number;
 }
 
 function parseAirbnb(rows: Record<string, string>[]): ParsedRow[] {
@@ -147,30 +152,42 @@ function parseAirbnb(rows: Record<string, string>[]): ParsedRow[] {
 }
 
 function parseVRBO(rows: Record<string, string>[]): ParsedRow[] {
-  // VRBO reservation report columns:
-  // Reservation ID, Listing Number, Property Name, Created On, Email,
-  // Inquirer, Phone, Check-in, Check-out, Nights Stay, Adults, Children, Status, Source
+  // VRBO financial report columns (normalized):
+  // property_id, unit_id, address, reservation_id,
+  // traveler_first_name, traveler_last_name, booking_status,
+  // check_in, check_out, nights, payout_date,
+  // gross_booking_amount, deductions, payout,
+  // lodging_tax_owner_remits, tax_withheld, payout_currency
   return rows
-    .filter(r => (col(r, 'status') || '').toLowerCase() !== 'cancelled')
+    .filter(r => (col(r, 'booking_status') || '').toLowerCase() !== 'cancelled')
     .map(r => {
-      const nights = parseInt(col(r, 'nights_stay', 'nights')) || 0;
+      const gross = parseMoney(col(r, 'gross_booking_amount'));
+      const deductions = parseMoney(col(r, 'deductions'));
+      const payout = parseMoney(col(r, 'payout'));
+      const nights = parseInt(col(r, 'nights')) || 0;
+      const firstName = col(r, 'traveler_first_name');
+      const lastName = col(r, 'traveler_last_name');
       return {
         confirmationCode: col(r, 'reservation_id'),
         checkIn: normalizeDate(col(r, 'check_in')),
         checkOut: normalizeDate(col(r, 'check_out')),
         nights,
-        guestName: col(r, 'inquirer'),
-        grossAmount: 0, // reservation report has no financial data
-        platformFee: 0,
-        netAmount: 0,
-        bookingDate: normalizeDate(col(r, 'created_on')),
-        listing: col(r, 'property_name', 'listing_number'),
-        referenceCode: col(r, 'listing_number'),
-        details: [col(r, 'adults') && `Adults: ${col(r, 'adults')}`, col(r, 'children') && `Children: ${col(r, 'children')}`, col(r, 'source') && `Source: ${col(r, 'source')}`].filter(Boolean).join(', ') || undefined,
-        currency: undefined,
+        guestName: [firstName, lastName].filter(Boolean).join(' ') || '',
+        grossAmount: gross,
+        platformFee: deductions,
+        netAmount: payout || (gross - deductions),
+        paidOut: payout,
+        payoutDate: normalizeDate(col(r, 'payout_date')),
+        currency: col(r, 'payout_currency') || undefined,
+        address: col(r, 'address') || undefined,
+        propertyId: col(r, 'property_id') || undefined,
+        unitId: col(r, 'unit_id') || undefined,
+        status: col(r, 'booking_status') || undefined,
+        lodgingTaxOwnerRemits: parseMoney(col(r, 'lodging_tax_owner_remits')) || undefined,
+        taxWithheld: parseMoney(col(r, 'tax_withheld')) || undefined,
       };
     })
-    .filter(r => r.checkIn);
+    .filter(r => r.grossAmount > 0 && r.checkIn);
 }
 
 function parseBookingCom(rows: Record<string, string>[]): ParsedRow[] {
@@ -307,6 +324,10 @@ export async function POST(req: Request) {
           childrenAges: row.childrenAges || undefined,
           rooms: row.rooms || undefined,
           people: row.people || undefined,
+          propertyId: row.propertyId || undefined,
+          unitId: row.unitId || undefined,
+          lodgingTaxOwnerRemits: row.lodgingTaxOwnerRemits || undefined,
+          taxWithheld: row.taxWithheld || undefined,
           updatedAt: now,
         };
 

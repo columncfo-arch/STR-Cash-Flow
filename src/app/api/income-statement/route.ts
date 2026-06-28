@@ -25,7 +25,8 @@ function buildPnL(
   const grossRevenue = bookings.reduce((s, b) => s + b.income, 0);
   const platformFees = bookings.reduce((s, b) => s + (b.platformFee ?? 0), 0);
   const fastPayFees = bookings.reduce((s, b) => s + (b.fastPayFee ?? 0), 0);
-  const taxRemitted = bookings.reduce((s, b) => s + (b.taxRemitted ?? 0), 0);
+  const taxRemitted = bookings.reduce((s, b) => s + (b.taxRemitted ?? 0) + (b.taxWithheld ?? 0), 0);
+  const ownerTaxes = bookings.reduce((s, b) => s + (b.lodgingTaxOwnerRemits ?? 0), 0);
 
   const expensesByCategory = emptyExpensesByCategory();
   for (const e of expenses) {
@@ -40,7 +41,8 @@ function buildPnL(
     expensesByCategory.cleaning +
     expensesByCategory.supplies +
     expensesByCategory.maintenance +
-    expensesByCategory.other;
+    expensesByCategory.other +
+    ownerTaxes;
 
   const operatingIncome = netRevenue - totalOperatingExpenses;
   const piti = monthlyPITI * months;
@@ -54,6 +56,7 @@ function buildPnL(
     refunds,
     netRevenue,
     expensesByCategory,
+    ownerTaxes,
     totalOperatingExpenses,
     operatingIncome,
     piti,
