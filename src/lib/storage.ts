@@ -75,9 +75,19 @@ async function fileSave(file: string, value: unknown): Promise<void> {
 const useRedis = Boolean(process.env.REDIS_URL);
 
 export async function loadSettings(): Promise<Settings> {
-  return useRedis
-    ? redisGet(REDIS_SETTINGS_KEY, DEFAULT_SETTINGS)
-    : fileLoad(SETTINGS_FILE, DEFAULT_SETTINGS, SEED_SETTINGS);
+  if (!useRedis) {
+    return fileLoad(SETTINGS_FILE, DEFAULT_SETTINGS, SEED_SETTINGS);
+  }
+  // Check Redis; if empty (first run), seed from the committed data/settings.json
+  const existing = await redisGet<Settings | null>(REDIS_SETTINGS_KEY, null);
+  if (existing) return existing;
+  try {
+    const seed = JSON.parse(await readFile(SEED_SETTINGS, 'utf-8')) as Settings;
+    await redisSet(REDIS_SETTINGS_KEY, seed);
+    return seed;
+  } catch {
+    return DEFAULT_SETTINGS;
+  }
 }
 
 export async function saveSettings(settings: Settings): Promise<void> {
