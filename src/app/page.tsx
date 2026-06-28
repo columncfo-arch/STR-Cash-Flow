@@ -4,7 +4,7 @@ import { AnnualStatement, Settings } from '@/types';
 import StatCard from '@/components/StatCard';
 import { TrendingUp } from 'lucide-react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -30,6 +30,10 @@ export default function Dashboard() {
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: settings?.currency ?? 'USD', maximumFractionDigits: 0 }).format(n);
 
+  const adr = statement && statement.totalNights > 0
+    ? statement.grossRevenue / statement.totalNights
+    : null;
+
   const chartData = statement?.months.map((m, i) => ({
     name: MONTHS[i],
     Airbnb: m.byPlatform.airbnb.income,
@@ -37,6 +41,7 @@ export default function Dashboard() {
     VRBO: m.byPlatform.vrbo.income,
     Direct: m.byPlatform.direct.income,
     Other: m.byPlatform.other.income,
+    'Net Income': m.netIncome,
   })) ?? [];
 
   const hasData = statement && statement.grossRevenue > 0;
@@ -48,30 +53,39 @@ export default function Dashboard() {
         <p className="text-slate-500 text-sm mt-1">{year} overview</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
         <StatCard label="Gross Revenue (YTD)" value={fmt(statement?.grossRevenue ?? 0)} color="text-emerald-700" />
         <StatCard label="Net Income (YTD)" value={fmt(statement?.netIncome ?? 0)} color={(statement?.netIncome ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-600'} />
         <StatCard label="Total Nights Booked" value={(statement?.totalNights ?? 0).toString()} sub="nights" />
         <StatCard label="Avg Occupancy" value={`${(statement?.avgOccupancyRate ?? 0).toFixed(1)}%`} />
+        <StatCard label="ADR" value={adr != null ? fmt(adr) : '—'} sub="per night" color="text-emerald-700" />
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
         <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-emerald-600" />
-          Monthly Revenue by Platform
+          Monthly Revenue by Platform &amp; Net Income
         </h2>
         {hasData ? (
           <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={chartData}>
+            <ComposedChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
               <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v) => fmt(Number(v))} />
+              <Tooltip formatter={(v, name) => [fmt(Number(v)), name]} />
               <Legend />
               {(['Airbnb', 'Booking.com', 'VRBO', 'Direct', 'Other'] as const).map(p => (
                 <Bar key={p} dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com', '')]} />
               ))}
-            </BarChart>
+              <Line
+                type="monotone"
+                dataKey="Net Income"
+                stroke="#0f172a"
+                strokeWidth={2}
+                dot={{ r: 3, fill: '#0f172a' }}
+                connectNulls
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         ) : (
           <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
