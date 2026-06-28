@@ -74,6 +74,7 @@ interface ParsedRow {
   grossAmount: number;
   platformFee: number;
   netAmount: number;
+  // Airbnb fields
   paidOut?: number;
   fastPayFee?: number;
   cleaningFee?: number;
@@ -81,13 +82,32 @@ interface ParsedRow {
   taxRemitted?: number;
   amount?: number;
   payoutDate?: string;
-  bookingDate?: string;
   arrivingByDate?: string;
+  earningsYear?: number;
+  // Shared metadata
+  bookingDate?: string;
   listing?: string;
   details?: string;
   referenceCode?: string;
   currency?: string;
-  earningsYear?: number;
+  status?: string;
+  // Booking.com fields
+  commissionPct?: number;
+  paymentStatus?: string;
+  paymentMethod?: string;
+  bookerName?: string;
+  bookerCountry?: string;
+  travelPurpose?: string;
+  device?: string;
+  unitType?: string;
+  cancellationDate?: string;
+  address?: string;
+  phone?: string;
+  adults?: number;
+  children?: number;
+  childrenAges?: string;
+  rooms?: number;
+  people?: number;
 }
 
 function parseAirbnb(rows: Record<string, string>[]): ParsedRow[] {
@@ -154,22 +174,51 @@ function parseVRBO(rows: Record<string, string>[]): ParsedRow[] {
 }
 
 function parseBookingCom(rows: Record<string, string>[]): ParsedRow[] {
-  return rows.map(r => {
-    const gross = parseMoney(col(r, 'gross_amount', 'room_revenue', 'total_price', 'amount'));
-    const fee = parseMoney(col(r, 'commission', 'commission_amount', 'platform_fee'));
-    const net = parseMoney(col(r, 'net_amount', 'net_revenue', 'payout', 'paid_out'));
-    const nights = parseInt(col(r, 'nights', 'room_nights')) || 0;
-    return {
-      confirmationCode: col(r, 'reservation_number', 'reservation_id', 'booking_number', 'confirmation_code'),
-      checkIn: normalizeDate(col(r, 'check_in', 'check_in_date', 'arrival_date')),
-      checkOut: normalizeDate(col(r, 'check_out', 'check_out_date', 'departure_date')),
-      nights,
-      guestName: col(r, 'guest_name', 'booker_name', 'guest'),
-      grossAmount: gross || (net + fee),
-      platformFee: fee || Math.max(gross - net, 0),
-      netAmount: net || (gross - fee),
-    };
-  }).filter(r => r.grossAmount > 0 && r.checkIn);
+  // Booking.com columns (normalized):
+  // book_number, booked_by, guest_name_s, check_in, check_out, booked_on,
+  // status, rooms, people, adults, children, children_s_age_s, price,
+  // commission, commission_amount, payment_status, payment_method_payment_provider,
+  // remarks, booker_country, travel_purpose, device, unit_type,
+  // duration_nights, cancellation_date, address, phone_number
+  return rows
+    .filter(r => (col(r, 'status') || '').toLowerCase() !== 'cancelled')
+    .map(r => {
+      const gross = parseMoney(col(r, 'price'));
+      const fee = parseMoney(col(r, 'commission_amount'));
+      const commissionPct = parseFloat(col(r, 'commission')) || undefined;
+      const nights = parseInt(col(r, 'duration_nights', 'nights')) || 0;
+      return {
+        confirmationCode: col(r, 'book_number'),
+        checkIn: normalizeDate(col(r, 'check_in')),
+        checkOut: normalizeDate(col(r, 'check_out')),
+        nights,
+        guestName: col(r, 'guest_name_s', 'guest_name'),
+        grossAmount: gross,
+        platformFee: fee,
+        netAmount: gross - fee,
+        bookingDate: normalizeDate(col(r, 'booked_on')),
+        status: col(r, 'status'),
+        commissionPct,
+        paymentStatus: col(r, 'payment_status') || undefined,
+        paymentMethod: col(r, 'payment_method_payment_provider') || undefined,
+        bookerName: col(r, 'booked_by') || undefined,
+        bookerCountry: col(r, 'booker_country') || undefined,
+        travelPurpose: col(r, 'travel_purpose') || undefined,
+        device: col(r, 'device') || undefined,
+        unitType: col(r, 'unit_type') || undefined,
+        cancellationDate: normalizeDate(col(r, 'cancellation_date')) || undefined,
+        address: col(r, 'address') || undefined,
+        phone: col(r, 'phone_number') || undefined,
+        adults: parseInt(col(r, 'adults')) || undefined,
+        children: parseInt(col(r, 'children')) || undefined,
+        childrenAges: col(r, 'children_s_age_s') || undefined,
+        rooms: parseInt(col(r, 'rooms')) || undefined,
+        people: parseInt(col(r, 'people')) || undefined,
+        referenceCode: col(r, 'book_number') || undefined,
+        details: col(r, 'remarks') || undefined,
+      };
+    })
+    .filter(r => r.grossAmount > 0 && r.checkIn);
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────────
@@ -241,6 +290,23 @@ export async function POST(req: Request) {
           referenceCode: row.referenceCode || undefined,
           currency: row.currency || undefined,
           earningsYear: row.earningsYear || undefined,
+          status: row.status || undefined,
+          commissionPct: row.commissionPct || undefined,
+          paymentStatus: row.paymentStatus || undefined,
+          paymentMethod: row.paymentMethod || undefined,
+          bookerName: row.bookerName || undefined,
+          bookerCountry: row.bookerCountry || undefined,
+          travelPurpose: row.travelPurpose || undefined,
+          device: row.device || undefined,
+          unitType: row.unitType || undefined,
+          cancellationDate: row.cancellationDate || undefined,
+          address: row.address || undefined,
+          phone: row.phone || undefined,
+          adults: row.adults || undefined,
+          children: row.children || undefined,
+          childrenAges: row.childrenAges || undefined,
+          rooms: row.rooms || undefined,
+          people: row.people || undefined,
           updatedAt: now,
         };
 

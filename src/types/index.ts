@@ -34,14 +34,33 @@ export interface Booking {
   taxRemitted?: number;   // platform-remitted tax
   amount?: number;        // raw "Amount" column
   // Booking metadata
-  payoutDate?: string;    // date payout was processed
-  bookingDate?: string;   // date booking was made
+  payoutDate?: string;
+  bookingDate?: string;
   arrivingByDate?: string;
   listing?: string;
   details?: string;
   referenceCode?: string;
   currency?: string;
   earningsYear?: number;
+  // Booking.com fields
+  commissionPct?: number;
+  paymentStatus?: string;
+  paymentMethod?: string;
+  bookerName?: string;
+  bookerCountry?: string;
+  travelPurpose?: string;
+  device?: string;
+  unitType?: string;
+  cancellationDate?: string;
+  address?: string;
+  phone?: string;
+  adults?: number;
+  children?: number;
+  childrenAges?: string;
+  rooms?: number;
+  people?: number;
+  // VRBO fields
+  status?: string;
   isManual?: boolean;
   notes?: string;
   createdAt: string;
