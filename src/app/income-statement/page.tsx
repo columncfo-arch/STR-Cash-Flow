@@ -156,7 +156,7 @@ export default function IncomeStatementPage() {
     if (!hasData) {
       return (
         <div className="bg-amber-50 border border-amber-200 rounded-xl p-5 mb-6 text-sm text-amber-800">
-          No data yet for {label}. Sync iCal to pull bookings, then import a CSV from your platform dashboard to add actual income figures.
+          No data yet for {label}. Go to Import Earnings and upload a CSV from your platform dashboard to get started.
         </div>
       );
     }
