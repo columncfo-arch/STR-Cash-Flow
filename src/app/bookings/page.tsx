@@ -239,7 +239,7 @@ export default function BookingsPage() {
             {bookings.length === 0 ? (
               <tr>
                 <td colSpan={8} className="text-center py-12 text-slate-400">
-                  No bookings found. Sync iCal feeds or add bookings manually.
+                  No bookings found. Import a CSV from your platform or add bookings manually.
                 </td>
               </tr>
             ) : (
