@@ -15,6 +15,7 @@ const PLATFORM_OPTIONS: { value: Platform; label: string }[] = [
 
 interface EditState {
   id: string;
+  checkIn: string;
   income: string;
   notes: string;
 }
@@ -67,7 +68,7 @@ export default function BookingsPage() {
     await fetch(`/api/bookings/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ income: parseFloat(editState.income) || 0, notes: editState.notes }),
+      body: JSON.stringify({ checkIn: editState.checkIn, income: parseFloat(editState.income) || 0, notes: editState.notes }),
     });
     setEditState(null);
     load();
@@ -266,10 +267,19 @@ export default function BookingsPage() {
                     {b.guestName ?? b.confirmationCode ?? '—'}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
-                    {format(new Date(b.checkIn), 'MMM d, yyyy')}
+                    {editState?.id === b.id ? (
+                      <input
+                        type="date"
+                        value={editState.checkIn}
+                        onChange={e => setEditState(s => s ? { ...s, checkIn: e.target.value } : s)}
+                        className="border border-emerald-300 rounded px-2 py-1 text-sm"
+                      />
+                    ) : (
+                      format(new Date(b.checkIn + 'T12:00:00'), 'MMM d, yyyy')
+                    )}
                   </td>
                   <td className="px-4 py-3 text-slate-600">
-                    {format(new Date(b.checkOut), 'MMM d, yyyy')}
+                    {format(new Date(b.checkOut + 'T12:00:00'), 'MMM d, yyyy')}
                   </td>
                   <td className="px-4 py-3 text-right text-slate-600">{b.nights}</td>
                   <td className="px-4 py-3 text-right">
@@ -311,7 +321,7 @@ export default function BookingsPage() {
                       ) : (
                         <>
                           <button
-                            onClick={() => setEditState({ id: b.id, income: String(b.income), notes: b.notes ?? '' })}
+                            onClick={() => setEditState({ id: b.id, checkIn: b.checkIn, income: String(b.income), notes: b.notes ?? '' })}
                             className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"
                             title="Edit income"
                           >
