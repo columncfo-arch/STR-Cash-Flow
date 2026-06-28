@@ -1,17 +1,18 @@
 export type Platform = 'airbnb' | 'booking' | 'vrbo' | 'direct' | 'other';
 
-export type ExpenseCategory = 'utilities' | 'cleaning' | 'supplies' | 'maintenance' | 'refund' | 'other';
+export type ExpenseCategory = 'cleaning' | 'electric' | 'water' | 'internet' | 'yard_care' | 'supplies' | 'refund' | 'maintenance' | 'other';
 
 export const EXPENSE_CATEGORIES: { value: ExpenseCategory; label: string }[] = [
-  { value: 'utilities', label: 'Utilities' },
   { value: 'cleaning', label: 'Cleaning' },
+  { value: 'electric', label: 'Electric' },
+  { value: 'water', label: 'Water' },
+  { value: 'internet', label: 'Internet' },
+  { value: 'yard_care', label: 'Yard Care' },
   { value: 'supplies', label: 'Supplies' },
-  { value: 'maintenance', label: 'Maintenance / Repairs' },
   { value: 'refund', label: 'Guest Refund' },
+  { value: 'maintenance', label: 'Maintenance' },
   { value: 'other', label: 'Other' },
 ];
-
-export const UTILITY_SUBCATEGORIES = ['Electric', 'Water', 'Internet', 'Lawn Care', 'Other'];
 
 export interface Booking {
   id: string;

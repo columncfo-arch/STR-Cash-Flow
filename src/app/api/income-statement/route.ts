@@ -4,7 +4,7 @@ import { AnnualStatement, Booking, Expense, ExpenseCategory, MonthlyStatement, P
 import { getYear, getMonth, getDaysInMonth } from 'date-fns';
 
 const PLATFORMS: Platform[] = ['airbnb', 'booking', 'vrbo', 'direct', 'other'];
-const EXPENSE_CATS: ExpenseCategory[] = ['utilities', 'cleaning', 'supplies', 'maintenance', 'refund', 'other'];
+const EXPENSE_CATS: ExpenseCategory[] = ['cleaning', 'electric', 'water', 'internet', 'yard_care', 'supplies', 'refund', 'maintenance', 'other'];
 
 function emptyPlatformBreakdown() {
   return Object.fromEntries(
@@ -37,8 +37,11 @@ function buildPnL(
   const netRevenue = grossRevenue - platformFees - fastPayFees - taxRemitted - refunds;
 
   const totalOperatingExpenses =
-    expensesByCategory.utilities +
     expensesByCategory.cleaning +
+    expensesByCategory.electric +
+    expensesByCategory.water +
+    expensesByCategory.internet +
+    expensesByCategory.yard_care +
     expensesByCategory.supplies +
     expensesByCategory.maintenance +
     expensesByCategory.other +

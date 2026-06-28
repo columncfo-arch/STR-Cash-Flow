@@ -174,7 +174,7 @@ function parseVRBO(rows: Record<string, string>[]): ParsedRow[] {
   // gross_booking_amount, deductions, payout,
   // lodging_tax_owner_remits, tax_withheld, payout_currency
   return rows
-    .filter(r => (col(r, 'booking_status') || '').toLowerCase() !== 'cancelled')
+    .filter(r => !col(r, 'booking_status').toLowerCase().includes('cancel'))
     .map(r => {
       const gross = parseMoney(col(r, 'gross_booking_amount'));
       const deductions = parseMoney(col(r, 'deductions'));

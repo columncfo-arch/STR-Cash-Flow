@@ -44,7 +44,7 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
   let fastPayFees = 0;
   let taxRemitted = 0;
   let ownerTaxes = 0;
-  const expensesByCategory = { utilities: 0, cleaning: 0, supplies: 0, maintenance: 0, refund: 0, other: 0 };
+  const expensesByCategory = { cleaning: 0, electric: 0, water: 0, internet: 0, yard_care: 0, supplies: 0, refund: 0, maintenance: 0, other: 0 };
 
   for (const m of months) {
     totalNights += m.totalNights;
@@ -194,7 +194,10 @@ export default function IncomeStatementPage() {
                   <td colSpan={2} className="px-4 pt-3 pb-1 text-xs font-semibold text-slate-400 uppercase tracking-wide border-t border-slate-100">Operating Expenses</td>
                 </tr>
                 {pnl.expensesByCategory.cleaning > 0 && <Row label="Cleaning" value={pnl.expensesByCategory.cleaning} indent negative />}
-                {pnl.expensesByCategory.utilities > 0 && <Row label="Utilities" value={pnl.expensesByCategory.utilities} indent negative />}
+                {pnl.expensesByCategory.electric > 0 && <Row label="Electric" value={pnl.expensesByCategory.electric} indent negative />}
+                {pnl.expensesByCategory.water > 0 && <Row label="Water" value={pnl.expensesByCategory.water} indent negative />}
+                {pnl.expensesByCategory.internet > 0 && <Row label="Internet" value={pnl.expensesByCategory.internet} indent negative />}
+                {pnl.expensesByCategory.yard_care > 0 && <Row label="Yard Care" value={pnl.expensesByCategory.yard_care} indent negative />}
                 {pnl.expensesByCategory.supplies > 0 && <Row label="Supplies" value={pnl.expensesByCategory.supplies} indent negative />}
                 {pnl.expensesByCategory.maintenance > 0 && <Row label="Maintenance" value={pnl.expensesByCategory.maintenance} indent negative />}
                 {pnl.expensesByCategory.other > 0 && <Row label="Other" value={pnl.expensesByCategory.other} indent negative />}
@@ -367,7 +370,10 @@ export default function IncomeStatementPage() {
       [],
       ['OPERATING EXPENSES'],
       ['Cleaning', (-pnl.expensesByCategory.cleaning).toFixed(2)],
-      ['Utilities', (-pnl.expensesByCategory.utilities).toFixed(2)],
+      ['Electric', (-pnl.expensesByCategory.electric).toFixed(2)],
+      ['Water', (-pnl.expensesByCategory.water).toFixed(2)],
+      ['Internet', (-pnl.expensesByCategory.internet).toFixed(2)],
+      ['Yard Care', (-pnl.expensesByCategory.yard_care).toFixed(2)],
       ['Supplies', (-pnl.expensesByCategory.supplies).toFixed(2)],
       ['Maintenance', (-pnl.expensesByCategory.maintenance).toFixed(2)],
       ['Other', (-pnl.expensesByCategory.other).toFixed(2)],
