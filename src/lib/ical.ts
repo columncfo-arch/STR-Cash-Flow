@@ -60,6 +60,59 @@ function isBlockedDate(summary: string): boolean {
   );
 }
 
+// Attempt to pull a dollar total out of text and/or X-* iCal properties.
+// Returns 0 if nothing found — caller decides whether to fall back.
+function extractIncome(description: string, event: Record<string, unknown>): number {
+  // 1) Scan all X-* custom properties first (VRBO, some Booking.com variants)
+  const xPriceKeys = [
+    'x-total-price', 'x-price', 'x-amount', 'x-booking-total',
+    'x-vrbo-total', 'x-airbnb-total', 'x-payout', 'x-revenue',
+    'x-host-payout', 'x-earnings',
+  ];
+  for (const key of xPriceKeys) {
+    const val = event[key] ?? event[key.toUpperCase()];
+    if (val) {
+      const n = parseFloat(String(val).replace(/[^0-9.]/g, ''));
+      if (n > 0) return n;
+    }
+  }
+
+  // 2) Scan every property value for dollar / currency patterns
+  for (const [k, v] of Object.entries(event)) {
+    if (k === 'type' || k === 'start' || k === 'end') continue;
+    const text = String(v ?? '');
+    if (!text) continue;
+
+    // Patterns: "$1,234.56", "USD 1234.56", "Total: 1234.56", "Payout: 1234"
+    const dollarPatterns = [
+      /(?:total|payout|earnings?|price|amount|revenue)[^\d]*\$?([\d,]+(?:\.\d{1,2})?)/gi,
+      /\$\s*([\d,]+(?:\.\d{1,2})?)/g,
+      /(?:USD|EUR|GBP|CAD|AUD)\s*([\d,]+(?:\.\d{1,2})?)/gi,
+    ];
+    for (const re of dollarPatterns) {
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(text)) !== null) {
+        const n = parseFloat(m[1].replace(/,/g, ''));
+        if (n >= 10) return n; // ignore tiny numbers like $1 (probably not a booking total)
+      }
+    }
+  }
+
+  // 3) Specifically scan DESCRIPTION for price lines (common in VRBO)
+  if (description) {
+    const lines = description.split(/[\r\n\\n]+/);
+    for (const line of lines) {
+      const m = line.match(/(?:total|payout|earning|price|amount)[^\d]*\$?([\d,]+(?:\.\d{1,2})?)/i);
+      if (m) {
+        const n = parseFloat(m[1].replace(/,/g, ''));
+        if (n >= 10) return n;
+      }
+    }
+  }
+
+  return 0;
+}
+
 export async function parseICalSource(
   source: ICalSource,
   defaultNightlyRate: number
@@ -86,6 +139,12 @@ export async function parseICalSource(
     const nights = Math.max(differenceInDays(end, start), 1);
     const platform = detectPlatform(source, uid);
 
+    const extractedIncome = extractIncome(description, event as Record<string, unknown>);
+    // Use extracted price if found; otherwise fall back to default nightly rate estimate
+    const income = extractedIncome > 0
+      ? extractedIncome
+      : (defaultNightlyRate > 0 ? nights * defaultNightlyRate : 0);
+
     const booking: Booking = {
       id: `${source.id}-${uid}`,
       sourceId: source.id,
@@ -97,7 +156,7 @@ export async function parseICalSource(
       nights,
       guestName: extractGuestName(summary, description),
       confirmationCode: extractConfirmationCode(uid, description),
-      income: defaultNightlyRate > 0 ? nights * defaultNightlyRate : 0,
+      income,
       isManual: false,
       createdAt: now,
       updatedAt: now,
