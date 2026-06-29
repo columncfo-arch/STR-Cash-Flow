@@ -304,6 +304,18 @@ async function fileToCSV(file: File): Promise<string> {
   const XLSX = await import('xlsx');
   const wb = XLSX.read(buf, { type: 'array', cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
+  // Convert Excel Date objects to YYYY-MM-DD strings so normalizeDate works reliably
+  for (const key of Object.keys(ws)) {
+    if (key.startsWith('!')) continue;
+    const cell = ws[key];
+    if (cell && cell.t === 'd' && cell.v instanceof Date) {
+      const d = cell.v as Date;
+      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      cell.t = 's';
+      cell.v = iso;
+      cell.w = iso;
+    }
+  }
   return XLSX.utils.sheet_to_csv(ws);
 }
 
