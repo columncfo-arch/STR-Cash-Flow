@@ -120,7 +120,7 @@ export default function Dashboard() {
               </tr>
             </thead>
             <tbody>
-              {Object.entries(statement.byPlatform)
+              {Object.entries(statement!.byPlatform)
                 .filter(([, v]) => v.income > 0)
                 .sort(([, a], [, b]) => b.income - a.income)
                 .map(([platform, data]) => (
@@ -130,7 +130,7 @@ export default function Dashboard() {
                     <td className="py-2 text-right text-slate-600">{data.nights}</td>
                     <td className="py-2 text-right font-semibold text-slate-800">{fmt(data.income)}</td>
                     <td className="py-2 text-right text-slate-500">
-                      {((data.income / statement.grossRevenue) * 100).toFixed(1)}%
+                      {((data.income / statement!.grossRevenue) * 100).toFixed(1)}%
                     </td>
                   </tr>
                 ))}

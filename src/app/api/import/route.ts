@@ -308,16 +308,14 @@ function parseBookingCom(rows: Record<string, string>[]): ParsedRow[] {
 
 // ─── Route ────────────────────────────────────────────────────────────────────
 
-async function fileToCSV(file: File): Promise<string> {
-  const isExcel = /\.(xlsx|xls|xlsm)$/i.test(file.name);
-  if (!isExcel) return file.text();
+// Direct Excel → rows, bypassing CSV entirely to avoid encoding/escaping issues
+// with old binary .xls (BIFF) files like those exported by Booking.com.
+async function parseExcelToRows(file: File): Promise<Record<string, string>[]> {
   const buf = await file.arrayBuffer();
   const XLSX = await import('xlsx');
-
-  // No cellDates — old binary .xls files can behave unexpectedly with it.
   const wb = XLSX.read(buf, { type: 'array' });
 
-  // Pick the sheet with the most rows (avoids selecting a summary/cover sheet).
+  // Pick the sheet with the most rows.
   let bestSheet = wb.Sheets[wb.SheetNames[0]];
   let bestRows = 0;
   for (const name of wb.SheetNames) {
@@ -329,35 +327,34 @@ async function fileToCSV(file: File): Promise<string> {
     if (rowCount > bestRows) { bestRows = rowCount; bestSheet = ws; }
   }
 
-  // raw: false → formatted string values for all cells (dates as "MM/DD/YYYY" etc.)
-  // This avoids raw Excel serial numbers and font/style data leaking into values.
-  const rows = XLSX.utils.sheet_to_json<string[]>(bestSheet, {
+  const raw = XLSX.utils.sheet_to_json<unknown[]>(bestSheet, {
     header: 1,
     raw: false,
     defval: '',
   });
 
-  if (rows.length === 0) return '';
+  if (raw.length === 0) return [];
 
-  // Skip leading title/logo rows that have fewer than 4 non-empty cells.
+  // Skip leading title/logo rows with fewer than 4 non-empty cells.
   let headerRowIdx = 0;
-  for (let i = 0; i < Math.min(rows.length, 15); i++) {
-    const nonEmpty = rows[i].filter(c => (c ?? '').trim() !== '').length;
+  for (let i = 0; i < Math.min(raw.length, 15); i++) {
+    const nonEmpty = (raw[i] as unknown[]).filter(c => String(c ?? '').trim() !== '').length;
     if (nonEmpty >= 4) { headerRowIdx = i; break; }
   }
 
-  function escapeCSV(val: string): string {
-    const s = (val ?? '').trim();
-    return (s.includes(',') || s.includes('"') || s.includes('\n'))
-      ? '"' + s.replace(/"/g, '""') + '"'
-      : s;
-  }
+  const headerCells = raw[headerRowIdx] as unknown[];
+  const seen = new Map<string, number>();
+  const headers = headerCells.map((h, i) => {
+    let key = String(h ?? '').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+    if (!key) key = `col${i}`;
+    const count = seen.get(key) ?? 0;
+    seen.set(key, count + 1);
+    return count === 0 ? key : `${key}_${count}`;
+  });
 
-  return rows
-    .slice(headerRowIdx)
-    .filter(row => row.some(c => (c ?? '').trim() !== ''))
-    .map(row => row.map(escapeCSV).join(','))
-    .join('\n');
+  return (raw.slice(headerRowIdx + 1) as unknown[][])
+    .filter(row => row.some(c => String(c ?? '').trim() !== ''))
+    .map(row => Object.fromEntries(headers.map((h, i) => [h, String(row[i] ?? '').trim()])));
 }
 
 export async function POST(req: Request) {
@@ -371,8 +368,10 @@ export async function POST(req: Request) {
       const file = formData.get('file') as File | null;
       if (!file) return NextResponse.json({ error: 'file required' }, { status: 400 });
 
-      const csvText = await fileToCSV(file);
-      const rawRows = parseCSV(csvText);
+      const isExcel = /\.(xlsx|xls|xlsm)$/i.test(file.name);
+      const rawRows = isExcel
+        ? await parseExcelToRows(file)
+        : parseCSV(await file.text());
       let rows: ParsedRow[];
       if (platform === 'airbnb') rows = parseAirbnb(rawRows);
       else if (platform === 'vrbo') rows = parseVRBO(rawRows);
