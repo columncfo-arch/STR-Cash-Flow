@@ -359,15 +359,12 @@ function parseHTMLTable(html: string): Record<string, string>[] | null {
 }
 
 // Direct Excel → rows.  Returns [rows, detectedFormat] for debug visibility.
-// Strategy: only use text path if file starts with '<' (HTML/XML).
-// Everything else goes to xlsx binary parser — this handles BIFF2-8 (old Excel
-// formats that do NOT use OLE2 magic bytes) as well as OOXML.
 async function parseExcelToRows(file: File): Promise<[Record<string, string>[], string]> {
   const buf = await file.arrayBuffer();
   const magic = new Uint8Array(buf, 0, 8);
   const hexMagic = Array.from(magic).map(b => b.toString(16).padStart(2, '0')).join(' ');
 
-  // Detect encoding BOM and find first meaningful byte
+  // Detect BOM and first meaningful byte to distinguish HTML/XML from binary
   let encoding = 'utf-8';
   let bomLen = 0;
   if (magic[0] === 0xEF && magic[1] === 0xBB && magic[2] === 0xBF) bomLen = 3;
@@ -376,33 +373,39 @@ async function parseExcelToRows(file: File): Promise<[Record<string, string>[], 
   const firstByte = magic[bomLen];
 
   if (firstByte === 0x3C) {
-    // Starts with '<' — HTML table or SpreadsheetML XML saved as .xls
+    // Text-based: HTML table or SpreadsheetML XML with .xls extension
     const text = new TextDecoder(encoding, { fatal: false }).decode(buf);
     if (/<table/i.test(text)) {
-      const rows = parseHTMLTable(text);
-      if (rows && rows.length > 0) return [rows, `html(${hexMagic})`];
+      try {
+        const rows = parseHTMLTable(text);
+        if (rows && rows.length > 0) return [rows, `html(${hexMagic})`];
+      } catch { /* fall through */ }
     }
-    // SpreadsheetML / XLML — xlsx can parse this as a string
-    const XLSXA = await import('xlsx');
     try {
-      const wb2 = XLSXA.read(text, { type: 'string' });
-      const result2 = xlsxWorkbookToRows(XLSXA, wb2);
-      if (result2.length > 0) return [result2, `xlml(${hexMagic})`];
+      const XLSX2 = await import('xlsx');
+      const wb2 = XLSX2.read(text, { type: 'string' });
+      if (wb2.SheetNames.length) {
+        const ws2 = wb2.Sheets[wb2.SheetNames[0]];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const raw2: any[] = XLSX2.utils.sheet_to_json(ws2, { header: 1, raw: false, defval: '' });
+        if (raw2.length > 1) {
+          const seen2 = new Map<string, number>();
+          const hdrs2 = (raw2[0] as unknown[]).map((h, i) => toKey(String(h ?? ''), i, seen2));
+          const rows2 = (raw2.slice(1) as unknown[][])
+            .filter(r => r.some(c => String(c ?? '').trim() !== ''))
+            .map(r => Object.fromEntries(hdrs2.map((h, i) => [h, String((r as unknown[])[i] ?? '').trim()])));
+          if (rows2.length > 0) return [rows2, `xlml(${hexMagic})`];
+        }
+      }
     } catch { /* fall through */ }
     return [parseCSV(text), `xml-csv(${hexMagic})`];
   }
 
-  // Binary: let xlsx handle it — covers BIFF2/3/4/5/8, OOXML, and anything else
+  // Binary: xlsx handles all BIFF versions (2-8) and OOXML
   const XLSX = await import('xlsx');
   const wb = XLSX.read(buf, { type: 'array' });
-  const label = magic[0] === 0xD0 && magic[1] === 0xCF ? 'ole2' :
-                magic[0] === 0x50 && magic[1] === 0x4B ? 'ooxml' : `binary`;
-  return [xlsxWorkbookToRows(XLSX, wb), `${label}(${hexMagic})`];
-}
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function xlsxWorkbookToRows(XLSX: any, wb: any): Record<string, string>[] {
-  if (!wb.SheetNames.length) return [];
+  if (!wb.SheetNames.length) return [[], `empty(${hexMagic})`];
 
   let bestSheet = wb.Sheets[wb.SheetNames[0]];
   let bestRows = 0;
@@ -417,7 +420,7 @@ function xlsxWorkbookToRows(XLSX: any, wb: any): Record<string, string>[] {
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const raw: any[] = XLSX.utils.sheet_to_json(bestSheet, { header: 1, raw: false, defval: '' });
-  if (raw.length === 0) return [];
+  if (raw.length === 0) return [[], `no-rows(${hexMagic})`];
 
   let headerRowIdx = 0;
   for (let i = 0; i < Math.min(raw.length, 15); i++) {
@@ -427,10 +430,15 @@ function xlsxWorkbookToRows(XLSX: any, wb: any): Record<string, string>[] {
 
   const seen = new Map<string, number>();
   const headers = (raw[headerRowIdx] as unknown[]).map((h, i) => toKey(String(h ?? ''), i, seen));
+  const label = magic[0] === 0xD0 && magic[1] === 0xCF ? 'ole2' :
+                magic[0] === 0x50 && magic[1] === 0x4B ? 'ooxml' : 'binary';
 
-  return (raw.slice(headerRowIdx + 1) as unknown[][])
-    .filter(row => row.some(c => String(c ?? '').trim() !== ''))
-    .map(row => Object.fromEntries(headers.map((h, i) => [h, String(row[i] ?? '').trim()])));
+  return [
+    (raw.slice(headerRowIdx + 1) as unknown[][])
+      .filter(row => (row as unknown[]).some(c => String(c ?? '').trim() !== ''))
+      .map(row => Object.fromEntries(headers.map((h, i) => [h, String((row as unknown[])[i] ?? '').trim()]))),
+    `${label}(${hexMagic})`,
+  ];
 }
 
 export async function POST(req: Request) {
