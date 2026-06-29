@@ -22,7 +22,7 @@ const PLATFORMS: { value: Platform; label: string; instructions: string }[] = [
   {
     value: 'vrbo',
     label: 'VRBO',
-    instructions: 'VRBO → Dashboard → Revenue → Statements → Export',
+    instructions: 'VRBO → Dashboard → Revenue → Reservations → select date range → Export CSV. (Not Statements — that is monthly PDFs, not booking data.)',
   },
   {
     value: 'booking',

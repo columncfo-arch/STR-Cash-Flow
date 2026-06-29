@@ -169,10 +169,9 @@ function parseAirbnb(rows: Record<string, string>[]): ParsedRow[] {
 function parseVRBO(rows: Record<string, string>[]): ParsedRow[] {
   return rows
     .filter(r => {
-      const status = col(r,
-        'booking_status', 'status', 'reservation_status', 'stay_status'
-      ).toLowerCase();
-      return !status.includes('cancel');
+      const s = col(r, 'booking_status', 'status', 'reservation_status', 'stay_status').toLowerCase();
+      // Only exclude explicitly cancelled rows; empty/unknown status is included
+      return s === '' || !s.includes('cancel');
     })
     .map(r => {
       const gross = parseMoney(col(r,
@@ -231,8 +230,8 @@ function parseVRBO(rows: Record<string, string>[]): ParsedRow[] {
 function parseBookingCom(rows: Record<string, string>[]): ParsedRow[] {
   return rows
     .filter(r => {
-      const status = col(r, 'status', 'reservation_status', 'booking_status').toLowerCase();
-      return !status.includes('cancel') && status !== 'no_show';
+      const s = col(r, 'status', 'reservation_status', 'booking_status').toLowerCase();
+      return s === '' || !s.includes('cancel');
     })
     .map(r => {
       const gross = parseMoney(col(r,
@@ -350,7 +349,7 @@ export async function POST(req: Request) {
         } else if (platform === 'booking') {
           const afterStatus = rawRows.filter(r => {
             const s = col(r, 'status', 'reservation_status', 'booking_status').toLowerCase();
-            return !s.includes('cancel') && s !== 'no_show';
+            return s === '' || !s.includes('cancel');
           });
           debugDiag = {
             afterStatusFilter: afterStatus.length,
