@@ -313,43 +313,49 @@ async function fileToCSV(file: File): Promise<string> {
   if (!isExcel) return file.text();
   const buf = await file.arrayBuffer();
   const XLSX = await import('xlsx');
-  const wb = XLSX.read(buf, { type: 'array', cellDates: true });
-  const ws = wb.Sheets[wb.SheetNames[0]];
 
-  // Use sheet_to_json (not sheet_to_csv) to avoid font/style metadata leaking
-  // into cell values on old binary .xls files.
-  const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, {
+  // No cellDates — old binary .xls files can behave unexpectedly with it.
+  const wb = XLSX.read(buf, { type: 'array' });
+
+  // Pick the sheet with the most rows (avoids selecting a summary/cover sheet).
+  let bestSheet = wb.Sheets[wb.SheetNames[0]];
+  let bestRows = 0;
+  for (const name of wb.SheetNames) {
+    const ws = wb.Sheets[name];
+    const ref = ws['!ref'];
+    if (!ref) continue;
+    const range = XLSX.utils.decode_range(ref);
+    const rowCount = range.e.r - range.s.r + 1;
+    if (rowCount > bestRows) { bestRows = rowCount; bestSheet = ws; }
+  }
+
+  // raw: false → formatted string values for all cells (dates as "MM/DD/YYYY" etc.)
+  // This avoids raw Excel serial numbers and font/style data leaking into values.
+  const rows = XLSX.utils.sheet_to_json<string[]>(bestSheet, {
     header: 1,
-    raw: true,     // keeps Date objects as Date, numbers as numbers
+    raw: false,
     defval: '',
   });
 
   if (rows.length === 0) return '';
 
-  // Skip leading title/summary rows that have fewer than 4 non-empty cells.
-  // Real header rows have many columns; title rows typically have 1-2.
+  // Skip leading title/logo rows that have fewer than 4 non-empty cells.
   let headerRowIdx = 0;
   for (let i = 0; i < Math.min(rows.length, 15); i++) {
-    const nonEmpty = (rows[i] as unknown[]).filter(c => String(c ?? '').trim() !== '').length;
+    const nonEmpty = rows[i].filter(c => (c ?? '').trim() !== '').length;
     if (nonEmpty >= 4) { headerRowIdx = i; break; }
   }
 
-  function cellStr(val: unknown): string {
-    if (val instanceof Date) {
-      return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, '0')}-${String(val.getDate()).padStart(2, '0')}`;
-    }
-    return String(val ?? '').trim();
-  }
-
-  function escapeCSV(val: unknown): string {
-    const s = cellStr(val);
+  function escapeCSV(val: string): string {
+    const s = (val ?? '').trim();
     return (s.includes(',') || s.includes('"') || s.includes('\n'))
       ? '"' + s.replace(/"/g, '""') + '"'
       : s;
   }
 
-  return (rows.slice(headerRowIdx) as unknown[][])
-    .filter(row => row.some(c => cellStr(c) !== ''))
+  return rows
+    .slice(headerRowIdx)
+    .filter(row => row.some(c => (c ?? '').trim() !== ''))
     .map(row => row.map(escapeCSV).join(','))
     .join('\n');
 }
