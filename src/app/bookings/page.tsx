@@ -55,7 +55,8 @@ export default function BookingsPage() {
 
   async function load() {
     const res = await fetch(`/api/bookings?year=${filterYear}`);
-    setBookings(await res.json());
+    const data = await res.json();
+    setBookings(Array.isArray(data) ? data : []);
   }
 
   useEffect(() => {
