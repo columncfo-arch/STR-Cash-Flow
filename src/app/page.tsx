@@ -20,7 +20,10 @@ const PLATFORM_COLORS: Record<string, string> = {
 export default function Dashboard() {
   const [statement, setStatement] = useState<AnnualStatement | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const year = new Date().getFullYear();
+  const now = new Date();
+  const year = now.getFullYear();
+  // 0-indexed month (0=Jan), slice months up to and including current month
+  const currentMonthIdx = now.getMonth();
 
   useEffect(() => {
     fetch('/api/income-statement?year=' + year).then(r => r.json()).then(d => setStatement(d.statement));
@@ -30,9 +33,15 @@ export default function Dashboard() {
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: settings?.currency ?? 'USD', maximumFractionDigits: 0 }).format(n);
 
-  const adr = statement && statement.totalNights > 0
-    ? statement.grossRevenue / statement.totalNights
-    : null;
+  // YTD = only months that have passed or are current, so stats stay consistent
+  const ytdMonths = statement?.months.slice(0, currentMonthIdx + 1) ?? [];
+  const ytdGross = ytdMonths.reduce((s, m) => s + m.grossRevenue, 0);
+  const ytdNetIncome = ytdMonths.reduce((s, m) => s + m.netIncome, 0);
+  const ytdNights = ytdMonths.reduce((s, m) => s + m.totalNights, 0);
+  const ytdOccupancy = ytdMonths.length > 0
+    ? ytdMonths.reduce((s, m) => s + m.occupancyRate, 0) / ytdMonths.length
+    : 0;
+  const adr = ytdNights > 0 ? ytdGross / ytdNights : null;
 
   const chartData = statement?.months.map((m, i) => ({
     name: MONTHS[i],
@@ -44,7 +53,7 @@ export default function Dashboard() {
     'Net Income': m.netIncome,
   })) ?? [];
 
-  const hasData = statement && statement.grossRevenue > 0;
+  const hasData = ytdGross > 0;
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -54,11 +63,11 @@ export default function Dashboard() {
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
-        <StatCard label="Gross Revenue (YTD)" value={fmt(statement?.grossRevenue ?? 0)} color="text-emerald-700" />
-        <StatCard label="Net Income (YTD)" value={fmt(statement?.netIncome ?? 0)} color={(statement?.netIncome ?? 0) >= 0 ? 'text-emerald-700' : 'text-red-600'} />
-        <StatCard label="Total Nights Booked" value={(statement?.totalNights ?? 0).toString()} sub="nights" />
-        <StatCard label="Avg Occupancy" value={`${(statement?.avgOccupancyRate ?? 0).toFixed(1)}%`} />
-        <StatCard label="ADR" value={adr != null ? fmt(adr) : '—'} sub="per night" color="text-emerald-700" />
+        <StatCard label="Gross Revenue (YTD)" value={fmt(ytdGross)} color="text-emerald-700" />
+        <StatCard label="Net Income (YTD)" value={fmt(ytdNetIncome)} color={ytdNetIncome >= 0 ? 'text-emerald-700' : 'text-red-600'} />
+        <StatCard label="Total Nights Booked" value={ytdNights.toString()} sub="nights YTD" />
+        <StatCard label="Avg Occupancy" value={`${ytdOccupancy.toFixed(1)}%`} sub="YTD" />
+        <StatCard label="ADR" value={adr != null ? fmt(adr) : '—'} sub="per night YTD" color="text-emerald-700" />
       </div>
 
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
