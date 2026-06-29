@@ -4,7 +4,7 @@ import { AnnualStatement, Settings } from '@/types';
 import StatCard from '@/components/StatCard';
 import { TrendingUp } from 'lucide-react';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
 } from 'recharts';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -71,18 +71,21 @@ export default function Dashboard() {
             <ComposedChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+              <YAxis yAxisId="left" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={(v, name) => [fmt(Number(v)), name]} />
               <Legend />
+              <ReferenceLine yAxisId="right" y={0} stroke="#e2e8f0" />
               {(['Airbnb', 'Booking.com', 'VRBO', 'Direct', 'Other'] as const).map(p => (
-                <Bar key={p} dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com', '')]} />
+                <Bar key={p} yAxisId="left" dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com', '')]} />
               ))}
               <Line
+                yAxisId="right"
                 type="monotone"
                 dataKey="Net Income"
-                stroke="#0f172a"
-                strokeWidth={2}
-                dot={{ r: 3, fill: '#0f172a' }}
+                stroke="#f97316"
+                strokeWidth={3}
+                dot={{ r: 4, fill: '#f97316', strokeWidth: 0 }}
                 connectNulls
               />
             </ComposedChart>

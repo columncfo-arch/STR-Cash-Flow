@@ -4,8 +4,8 @@ import { AnnualStatement, MonthlyStatement, Platform, PnLSummary, Settings } fro
 import { format, getMonth, getYear } from 'date-fns';
 import { Download, ChevronDown, ChevronRight } from 'lucide-react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-  LineChart, Line,
+  ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  LineChart, Line, ReferenceLine,
 } from 'recharts';
 
 const MONTHS_LONG = [
@@ -457,25 +457,29 @@ export default function IncomeStatementPage() {
       {/* Chart */}
       {activeMonths.length > 1 && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mt-4">
-          <h2 className="font-semibold text-slate-800 mb-4">Monthly Revenue</h2>
+          <h2 className="font-semibold text-slate-800 mb-4">Monthly Revenue &amp; Net Income</h2>
           <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={activeMonths.map(m => ({
+            <ComposedChart data={activeMonths.map(m => ({
               name: MONTHS_SHORT[m.month - 1],
               Airbnb: m.byPlatform.airbnb.income,
               'Booking.com': m.byPlatform.booking.income,
               VRBO: m.byPlatform.vrbo.income,
               Direct: m.byPlatform.direct.income,
               Other: m.byPlatform.other.income,
+              'Net Income': m.netIncome,
             }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+              <YAxis yAxisId="left" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
               <Tooltip formatter={(v) => fmt(Number(v))} />
               <Legend />
+              <ReferenceLine yAxisId="right" y={0} stroke="#e2e8f0" />
               {(['Airbnb','Booking.com','VRBO','Direct','Other'] as const).map(p => (
-                <Bar key={p} dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com','')]} />
+                <Bar key={p} yAxisId="left" dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com','')]} />
               ))}
-            </BarChart>
+              <Line yAxisId="right" type="monotone" dataKey="Net Income" stroke="#f97316" strokeWidth={3} dot={{ r: 4, fill: '#f97316', strokeWidth: 0 }} connectNulls />
+            </ComposedChart>
           </ResponsiveContainer>
         </div>
       )}
