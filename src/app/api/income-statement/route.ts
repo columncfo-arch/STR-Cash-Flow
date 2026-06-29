@@ -134,7 +134,9 @@ export async function GET(req: Request) {
       }
     }
 
-    const annualPnL = buildPnL(yearBookings, yearExpenses, settings.monthlyPITI, 12);
+    const now = new Date();
+    const pitiMonths = year < now.getFullYear() ? 12 : Math.min(now.getMonth() + 1, 12);
+    const annualPnL = buildPnL(yearBookings, yearExpenses, settings.monthlyPITI, pitiMonths);
 
     const statement: AnnualStatement = {
       year,
