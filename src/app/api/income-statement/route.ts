@@ -21,6 +21,7 @@ function buildPnL(
   expenses: Expense[],
   monthlyPITI: number,
   months: number,
+  cleaningFeePerBooking: number,
 ): PnLSummary {
   const grossRevenue = bookings.reduce((s, b) => s + b.income, 0);
   const platformFees = bookings.reduce((s, b) => s + (b.platformFee ?? 0), 0);
@@ -32,6 +33,8 @@ function buildPnL(
   for (const e of expenses) {
     expensesByCategory[e.category] = (expensesByCategory[e.category] ?? 0) + e.amount;
   }
+  // Auto-add cleaning expense based on booking count
+  expensesByCategory.cleaning += cleaningFeePerBooking * bookings.length;
 
   const refunds = expensesByCategory.refund;
   const netRevenue = grossRevenue - platformFees - fastPayFees - taxRemitted - refunds;
@@ -73,6 +76,7 @@ function buildMonthly(
   bookings: Booking[],
   expenses: Expense[],
   monthlyPITI: number,
+  cleaningFeePerBooking: number,
 ): MonthlyStatement {
   // Use string prefix to avoid timezone shifts from Date parsing
   const prefix = `${year}-${String(month).padStart(2, '0')}`;
@@ -90,7 +94,7 @@ function buildMonthly(
   }
 
   const daysInMonth = getDaysInMonth(new Date(year, month - 1));
-  const pnl = buildPnL(monthBookings, monthExpenses, monthlyPITI, 1);
+  const pnl = buildPnL(monthBookings, monthExpenses, monthlyPITI, 1, cleaningFeePerBooking);
 
   return {
     year,
@@ -116,7 +120,7 @@ export async function GET(req: Request) {
 
     const months: MonthlyStatement[] = [];
     for (let m = 1; m <= 12; m++) {
-      months.push(buildMonthly(year, m, allBookings, allExpenses, settings.monthlyPITI));
+      months.push(buildMonthly(year, m, allBookings, allExpenses, settings.monthlyPITI, settings.cleaningFeePerBooking ?? 0));
     }
 
     const yearBookings = allBookings.filter(b => b.checkIn.startsWith(String(year)));
@@ -136,7 +140,7 @@ export async function GET(req: Request) {
 
     const now = new Date();
     const pitiMonths = year < now.getFullYear() ? 12 : Math.min(now.getMonth() + 1, 12);
-    const annualPnL = buildPnL(yearBookings, yearExpenses, settings.monthlyPITI, pitiMonths);
+    const annualPnL = buildPnL(yearBookings, yearExpenses, settings.monthlyPITI, pitiMonths, settings.cleaningFeePerBooking ?? 0);
 
     const statement: AnnualStatement = {
       year,

@@ -79,6 +79,20 @@ export default function SettingsPage() {
               Combined monthly mortgage P&I + property tax + insurance. Applied automatically to every month in your P&L.
             </p>
           </div>
+          <div>
+            <label className="text-xs text-slate-500 block mb-1">Cleaning Fee per Booking ($)</label>
+            <input
+              type="number"
+              value={settings.cleaningFeePerBooking ?? 0}
+              onChange={e => setSettings({ ...settings, cleaningFeePerBooking: parseFloat(e.target.value) || 0 })}
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
+              placeholder="0"
+              min="0"
+            />
+            <p className="text-xs text-slate-400 mt-1">
+              Added to cleaning expenses automatically for every booking in the period. Combined with any manually logged cleaning expenses.
+            </p>
+          </div>
         </div>
       </section>
 

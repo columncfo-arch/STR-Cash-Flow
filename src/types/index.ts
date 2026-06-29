@@ -88,6 +88,7 @@ export interface Settings {
   currency: string;
   propertyName: string;
   monthlyPITI: number;
+  cleaningFeePerBooking: number;
 }
 
 export interface PnLSummary {

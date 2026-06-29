@@ -11,6 +11,7 @@ const DEFAULT_SETTINGS: Settings = {
   currency: 'USD',
   propertyName: 'My STR Property',
   monthlyPITI: 0,
+  cleaningFeePerBooking: 0,
 };
 
 // ─── Redis backend ─────────────────────────────────────────────────────────────
