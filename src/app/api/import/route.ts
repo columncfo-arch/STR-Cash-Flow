@@ -163,7 +163,7 @@ function parseAirbnb(rows: Record<string, string>[]): ParsedRow[] {
         earningsYear: parseInt(col(r, 'earnings_year')) || undefined,
       };
     })
-    .filter(r => r.grossAmount > 0 && r.checkIn);
+    .filter(r => !!r.checkIn);
 }
 
 function parseVRBO(rows: Record<string, string>[]): ParsedRow[] {
@@ -224,7 +224,7 @@ function parseVRBO(rows: Record<string, string>[]): ParsedRow[] {
         taxWithheld: parseMoney(col(r, 'tax_withheld', 'taxes_withheld', 'withheld_tax')) || undefined,
       };
     })
-    .filter(r => r.grossAmount > 0 && r.checkIn);
+    .filter(r => !!r.checkIn);
 }
 
 function parseBookingCom(rows: Record<string, string>[]): ParsedRow[] {
@@ -292,7 +292,7 @@ function parseBookingCom(rows: Record<string, string>[]): ParsedRow[] {
         details: col(r, 'remarks', 'notes', 'special_requests') || undefined,
       };
     })
-    .filter(r => r.grossAmount > 0 && r.checkIn);
+    .filter(r => !!r.checkIn);
 }
 
 // ─── Route ────────────────────────────────────────────────────────────────────
