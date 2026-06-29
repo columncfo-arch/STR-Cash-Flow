@@ -308,30 +308,86 @@ function parseBookingCom(rows: Record<string, string>[]): ParsedRow[] {
 
 // ─── Route ────────────────────────────────────────────────────────────────────
 
-// Direct Excel → rows, bypassing CSV entirely to avoid encoding/escaping issues.
-// Booking.com (and many old web apps) export HTML tables with an .xls extension.
-// We check magic bytes so we don't try to parse HTML as binary BIFF.
-async function parseExcelToRows(file: File): Promise<Record<string, string>[]> {
+// Normalise a raw header cell value into a safe column key.
+function toKey(h: string, idx: number, seen: Map<string, number>): string {
+  let key = h.toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+  if (!key) key = `col${idx}`;
+  const n = seen.get(key) ?? 0;
+  seen.set(key, n + 1);
+  return n === 0 ? key : `${key}_${n}`;
+}
+
+// DOM-free HTML <table> parser — handles Booking.com's HTML-as-.xls export.
+function parseHTMLTable(html: string): Record<string, string>[] | null {
+  if (!/<table/i.test(html)) return null;
+
+  const allRows: string[][] = [];
+  const rowRe = /<tr(?:\s[^>]*)?>[\s\S]*?<\/tr>/gi;
+  const cellRe = /<t[dh](?:\s[^>]*)?>[\s\S]*?<\/t[dh]>/gi;
+  const tagRe  = /<[^>]+>/g;
+
+  let rowM: RegExpExecArray | null;
+  while ((rowM = rowRe.exec(html)) !== null) {
+    const cells: string[] = [];
+    cellRe.lastIndex = 0;
+    let cellM: RegExpExecArray | null;
+    while ((cellM = cellRe.exec(rowM[0])) !== null) {
+      const txt = cellM[0]
+        .replace(tagRe, '')
+        .replace(/&amp;/gi, '&').replace(/&lt;/gi, '<').replace(/&gt;/gi, '>')
+        .replace(/&quot;/gi, '"').replace(/&#39;/gi, "'").replace(/&nbsp;/gi, ' ')
+        .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(+n))
+        .trim();
+      cells.push(txt);
+    }
+    if (cells.length > 0) allRows.push(cells);
+  }
+
+  if (allRows.length < 2) return null;
+
+  let headerIdx = 0;
+  for (let i = 0; i < Math.min(allRows.length, 15); i++) {
+    if (allRows[i].filter(c => c !== '').length >= 4) { headerIdx = i; break; }
+  }
+
+  const seen = new Map<string, number>();
+  const headers = allRows[headerIdx].map((h, i) => toKey(h, i, seen));
+
+  return allRows.slice(headerIdx + 1)
+    .filter(row => row.some(c => c !== ''))
+    .map(row => Object.fromEntries(headers.map((h, i) => [h, row[i] ?? ''])));
+}
+
+// Direct Excel → rows.  Returns [rows, detectedFormat] for debug visibility.
+async function parseExcelToRows(file: File): Promise<[Record<string, string>[], string]> {
   const buf = await file.arrayBuffer();
-  const XLSX = await import('xlsx');
-
   const magic = new Uint8Array(buf, 0, 8);
-  const isOLE2 = magic[0] === 0xD0 && magic[1] === 0xCF; // binary BIFF (.xls)
-  const isZip  = magic[0] === 0x50 && magic[1] === 0x4B; // OOXML ZIP (.xlsx/.xlsm)
+  const hexMagic = Array.from(magic).map(b => b.toString(16).padStart(2, '0')).join(' ');
 
-  let wb;
-  if (isOLE2 || isZip) {
-    wb = XLSX.read(buf, { type: 'array' });
-  } else {
-    // HTML table or SpreadsheetML XML saved as .xls — parse as text
+  const isOLE2 = magic[0] === 0xD0 && magic[1] === 0xCF;
+  const isZip  = magic[0] === 0x50 && magic[1] === 0x4B;
+
+  if (!isOLE2 && !isZip) {
+    // Text-based file (.xls extension but actually HTML/XML/CSV)
     let encoding = 'utf-8';
     if (magic[0] === 0xFF && magic[1] === 0xFE) encoding = 'utf-16le';
     else if (magic[0] === 0xFE && magic[1] === 0xFF) encoding = 'utf-16be';
     const text = new TextDecoder(encoding, { fatal: false }).decode(buf);
-    wb = XLSX.read(text, { type: 'string' });
+
+    // Try HTML table parser (DOM-free, works in Node.js)
+    if (/<table/i.test(text)) {
+      const rows = parseHTMLTable(text);
+      if (rows && rows.length > 0) return [rows, `html(${hexMagic})`];
+    }
+
+    // Fallback: plain CSV/TSV
+    return [parseCSV(text), `text-csv(${hexMagic})`];
   }
 
-  // Pick the sheet with the most rows.
+  const XLSX = await import('xlsx');
+  const wb = XLSX.read(buf, { type: 'array' });
+  const fmt = isOLE2 ? `ole2(${hexMagic})` : `ooxml(${hexMagic})`;
+
   let bestSheet = wb.Sheets[wb.SheetNames[0]];
   let bestRows = 0;
   for (const name of wb.SheetNames) {
@@ -343,34 +399,24 @@ async function parseExcelToRows(file: File): Promise<Record<string, string>[]> {
     if (rowCount > bestRows) { bestRows = rowCount; bestSheet = ws; }
   }
 
-  const raw = XLSX.utils.sheet_to_json<unknown[]>(bestSheet, {
-    header: 1,
-    raw: false,
-    defval: '',
-  });
+  const raw = XLSX.utils.sheet_to_json<unknown[]>(bestSheet, { header: 1, raw: false, defval: '' });
+  if (raw.length === 0) return [[], fmt];
 
-  if (raw.length === 0) return [];
-
-  // Skip leading title/logo rows with fewer than 4 non-empty cells.
   let headerRowIdx = 0;
   for (let i = 0; i < Math.min(raw.length, 15); i++) {
     const nonEmpty = (raw[i] as unknown[]).filter(c => String(c ?? '').trim() !== '').length;
     if (nonEmpty >= 4) { headerRowIdx = i; break; }
   }
 
-  const headerCells = raw[headerRowIdx] as unknown[];
   const seen = new Map<string, number>();
-  const headers = headerCells.map((h, i) => {
-    let key = String(h ?? '').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
-    if (!key) key = `col${i}`;
-    const count = seen.get(key) ?? 0;
-    seen.set(key, count + 1);
-    return count === 0 ? key : `${key}_${count}`;
-  });
+  const headers = (raw[headerRowIdx] as unknown[]).map((h, i) => toKey(String(h ?? ''), i, seen));
 
-  return (raw.slice(headerRowIdx + 1) as unknown[][])
-    .filter(row => row.some(c => String(c ?? '').trim() !== ''))
-    .map(row => Object.fromEntries(headers.map((h, i) => [h, String(row[i] ?? '').trim()])));
+  return [
+    (raw.slice(headerRowIdx + 1) as unknown[][])
+      .filter(row => row.some(c => String(c ?? '').trim() !== ''))
+      .map(row => Object.fromEntries(headers.map((h, i) => [h, String(row[i] ?? '').trim()]))),
+    fmt,
+  ];
 }
 
 export async function POST(req: Request) {
@@ -385,9 +431,14 @@ export async function POST(req: Request) {
       if (!file) return NextResponse.json({ error: 'file required' }, { status: 400 });
 
       const isExcel = /\.(xlsx|xls|xlsm)$/i.test(file.name);
-      const rawRows = isExcel
-        ? await parseExcelToRows(file)
-        : parseCSV(await file.text());
+      let rawRows: Record<string, string>[];
+      let debugFormat = 'csv';
+      if (isExcel) {
+        [rawRows, debugFormat] = await parseExcelToRows(file);
+      } else {
+        rawRows = parseCSV(await file.text());
+      }
+
       let rows: ParsedRow[];
       if (platform === 'airbnb') rows = parseAirbnb(rawRows);
       else if (platform === 'vrbo') rows = parseVRBO(rawRows);
@@ -395,10 +446,9 @@ export async function POST(req: Request) {
       else rows = parseAirbnb(rawRows);
 
       const debugHeaders = rawRows[0] ? Object.keys(rawRows[0]) : [];
-      // Always return first 3 raw rows so we can diagnose column/value issues
       const rawSample = rawRows.slice(0, 3);
 
-      return NextResponse.json({ rows, totalRows: rawRows.length, debugHeaders, rawSample });
+      return NextResponse.json({ rows, totalRows: rawRows.length, debugHeaders, rawSample, debugFormat });
     }
 
     // ── Apply (and legacy preview): JSON body ──
