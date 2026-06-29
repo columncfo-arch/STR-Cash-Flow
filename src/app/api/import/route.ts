@@ -408,10 +408,8 @@ function maxCols(rows: Record<string, string>[]): number {
 }
 
 // Excel/XLS file → normalized row objects.  Returns [rows, detectedFormat].
-// Booking.com exports HTML with a .xls extension. XLSX.read(buffer) "succeeds"
-// on such files but produces garbled column names from embedded CSS (e.g. "arial1").
-// Fix: peek at the decoded text; if it looks like HTML/XML, bypass the binary
-// parser entirely and go straight to text-based parsing.
+// Booking.com exports a plain TSV named .xls. XLSX.read(buffer) silently "parses"
+// it as BIFF and returns garbage. Detect the true format from content first.
 async function parseExcelToRows(file: File): Promise<[Record<string, string>[], string]> {
   const buf = Buffer.from(await file.arrayBuffer());
   const magic = buf.subarray(0, 8);
@@ -422,12 +420,22 @@ async function parseExcelToRows(file: File): Promise<[Record<string, string>[], 
   if (magic[0] === 0xFF && magic[1] === 0xFE) encoding = 'utf-16le';
   else if (magic[0] === 0xFE && magic[1] === 0xFF) encoding = 'utf-16be';
 
-  // Peek at first 1 KB (decoded) to detect HTML/XML text files with .xls extension
-  const preview = new TextDecoder(encoding, { fatal: false }).decode(buf.subarray(0, 1024));
-  const isTextXls = /^\s*(<\?xml|<!doctype|<html)/i.test(preview) ||
-                    /^\s*[\s\S]{0,400}<table/i.test(preview);
+  const text = new TextDecoder(encoding, { fatal: false }).decode(buf);
+  const firstLine = text.slice(0, 4000).split('\n')[0] ?? '';
 
-  if (!isTextXls) {
+  // TSV fast-path: many tabs + no binary control chars = plain text TSV
+  const tabCount = (firstLine.match(/\t/g) ?? []).length;
+  const hasBinaryChars = /[\x00-\x08\x0B\x0C\x0E-\x1F]/.test(firstLine.slice(0, 500));
+  if (tabCount >= 5 && !hasBinaryChars) {
+    const rows = parseCSV(text);
+    if (maxCols(rows) >= 3) return [rows, `tsv(${hexMagic})`];
+  }
+
+  // HTML/XML detection: skip binary XLSX parser for text files
+  const isHtmlOrXml = /^\s*(<\?xml|<!doctype|<html)/i.test(text.slice(0, 512)) ||
+                      /[\s\S]{0,500}<table[\s>]/i.test(text.slice(0, 512));
+
+  if (!isHtmlOrXml) {
     // 1. Try xlsx binary parser (handles real BIFF2-8 and OOXML)
     try {
       const wb = XLSX.read(buf, { type: 'buffer' });
@@ -439,8 +447,6 @@ async function parseExcelToRows(file: File): Promise<[Record<string, string>[], 
       }
     } catch { /* fall through */ }
   }
-
-  const text = new TextDecoder(encoding, { fatal: false }).decode(buf);
 
   // 2. xlsx string parser — handles SpreadsheetML / Office HTML with XML namespaces
   try {
