@@ -55,8 +55,23 @@ async function redisSet(key: string, value: unknown): Promise<void> {
 // This makes add/update/delete atomic per-record — concurrent writes to
 // different records never clobber each other (unlike a single JSON blob).
 
-async function redisHashAll<T>(key: string): Promise<T[]> {
+async function redisHashAll<T extends { id: string }>(key: string): Promise<T[]> {
   const client = await getRedis();
+  // Transparent migration: old code stored the whole array as a JSON string.
+  // If the key is still a STRING type, parse + migrate to Hash, then return.
+  const keyType = await client.type(key);
+  if (keyType === 'string') {
+    const raw = await client.get(key);
+    const items: T[] = raw ? (JSON.parse(raw) as T[]) : [];
+    const pipeline = client.multi();
+    pipeline.del(key);
+    for (const item of items) {
+      if (item.id) pipeline.hSet(key, item.id, JSON.stringify(item));
+    }
+    await pipeline.exec();
+    return items;
+  }
+  if (keyType === 'none') return [];
   const all = await client.hGetAll(key);
   return Object.values(all).map(v => JSON.parse(v) as T);
 }
