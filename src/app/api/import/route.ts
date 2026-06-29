@@ -315,19 +315,43 @@ async function fileToCSV(file: File): Promise<string> {
   const XLSX = await import('xlsx');
   const wb = XLSX.read(buf, { type: 'array', cellDates: true });
   const ws = wb.Sheets[wb.SheetNames[0]];
-  // Convert Excel Date objects to YYYY-MM-DD strings so normalizeDate works reliably
-  for (const key of Object.keys(ws)) {
-    if (key.startsWith('!')) continue;
-    const cell = ws[key];
-    if (cell && cell.t === 'd' && cell.v instanceof Date) {
-      const d = cell.v as Date;
-      const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      cell.t = 's';
-      cell.v = iso;
-      cell.w = iso;
-    }
+
+  // Use sheet_to_json (not sheet_to_csv) to avoid font/style metadata leaking
+  // into cell values on old binary .xls files.
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, {
+    header: 1,
+    raw: true,     // keeps Date objects as Date, numbers as numbers
+    defval: '',
+  });
+
+  if (rows.length === 0) return '';
+
+  // Skip leading title/summary rows that have fewer than 4 non-empty cells.
+  // Real header rows have many columns; title rows typically have 1-2.
+  let headerRowIdx = 0;
+  for (let i = 0; i < Math.min(rows.length, 15); i++) {
+    const nonEmpty = (rows[i] as unknown[]).filter(c => String(c ?? '').trim() !== '').length;
+    if (nonEmpty >= 4) { headerRowIdx = i; break; }
   }
-  return XLSX.utils.sheet_to_csv(ws);
+
+  function cellStr(val: unknown): string {
+    if (val instanceof Date) {
+      return `${val.getFullYear()}-${String(val.getMonth() + 1).padStart(2, '0')}-${String(val.getDate()).padStart(2, '0')}`;
+    }
+    return String(val ?? '').trim();
+  }
+
+  function escapeCSV(val: unknown): string {
+    const s = cellStr(val);
+    return (s.includes(',') || s.includes('"') || s.includes('\n'))
+      ? '"' + s.replace(/"/g, '""') + '"'
+      : s;
+  }
+
+  return (rows.slice(headerRowIdx) as unknown[][])
+    .filter(row => row.some(c => cellStr(c) !== ''))
+    .map(row => row.map(escapeCSV).join(','))
+    .join('\n');
 }
 
 export async function POST(req: Request) {
