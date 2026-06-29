@@ -308,12 +308,28 @@ function parseBookingCom(rows: Record<string, string>[]): ParsedRow[] {
 
 // ─── Route ────────────────────────────────────────────────────────────────────
 
-// Direct Excel → rows, bypassing CSV entirely to avoid encoding/escaping issues
-// with old binary .xls (BIFF) files like those exported by Booking.com.
+// Direct Excel → rows, bypassing CSV entirely to avoid encoding/escaping issues.
+// Booking.com (and many old web apps) export HTML tables with an .xls extension.
+// We check magic bytes so we don't try to parse HTML as binary BIFF.
 async function parseExcelToRows(file: File): Promise<Record<string, string>[]> {
   const buf = await file.arrayBuffer();
   const XLSX = await import('xlsx');
-  const wb = XLSX.read(buf, { type: 'array' });
+
+  const magic = new Uint8Array(buf, 0, 8);
+  const isOLE2 = magic[0] === 0xD0 && magic[1] === 0xCF; // binary BIFF (.xls)
+  const isZip  = magic[0] === 0x50 && magic[1] === 0x4B; // OOXML ZIP (.xlsx/.xlsm)
+
+  let wb;
+  if (isOLE2 || isZip) {
+    wb = XLSX.read(buf, { type: 'array' });
+  } else {
+    // HTML table or SpreadsheetML XML saved as .xls — parse as text
+    let encoding = 'utf-8';
+    if (magic[0] === 0xFF && magic[1] === 0xFE) encoding = 'utf-16le';
+    else if (magic[0] === 0xFE && magic[1] === 0xFF) encoding = 'utf-16be';
+    const text = new TextDecoder(encoding, { fatal: false }).decode(buf);
+    wb = XLSX.read(text, { type: 'string' });
+  }
 
   // Pick the sheet with the most rows.
   let bestSheet = wb.Sheets[wb.SheetNames[0]];
