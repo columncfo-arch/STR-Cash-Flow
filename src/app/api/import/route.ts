@@ -347,8 +347,10 @@ function parseHTMLTable(html: string): Record<string, string>[] | null {
   if (allRows.length < 2) return null;
 
   let headerIdx = 0;
+  let bestHScore = -1;
   for (let i = 0; i < Math.min(allRows.length, 15); i++) {
-    if (allRows[i].filter(c => c !== '').length >= 4) { headerIdx = i; break; }
+    const s = headerScore(allRows[i]);
+    if (s > bestHScore) { bestHScore = s; headerIdx = i; }
   }
 
   const seen = new Map<string, number>();
@@ -357,6 +359,17 @@ function parseHTMLTable(html: string): Record<string, string>[] | null {
   return allRows.slice(headerIdx + 1)
     .filter(row => row.some(c => c !== ''))
     .map(row => Object.fromEntries(headers.map((h, i) => [h, row[i] ?? ''])));
+}
+
+// Score a candidate header row — higher = more likely to be real column labels.
+// Font names ("Arial", "Tahoma") score low; multi-word or punctuated labels score high.
+function headerScore(row: unknown[]): number {
+  const cells = row.map(c => String(c ?? '').trim()).filter(c => c !== '');
+  if (cells.length < 3) return -1;
+  const quality = cells.filter(c =>
+    c.includes(' ') || c.includes('_') || c.includes('-') || c.length > 8 || /[()#%/]/.test(c)
+  ).length;
+  return quality * 3 + cells.length;
 }
 
 // Extract normalized rows from an xlsx workbook.
@@ -374,10 +387,13 @@ function wbToRows(wb: XLSX.WorkBook): Record<string, string>[] {
   }
   const raw = XLSX.utils.sheet_to_json<unknown[]>(bestSheet, { header: 1, raw: false, defval: '' });
   if (raw.length === 0) return [];
+  // Pick the header row by quality score — not just the first row with ≥4 cells.
+  // This handles files where CSS font names or title rows appear above the real headers.
   let headerRowIdx = 0;
+  let bestScore = -1;
   for (let i = 0; i < Math.min(raw.length, 15); i++) {
-    const nonEmpty = raw[i].filter(c => String(c ?? '').trim() !== '').length;
-    if (nonEmpty >= 4) { headerRowIdx = i; break; }
+    const s = headerScore(raw[i]);
+    if (s > bestScore) { bestScore = s; headerRowIdx = i; }
   }
   const seen = new Map<string, number>();
   const headers = raw[headerRowIdx].map((h, i) => toKey(String(h ?? ''), i, seen));
