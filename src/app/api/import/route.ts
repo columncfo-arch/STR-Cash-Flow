@@ -72,12 +72,23 @@ function col(row: Record<string, string>, ...candidates: string[]): string {
 function normalizeDate(s: string): string {
   if (!s) return '';
   s = s.trim();
+  // YYYY-MM-DD
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-  const slash = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (slash) return `${slash[3]}-${slash[1].padStart(2, '0')}-${slash[2].padStart(2, '0')}`;
+  // M/D/YYYY or MM/DD/YYYY
+  const slash4 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (slash4) return `${slash4[3]}-${slash4[1].padStart(2, '0')}-${slash4[2].padStart(2, '0')}`;
+  // M/D/YY — VRBO exports 2-digit year, e.g. "5/16/25"
+  const slash2 = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2})$/);
+  if (slash2) {
+    const yr = parseInt(slash2[3]);
+    const fullYear = yr <= 49 ? 2000 + yr : 1900 + yr;
+    return `${fullYear}-${slash2[1].padStart(2, '0')}-${slash2[2].padStart(2, '0')}`;
+  }
+  // YYYY-MM-DDThh:mm:ss… — ISO with time component
+  if (/^\d{4}-\d{2}-\d{2}T/.test(s)) return s.slice(0, 10);
   const d = new Date(s);
   if (!isNaN(d.getTime())) return d.toISOString().slice(0, 10);
-  return s;
+  return '';
 }
 
 interface ParsedRow {
