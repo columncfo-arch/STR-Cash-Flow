@@ -43,7 +43,7 @@ export default function ImportPage() {
   const [error, setError] = useState('');
   const [debugHeaders, setDebugHeaders] = useState<string[]>([]);
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [debugDiag, setDebugDiag] = useState<any>(null);
+  const [rawSample, setRawSample] = useState<any[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
@@ -51,7 +51,7 @@ export default function ImportPage() {
     setRows(null);
     setResult(null);
     setDebugHeaders([]);
-    setDebugDiag(null);
+    setRawSample([]);
     setLoading(true);
     try {
       const formData = new FormData();
@@ -63,7 +63,7 @@ export default function ImportPage() {
       setRows(data.rows);
       setTotalRows(data.totalRows);
       setDebugHeaders(data.debugHeaders ?? []);
-      setDebugDiag(data.debugDiag ?? null);
+      setRawSample(data.rawSample ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to parse file');
     } finally {
@@ -180,21 +180,20 @@ export default function ImportPage() {
           </div>
 
           {rows.length === 0 ? (
-            <div className="py-4 space-y-3">
+            <div className="py-2 space-y-3">
               <p className="text-sm text-slate-500">
-                No bookings found. Make sure you&apos;re exporting <strong>Transaction History</strong> (not a summary report) and the correct platform is selected.
+                No bookings found. Make sure you&apos;re exporting the correct file and the right platform is selected.
               </p>
               {debugHeaders.length > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
-                  <p className="text-xs font-semibold text-amber-800">Columns detected in your file:</p>
+                  <p className="text-xs font-semibold text-amber-800">Columns detected ({debugHeaders.length}):</p>
                   <p className="text-xs text-amber-700 font-mono break-all">{debugHeaders.join(' | ')}</p>
-                  {debugDiag && (
-                    <div className="mt-2 pt-2 border-t border-amber-200">
-                      <p className="text-xs font-semibold text-amber-800">Diagnosis:</p>
-                      <p className="text-xs text-amber-700">Rows passing status filter: <strong>{debugDiag.afterStatusFilter}</strong></p>
-                      {debugDiag.sample?.map((s: Record<string, unknown>, i: number) => (
-                        <div key={i} className="mt-1 text-xs text-amber-700 font-mono">
-                          Row {i+1}: gross=&quot;{String(s.gross)}&quot; checkIn=&quot;{String(s.checkIn)}&quot; {s.status !== undefined ? `status="${String(s.status)}"` : ''}
+                  {rawSample.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-amber-200 space-y-2">
+                      <p className="text-xs font-semibold text-amber-800">First row values:</p>
+                      {Object.entries(rawSample[0]).map(([k, v]) => (
+                        <div key={k} className="text-xs font-mono text-amber-800">
+                          <span className="text-amber-500">{k}</span>: &quot;{String(v)}&quot;
                         </div>
                       ))}
                     </div>

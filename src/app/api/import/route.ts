@@ -327,43 +327,10 @@ export async function POST(req: Request) {
       else rows = parseAirbnb(rawRows);
 
       const debugHeaders = rawRows[0] ? Object.keys(rawRows[0]) : [];
-      const debugFirstRow = rawRows[0] ?? {};
+      // Always return first 3 raw rows so we can diagnose column/value issues
+      const rawSample = rawRows.slice(0, 3);
 
-      // Extra diagnostics when 0 rows parsed
-      let debugDiag: Record<string, unknown> = {};
-      if (rows.length === 0 && rawRows.length > 0) {
-        if (platform === 'vrbo') {
-          const afterStatus = rawRows.filter(r => {
-            const s = col(r, 'booking_status', 'status', 'reservation_status', 'stay_status').toLowerCase();
-            return !s.includes('cancel');
-          });
-          debugDiag = {
-            afterStatusFilter: afterStatus.length,
-            sample: afterStatus.slice(0, 2).map(r => ({
-              gross: col(r, 'gross_booking_amount', 'gross_booking_value', 'gross_amount', 'total_amount', 'booking_amount', 'owner_payout', 'total'),
-              checkIn: col(r, 'check_in', 'check_in_date', 'checkin', 'arrival_date', 'start_date'),
-              rawKeys: Object.keys(r),
-              rawFirst5: Object.fromEntries(Object.entries(r).slice(0, 5)),
-            })),
-          };
-        } else if (platform === 'booking') {
-          const afterStatus = rawRows.filter(r => {
-            const s = col(r, 'status', 'reservation_status', 'booking_status').toLowerCase();
-            return s === '' || !s.includes('cancel');
-          });
-          debugDiag = {
-            afterStatusFilter: afterStatus.length,
-            sample: afterStatus.slice(0, 2).map(r => ({
-              price: col(r, 'price', 'total_price', 'room_revenue', 'total_amount', 'amount'),
-              checkIn: col(r, 'check_in', 'check_in_date', 'arrival_date', 'start_date'),
-              status: col(r, 'status', 'reservation_status'),
-              rawFirst5: Object.fromEntries(Object.entries(r).slice(0, 5)),
-            })),
-          };
-        }
-      }
-
-      return NextResponse.json({ rows, totalRows: rawRows.length, debugHeaders, debugFirstRow, debugDiag });
+      return NextResponse.json({ rows, totalRows: rawRows.length, debugHeaders, rawSample });
     }
 
     // ── Apply (and legacy preview): JSON body ──
