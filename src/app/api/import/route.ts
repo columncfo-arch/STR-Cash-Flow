@@ -386,47 +386,61 @@ function wbToRows(wb: XLSX.WorkBook): Record<string, string>[] {
     .map(row => Object.fromEntries(headers.map((h, i) => [h, String(row[i] ?? '').trim()])));
 }
 
+// Count the max columns in the first few rows — used to detect garbage parses.
+function maxCols(rows: Record<string, string>[]): number {
+  return rows.slice(0, 5).reduce((m, r) => Math.max(m, Object.keys(r).length), 0);
+}
+
 // Excel/XLS file → normalized row objects.  Returns [rows, detectedFormat].
+// Booking.com exports HTML with a .xls extension. XLSX.read(buffer) "succeeds"
+// on such files but produces garbled column names from embedded CSS (e.g. "arial1").
+// Fix: peek at the decoded text; if it looks like HTML/XML, bypass the binary
+// parser entirely and go straight to text-based parsing.
 async function parseExcelToRows(file: File): Promise<[Record<string, string>[], string]> {
   const buf = Buffer.from(await file.arrayBuffer());
   const magic = buf.subarray(0, 8);
   const hexMagic = Array.from(magic).map(b => b.toString(16).padStart(2, '0')).join(' ');
 
-  // Find first meaningful byte after any BOM
+  // Detect text encoding from BOM
   let encoding = 'utf-8';
-  let bomLen = 0;
-  if (magic[0] === 0xEF && magic[1] === 0xBB && magic[2] === 0xBF) bomLen = 3;
-  else if (magic[0] === 0xFF && magic[1] === 0xFE) { encoding = 'utf-16le'; bomLen = 2; }
-  else if (magic[0] === 0xFE && magic[1] === 0xFF) { encoding = 'utf-16be'; bomLen = 2; }
-  const firstByte = magic[bomLen];
+  if (magic[0] === 0xFF && magic[1] === 0xFE) encoding = 'utf-16le';
+  else if (magic[0] === 0xFE && magic[1] === 0xFF) encoding = 'utf-16be';
 
-  // '<' means HTML or XML (Microsoft Office HTML export, SpreadsheetML)
-  if (firstByte === 0x3C) {
-    const text = new TextDecoder(encoding, { fatal: false }).decode(buf);
-    // Try xlsx HTML/XLML parser first — handles Office-flavoured HTML correctly
+  // Peek at first 1 KB (decoded) to detect HTML/XML text files with .xls extension
+  const preview = new TextDecoder(encoding, { fatal: false }).decode(buf.subarray(0, 1024));
+  const isTextXls = /^\s*(<\?xml|<!doctype|<html)/i.test(preview) ||
+                    /^\s*[\s\S]{0,400}<table/i.test(preview);
+
+  if (!isTextXls) {
+    // 1. Try xlsx binary parser (handles real BIFF2-8 and OOXML)
     try {
-      const wb = XLSX.read(text, { type: 'string' });
+      const wb = XLSX.read(buf, { type: 'buffer' });
       const rows = wbToRows(wb);
-      if (rows.length > 0) return [rows, `xlml(${hexMagic})`];
+      if (rows.length > 0 && maxCols(rows) >= 3) {
+        const label = magic[0] === 0xD0 && magic[1] === 0xCF ? 'ole2' :
+                      magic[0] === 0x50 && magic[1] === 0x4B ? 'ooxml' : 'binary';
+        return [rows, `${label}(${hexMagic})`];
+      }
     } catch { /* fall through */ }
-    // Regex HTML table fallback
-    try {
-      const rows = parseHTMLTable(text);
-      if (rows && rows.length > 0) return [rows, `html(${hexMagic})`];
-    } catch { /* fall through */ }
-    return [parseCSV(text), `xml-csv(${hexMagic})`];
   }
 
-  // Binary: BIFF (any version), OOXML, or unknown binary
+  const text = new TextDecoder(encoding, { fatal: false }).decode(buf);
+
+  // 2. xlsx string parser — handles SpreadsheetML / Office HTML with XML namespaces
   try {
-    const wb = XLSX.read(buf, { type: 'buffer' });
-    const rows = wbToRows(wb);
-    const label = magic[0] === 0xD0 && magic[1] === 0xCF ? 'ole2' :
-                  magic[0] === 0x50 && magic[1] === 0x4B ? 'ooxml' : 'binary';
-    return [rows, `${label}(${hexMagic})`];
-  } catch (e) {
-    return [[], `error(${e instanceof Error ? e.message : String(e)})`];
-  }
+    const wb2 = XLSX.read(text, { type: 'string' });
+    const rows2 = wbToRows(wb2);
+    if (rows2.length > 0 && maxCols(rows2) >= 3) return [rows2, `xlml(${hexMagic})`];
+  } catch { /* fall through */ }
+
+  // 3. Regex HTML table parser — extracts <td>/<th> text directly, ignoring CSS
+  try {
+    const rows3 = parseHTMLTable(text);
+    if (rows3 && rows3.length > 0 && maxCols(rows3) >= 3) return [rows3, `html(${hexMagic})`];
+  } catch { /* fall through */ }
+
+  // 4. Last resort: plain CSV/TSV
+  return [parseCSV(text), `csv(${hexMagic})`];
 }
 
 export async function POST(req: Request) {
