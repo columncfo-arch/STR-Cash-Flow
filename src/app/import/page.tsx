@@ -41,12 +41,14 @@ export default function ImportPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<{ created: number; updated: number } | null>(null);
   const [error, setError] = useState('');
+  const [debugHeaders, setDebugHeaders] = useState<string[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleFile(file: File) {
     setError('');
     setRows(null);
     setResult(null);
+    setDebugHeaders([]);
     setLoading(true);
     try {
       const formData = new FormData();
@@ -57,6 +59,7 @@ export default function ImportPage() {
       if (!res.ok) throw new Error(data.error ?? 'Failed to parse file');
       setRows(data.rows);
       setTotalRows(data.totalRows);
+      setDebugHeaders(data.debugHeaders ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to parse file');
     } finally {
@@ -173,9 +176,17 @@ export default function ImportPage() {
           </div>
 
           {rows.length === 0 ? (
-            <p className="text-sm text-slate-500 py-4">
-              No bookings found. Make sure you&apos;re exporting <strong>Transaction History</strong> (not a summary report) and the correct platform is selected.
-            </p>
+            <div className="py-4 space-y-3">
+              <p className="text-sm text-slate-500">
+                No bookings found. Make sure you&apos;re exporting <strong>Transaction History</strong> (not a summary report) and the correct platform is selected.
+              </p>
+              {debugHeaders.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                  <p className="text-xs font-semibold text-amber-800 mb-1">Columns detected in your file:</p>
+                  <p className="text-xs text-amber-700 font-mono break-all">{debugHeaders.join(', ')}</p>
+                </div>
+              )}
+            </div>
           ) : (
             <>
               <div className="rounded-lg border border-slate-200 overflow-hidden mb-4">

@@ -167,87 +167,130 @@ function parseAirbnb(rows: Record<string, string>[]): ParsedRow[] {
 }
 
 function parseVRBO(rows: Record<string, string>[]): ParsedRow[] {
-  // VRBO financial report columns (normalized):
-  // property_id, unit_id, address, reservation_id,
-  // traveler_first_name, traveler_last_name, booking_status,
-  // check_in, check_out, nights, payout_date,
-  // gross_booking_amount, deductions, payout,
-  // lodging_tax_owner_remits, tax_withheld, payout_currency
   return rows
-    .filter(r => !col(r, 'booking_status').toLowerCase().includes('cancel'))
+    .filter(r => {
+      const status = col(r,
+        'booking_status', 'status', 'reservation_status', 'stay_status'
+      ).toLowerCase();
+      return !status.includes('cancel');
+    })
     .map(r => {
-      const gross = parseMoney(col(r, 'gross_booking_amount'));
-      const deductions = parseMoney(col(r, 'deductions'));
-      const payout = parseMoney(col(r, 'payout'));
-      const nights = parseInt(col(r, 'nights')) || 0;
-      const firstName = col(r, 'traveler_first_name');
-      const lastName = col(r, 'traveler_last_name');
+      const gross = parseMoney(col(r,
+        'gross_booking_amount', 'gross_booking_value', 'gross_amount',
+        'total_amount', 'booking_amount', 'owner_payout', 'total',
+        'gross_revenue', 'rental_amount', 'guest_total'
+      ));
+      const deductions = parseMoney(col(r,
+        'deductions', 'vrbo_fee', 'service_fee', 'platform_fee',
+        'host_service_fee', 'fees', 'commission_amount', 'commission'
+      ));
+      const payout = parseMoney(col(r,
+        'payout', 'owner_payout', 'net_payout', 'net_amount',
+        'amount_paid', 'payment_amount', 'total_payout'
+      ));
+      const nights = parseInt(col(r,
+        'nights', 'duration', 'length_of_stay', 'stay_duration', 'number_of_nights'
+      )) || 0;
+      const firstName = col(r, 'traveler_first_name', 'guest_first_name', 'first_name');
+      const lastName = col(r, 'traveler_last_name', 'guest_last_name', 'last_name');
+      const fullName = col(r, 'traveler_name', 'guest_name', 'guest');
+      const checkIn = normalizeDate(col(r,
+        'check_in', 'check_in_date', 'checkin', 'checkin_date',
+        'arrival_date', 'arrival', 'start_date'
+      ));
+      const checkOut = normalizeDate(col(r,
+        'check_out', 'check_out_date', 'checkout', 'checkout_date',
+        'departure_date', 'departure', 'end_date'
+      ));
       return {
-        confirmationCode: col(r, 'reservation_id'),
-        checkIn: normalizeDate(col(r, 'check_in')),
-        checkOut: normalizeDate(col(r, 'check_out')),
+        confirmationCode: col(r,
+          'reservation_id', 'confirmation_code', 'booking_id',
+          'reference_number', 'ref_number', 'id'
+        ),
+        checkIn,
+        checkOut,
         nights,
-        guestName: [firstName, lastName].filter(Boolean).join(' ') || '',
+        guestName: fullName || [firstName, lastName].filter(Boolean).join(' ') || '',
         grossAmount: gross,
         platformFee: deductions,
         netAmount: payout || (gross - deductions),
-        paidOut: payout,
-        payoutDate: normalizeDate(col(r, 'payout_date')),
-        currency: col(r, 'payout_currency') || undefined,
-        address: col(r, 'address') || undefined,
-        propertyId: col(r, 'property_id') || undefined,
+        paidOut: payout || undefined,
+        payoutDate: normalizeDate(col(r, 'payout_date', 'payment_date', 'paid_date')),
+        currency: col(r, 'payout_currency', 'currency') || undefined,
+        address: col(r, 'address', 'property_address') || undefined,
+        propertyId: col(r, 'property_id', 'listing_id') || undefined,
         unitId: col(r, 'unit_id') || undefined,
-        status: col(r, 'booking_status') || undefined,
-        lodgingTaxOwnerRemits: parseMoney(col(r, 'lodging_tax_owner_remits')) || undefined,
-        taxWithheld: parseMoney(col(r, 'tax_withheld')) || undefined,
+        status: col(r, 'booking_status', 'status', 'reservation_status') || undefined,
+        lodgingTaxOwnerRemits: parseMoney(col(r, 'lodging_tax_owner_remits', 'lodging_tax', 'tax_owner_remits')) || undefined,
+        taxWithheld: parseMoney(col(r, 'tax_withheld', 'taxes_withheld', 'withheld_tax')) || undefined,
       };
     })
     .filter(r => r.grossAmount > 0 && r.checkIn);
 }
 
 function parseBookingCom(rows: Record<string, string>[]): ParsedRow[] {
-  // Booking.com columns (normalized):
-  // book_number, booked_by, guest_name_s, check_in, check_out, booked_on,
-  // status, rooms, people, adults, children, children_s_age_s, price,
-  // commission, commission_amount, payment_status, payment_method_payment_provider,
-  // remarks, booker_country, travel_purpose, device, unit_type,
-  // duration_nights, cancellation_date, address, phone_number
   return rows
-    .filter(r => !col(r, 'status').toLowerCase().includes('cancel'))
+    .filter(r => {
+      const status = col(r, 'status', 'reservation_status', 'booking_status').toLowerCase();
+      return !status.includes('cancel') && status !== 'no_show';
+    })
     .map(r => {
-      const gross = parseMoney(col(r, 'price'));
-      const fee = parseMoney(col(r, 'commission_amount'));
-      const commissionPct = parseFloat(col(r, 'commission')) || undefined;
-      const nights = parseInt(col(r, 'duration_nights', 'nights')) || 0;
+      const gross = parseMoney(col(r,
+        'price', 'total_price', 'room_revenue', 'gross_revenue',
+        'total_revenue', 'total_amount', 'amount', 'revenue',
+        'gross_booking_value', 'booking_value', 'nightly_rate_total',
+        'accommodation_price', 'total'
+      ));
+      const fee = parseMoney(col(r,
+        'commission_amount', 'commission', 'booking_com_commission',
+        'platform_fee', 'service_fee'
+      ));
+      const commissionPct = parseFloat(col(r, 'commission_', 'commission_percent', 'commission_rate')) || undefined;
+      const nights = parseInt(col(r,
+        'duration_nights', 'nights', 'number_of_nights', 'stay_duration', 'length_of_stay'
+      )) || 0;
+      const confirmationCode = col(r,
+        'book_number', 'booking_number', 'reservation_number', 'reservation_id',
+        'confirmation_code', 'booking_id', 'reference_number', 'id'
+      );
+      const checkIn = normalizeDate(col(r,
+        'check_in', 'check_in_date', 'arrival_date', 'arrival', 'start_date', 'checkin'
+      ));
+      const checkOut = normalizeDate(col(r,
+        'check_out', 'check_out_date', 'departure_date', 'departure', 'end_date', 'checkout'
+      ));
       return {
-        confirmationCode: col(r, 'book_number'),
-        checkIn: normalizeDate(col(r, 'check_in')),
-        checkOut: normalizeDate(col(r, 'check_out')),
+        confirmationCode,
+        checkIn,
+        checkOut,
         nights,
-        guestName: col(r, 'guest_name_s', 'guest_name'),
+        guestName: col(r,
+          'guest_name_s', 'guest_name', 'guest', 'booker_name',
+          'booked_by', 'traveler_name', 'customer_name', 'name'
+        ),
         grossAmount: gross,
         platformFee: fee,
         netAmount: gross - fee,
-        bookingDate: normalizeDate(col(r, 'booked_on')),
-        status: col(r, 'status'),
+        bookingDate: normalizeDate(col(r, 'booked_on', 'booking_date', 'created_date', 'date')),
+        status: col(r, 'status', 'reservation_status', 'booking_status'),
         commissionPct,
         paymentStatus: col(r, 'payment_status') || undefined,
-        paymentMethod: col(r, 'payment_method_payment_provider') || undefined,
-        bookerName: col(r, 'booked_by') || undefined,
-        bookerCountry: col(r, 'booker_country') || undefined,
+        paymentMethod: col(r, 'payment_method_payment_provider', 'payment_method') || undefined,
+        bookerName: col(r, 'booked_by', 'booker_name') || undefined,
+        bookerCountry: col(r, 'booker_country', 'guest_country', 'country') || undefined,
         travelPurpose: col(r, 'travel_purpose') || undefined,
         device: col(r, 'device') || undefined,
-        unitType: col(r, 'unit_type') || undefined,
+        unitType: col(r, 'unit_type', 'room_type', 'property_type') || undefined,
         cancellationDate: normalizeDate(col(r, 'cancellation_date')) || undefined,
         address: col(r, 'address') || undefined,
-        phone: col(r, 'phone_number') || undefined,
-        adults: parseInt(col(r, 'adults')) || undefined,
-        children: parseInt(col(r, 'children')) || undefined,
-        childrenAges: col(r, 'children_s_age_s') || undefined,
-        rooms: parseInt(col(r, 'rooms')) || undefined,
-        people: parseInt(col(r, 'people')) || undefined,
-        referenceCode: col(r, 'book_number') || undefined,
-        details: col(r, 'remarks') || undefined,
+        phone: col(r, 'phone_number', 'phone', 'contact_number') || undefined,
+        adults: parseInt(col(r, 'adults', 'adult_count', 'num_adults')) || undefined,
+        children: parseInt(col(r, 'children', 'child_count', 'num_children')) || undefined,
+        childrenAges: col(r, 'children_s_age_s', 'children_ages', 'child_ages') || undefined,
+        rooms: parseInt(col(r, 'rooms', 'room_count', 'num_rooms')) || undefined,
+        people: parseInt(col(r, 'people', 'guests', 'num_guests', 'total_guests')) || undefined,
+        referenceCode: confirmationCode || undefined,
+        details: col(r, 'remarks', 'notes', 'special_requests') || undefined,
       };
     })
     .filter(r => r.grossAmount > 0 && r.checkIn);
