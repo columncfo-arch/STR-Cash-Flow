@@ -142,7 +142,7 @@ export async function GET(req: Request) {
       year,
       months,
       totalNights,
-      avgOccupancyRate: months.reduce((s, m) => s + m.occupancyRate, 0) / 12,
+      avgOccupancyRate: months.slice(0, pitiMonths).reduce((s, m) => s + m.occupancyRate, 0) / pitiMonths,
       byPlatform,
       ...annualPnL,
     };
