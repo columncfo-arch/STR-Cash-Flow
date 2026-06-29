@@ -42,6 +42,7 @@ export default function ImportPage() {
   const [result, setResult] = useState<{ created: number; updated: number } | null>(null);
   const [error, setError] = useState('');
   const [debugHeaders, setDebugHeaders] = useState<string[]>([]);
+  const [debugFormat, setDebugFormat] = useState('');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [rawSample, setRawSample] = useState<any[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -51,6 +52,7 @@ export default function ImportPage() {
     setRows(null);
     setResult(null);
     setDebugHeaders([]);
+    setDebugFormat('');
     setRawSample([]);
     setLoading(true);
     try {
@@ -63,6 +65,7 @@ export default function ImportPage() {
       setRows(data.rows);
       setTotalRows(data.totalRows);
       setDebugHeaders(data.debugHeaders ?? []);
+      setDebugFormat(data.debugFormat ?? '');
       setRawSample(data.rawSample ?? []);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to parse file');
@@ -186,6 +189,7 @@ export default function ImportPage() {
               </p>
               {debugHeaders.length > 0 && (
                 <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                  {debugFormat && <p className="text-xs font-mono text-amber-600 break-all">format: {debugFormat}</p>}
                   <p className="text-xs font-semibold text-amber-800">Columns detected ({debugHeaders.length}):</p>
                   <p className="text-xs text-amber-700 font-mono break-all">{debugHeaders.join(' | ')}</p>
                   {rawSample.length > 0 && (

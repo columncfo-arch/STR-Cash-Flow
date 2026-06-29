@@ -359,34 +359,50 @@ function parseHTMLTable(html: string): Record<string, string>[] | null {
 }
 
 // Direct Excel → rows.  Returns [rows, detectedFormat] for debug visibility.
+// Strategy: only use text path if file starts with '<' (HTML/XML).
+// Everything else goes to xlsx binary parser — this handles BIFF2-8 (old Excel
+// formats that do NOT use OLE2 magic bytes) as well as OOXML.
 async function parseExcelToRows(file: File): Promise<[Record<string, string>[], string]> {
   const buf = await file.arrayBuffer();
   const magic = new Uint8Array(buf, 0, 8);
   const hexMagic = Array.from(magic).map(b => b.toString(16).padStart(2, '0')).join(' ');
 
-  const isOLE2 = magic[0] === 0xD0 && magic[1] === 0xCF;
-  const isZip  = magic[0] === 0x50 && magic[1] === 0x4B;
+  // Detect encoding BOM and find first meaningful byte
+  let encoding = 'utf-8';
+  let bomLen = 0;
+  if (magic[0] === 0xEF && magic[1] === 0xBB && magic[2] === 0xBF) bomLen = 3;
+  else if (magic[0] === 0xFF && magic[1] === 0xFE) { encoding = 'utf-16le'; bomLen = 2; }
+  else if (magic[0] === 0xFE && magic[1] === 0xFF) { encoding = 'utf-16be'; bomLen = 2; }
+  const firstByte = magic[bomLen];
 
-  if (!isOLE2 && !isZip) {
-    // Text-based file (.xls extension but actually HTML/XML/CSV)
-    let encoding = 'utf-8';
-    if (magic[0] === 0xFF && magic[1] === 0xFE) encoding = 'utf-16le';
-    else if (magic[0] === 0xFE && magic[1] === 0xFF) encoding = 'utf-16be';
+  if (firstByte === 0x3C) {
+    // Starts with '<' — HTML table or SpreadsheetML XML saved as .xls
     const text = new TextDecoder(encoding, { fatal: false }).decode(buf);
-
-    // Try HTML table parser (DOM-free, works in Node.js)
     if (/<table/i.test(text)) {
       const rows = parseHTMLTable(text);
       if (rows && rows.length > 0) return [rows, `html(${hexMagic})`];
     }
-
-    // Fallback: plain CSV/TSV
-    return [parseCSV(text), `text-csv(${hexMagic})`];
+    // SpreadsheetML / XLML — xlsx can parse this as a string
+    const XLSXA = await import('xlsx');
+    try {
+      const wb2 = XLSXA.read(text, { type: 'string' });
+      const result2 = xlsxWorkbookToRows(XLSXA, wb2);
+      if (result2.length > 0) return [result2, `xlml(${hexMagic})`];
+    } catch { /* fall through */ }
+    return [parseCSV(text), `xml-csv(${hexMagic})`];
   }
 
+  // Binary: let xlsx handle it — covers BIFF2/3/4/5/8, OOXML, and anything else
   const XLSX = await import('xlsx');
   const wb = XLSX.read(buf, { type: 'array' });
-  const fmt = isOLE2 ? `ole2(${hexMagic})` : `ooxml(${hexMagic})`;
+  const label = magic[0] === 0xD0 && magic[1] === 0xCF ? 'ole2' :
+                magic[0] === 0x50 && magic[1] === 0x4B ? 'ooxml' : `binary`;
+  return [xlsxWorkbookToRows(XLSX, wb), `${label}(${hexMagic})`];
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function xlsxWorkbookToRows(XLSX: any, wb: any): Record<string, string>[] {
+  if (!wb.SheetNames.length) return [];
 
   let bestSheet = wb.Sheets[wb.SheetNames[0]];
   let bestRows = 0;
@@ -399,8 +415,9 @@ async function parseExcelToRows(file: File): Promise<[Record<string, string>[], 
     if (rowCount > bestRows) { bestRows = rowCount; bestSheet = ws; }
   }
 
-  const raw = XLSX.utils.sheet_to_json<unknown[]>(bestSheet, { header: 1, raw: false, defval: '' });
-  if (raw.length === 0) return [[], fmt];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const raw: any[] = XLSX.utils.sheet_to_json(bestSheet, { header: 1, raw: false, defval: '' });
+  if (raw.length === 0) return [];
 
   let headerRowIdx = 0;
   for (let i = 0; i < Math.min(raw.length, 15); i++) {
@@ -411,12 +428,9 @@ async function parseExcelToRows(file: File): Promise<[Record<string, string>[], 
   const seen = new Map<string, number>();
   const headers = (raw[headerRowIdx] as unknown[]).map((h, i) => toKey(String(h ?? ''), i, seen));
 
-  return [
-    (raw.slice(headerRowIdx + 1) as unknown[][])
-      .filter(row => row.some(c => String(c ?? '').trim() !== ''))
-      .map(row => Object.fromEntries(headers.map((h, i) => [h, String(row[i] ?? '').trim()]))),
-    fmt,
-  ];
+  return (raw.slice(headerRowIdx + 1) as unknown[][])
+    .filter(row => row.some(c => String(c ?? '').trim() !== ''))
+    .map(row => Object.fromEntries(headers.map((h, i) => [h, String(row[i] ?? '').trim()])));
 }
 
 export async function POST(req: Request) {
