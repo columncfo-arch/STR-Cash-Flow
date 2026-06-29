@@ -1,11 +1,19 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Settings } from '@/types';
-import { Check } from 'lucide-react';
+import { Check, AlertTriangle } from 'lucide-react';
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [saved, setSaved] = useState(false);
+  const [cleared, setCleared] = useState(false);
+
+  async function clearAllBookings() {
+    if (!confirm('Delete ALL bookings? This cannot be undone.')) return;
+    await fetch('/api/bookings?all=true', { method: 'DELETE' });
+    setCleared(true);
+    setTimeout(() => setCleared(false), 3000);
+  }
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(setSettings);
@@ -74,13 +82,27 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <button
-        onClick={save}
-        className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm hover:bg-emerald-700 transition-colors"
-      >
-        {saved ? <Check className="w-4 h-4" /> : null}
-        {saved ? 'Saved!' : 'Save Settings'}
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={save}
+          className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm hover:bg-emerald-700 transition-colors"
+        >
+          {saved ? <Check className="w-4 h-4" /> : null}
+          {saved ? 'Saved!' : 'Save Settings'}
+        </button>
+      </div>
+
+      <section className="bg-white border border-red-100 rounded-xl p-6 shadow-sm mt-8">
+        <h2 className="font-semibold text-red-700 mb-2">Danger Zone</h2>
+        <p className="text-sm text-slate-500 mb-4">Permanently delete all booking data from the database.</p>
+        <button
+          onClick={clearAllBookings}
+          className="flex items-center gap-2 border border-red-300 text-red-600 px-4 py-2 rounded-lg text-sm hover:bg-red-50 transition-colors"
+        >
+          <AlertTriangle className="w-4 h-4" />
+          {cleared ? 'All bookings deleted.' : 'Delete All Bookings'}
+        </button>
+      </section>
     </div>
   );
 }
