@@ -12,6 +12,7 @@ const DEFAULT_SETTINGS: Settings = {
   propertyName: 'My STR Property',
   monthlyPITI: 0,
   cleaningFeePerBooking: 0,
+  forecastGrowthPct: 0,
 };
 
 // ─── Redis backend ─────────────────────────────────────────────────────────────

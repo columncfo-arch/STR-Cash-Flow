@@ -19,6 +19,7 @@ const PLATFORM_COLORS: Record<string, string> = {
 
 export default function Dashboard() {
   const [statement, setStatement] = useState<AnnualStatement | null>(null);
+  const [prevStatement, setPrevStatement] = useState<AnnualStatement | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const now = new Date();
   const year = now.getFullYear();
@@ -27,6 +28,7 @@ export default function Dashboard() {
 
   useEffect(() => {
     fetch('/api/income-statement?year=' + year).then(r => r.json()).then(d => setStatement(d.statement));
+    fetch('/api/income-statement?year=' + (year - 1)).then(r => r.json()).then(d => setPrevStatement(d.statement));
     fetch('/api/settings').then(r => r.json()).then(setSettings);
   }, []);
 
@@ -43,15 +45,29 @@ export default function Dashboard() {
     : 0;
   const adr = ytdNights > 0 ? ytdGross / ytdNights : null;
 
-  const chartData = statement?.months.map((m, i) => ({
-    name: MONTHS[i],
-    Airbnb: m.byPlatform.airbnb.income,
-    'Booking.com': m.byPlatform.booking.income,
-    VRBO: m.byPlatform.vrbo.income,
-    Direct: m.byPlatform.direct.income,
-    Other: m.byPlatform.other.income,
-    'Net Income': m.netIncome,
-  })) ?? [];
+  const growthFactor = (settings?.forecastGrowthPct ?? 0) / 100;
+
+  const chartData = statement?.months.map((m, i) => {
+    const actualNetIncome: number | null = i <= currentMonthIdx ? m.netIncome : null;
+    let forecast: number | null = null;
+    if (i >= currentMonthIdx && prevStatement) {
+      const prev = prevStatement.months[i];
+      // At current month: connect to actual; beyond: project using prev year net income + growth on prev revenue
+      forecast = i === currentMonthIdx
+        ? m.netIncome
+        : prev.netIncome + prev.grossRevenue * growthFactor;
+    }
+    return {
+      name: MONTHS[i],
+      Airbnb: m.byPlatform.airbnb.income,
+      'Booking.com': m.byPlatform.booking.income,
+      VRBO: m.byPlatform.vrbo.income,
+      Direct: m.byPlatform.direct.income,
+      Other: m.byPlatform.other.income,
+      'Net Income': actualNetIncome,
+      Forecast: forecast,
+    };
+  }) ?? [];
 
   const hasData = ytdGross > 0;
 
@@ -95,6 +111,16 @@ export default function Dashboard() {
                 stroke="#f97316"
                 strokeWidth={3}
                 dot={{ r: 4, fill: '#f97316', strokeWidth: 0 }}
+                connectNulls
+              />
+              <Line
+                yAxisId="right"
+                type="monotone"
+                dataKey="Forecast"
+                stroke="#f97316"
+                strokeWidth={2}
+                strokeDasharray="6 3"
+                dot={false}
                 connectNulls
               />
             </ComposedChart>

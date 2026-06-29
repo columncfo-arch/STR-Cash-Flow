@@ -89,6 +89,7 @@ export interface Settings {
   propertyName: string;
   monthlyPITI: number;
   cleaningFeePerBooking: number;
+  forecastGrowthPct: number; // AirDNA-driven YoY revenue growth assumption (%)
 }
 
 export interface PnLSummary {

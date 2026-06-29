@@ -96,6 +96,39 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm mb-6">
+        <h2 className="font-semibold text-slate-800 mb-1">Revenue Forecast</h2>
+        <p className="text-xs text-slate-500 mb-4">
+          Used to project future months on the dashboard chart. Set based on AirDNA or similar market data
+          comparing this year&apos;s expected performance vs last year.
+        </p>
+        <div>
+          <label className="text-xs text-slate-500 block mb-1">
+            Year-over-Year Growth Assumption (%)
+          </label>
+          <div className="flex items-center gap-3">
+            <input
+              type="range"
+              min="-50"
+              max="100"
+              step="1"
+              value={settings.forecastGrowthPct ?? 0}
+              onChange={e => setSettings({ ...settings, forecastGrowthPct: parseFloat(e.target.value) })}
+              className="flex-1"
+            />
+            <span className={`text-sm font-semibold w-14 text-right ${
+              (settings.forecastGrowthPct ?? 0) > 0 ? 'text-emerald-600' :
+              (settings.forecastGrowthPct ?? 0) < 0 ? 'text-red-500' : 'text-slate-600'
+            }`}>
+              {(settings.forecastGrowthPct ?? 0) > 0 ? '+' : ''}{settings.forecastGrowthPct ?? 0}%
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-1">
+            Example: AirDNA shows your market is up 12% this summer → set +12%. Applied to last year&apos;s monthly revenue to project future months.
+          </p>
+        </div>
+      </section>
+
       <div className="flex items-center gap-3">
         <button
           onClick={save}
