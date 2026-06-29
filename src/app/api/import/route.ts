@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { loadBookings, saveBookings } from '@/lib/storage';
+import { loadBookings, replaceAllBookings } from '@/lib/storage';
 import { Booking, Platform } from '@/types';
 import * as XLSX from 'xlsx';
 
@@ -609,7 +609,7 @@ export async function POST(req: Request) {
         }
       }
 
-      await saveBookings(existing);
+      await replaceAllBookings(existing);
       return NextResponse.json({ created, updated });
     }
 

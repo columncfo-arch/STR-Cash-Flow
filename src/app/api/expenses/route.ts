@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { loadExpenses, saveExpenses } from '@/lib/storage';
+import { loadExpenses, addExpense } from '@/lib/storage';
 import { Expense } from '@/types';
 
 export async function GET(req: Request) {
@@ -36,9 +36,7 @@ export async function POST(req: Request) {
       updatedAt: now,
     };
 
-    const expenses = await loadExpenses();
-    expenses.push(expense);
-    await saveExpenses(expenses);
+    await addExpense(expense);
 
     return NextResponse.json(expense, { status: 201 });
   } catch {

@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { loadBookings, saveBookings } from '@/lib/storage';
+import { loadBookings, addBooking, deleteBookings } from '@/lib/storage';
 import { Booking } from '@/types';
 
 export async function GET(req: Request) {
@@ -29,15 +29,13 @@ export async function DELETE(req: Request) {
     const platform = searchParams.get('platform');
     const all = searchParams.get('all');
 
-    const bookings = await loadBookings();
-    const remaining = (all === 'true')
-      ? []
+    const deleted = (all === 'true')
+      ? await deleteBookings(() => true)
       : platform
-        ? bookings.filter(b => b.platform !== platform)
-        : bookings;
+        ? await deleteBookings(b => b.platform === platform)
+        : 0;
 
-    await saveBookings(remaining);
-    return NextResponse.json({ deleted: bookings.length - remaining.length });
+    return NextResponse.json({ deleted });
   } catch {
     return NextResponse.json({ error: 'Failed to delete bookings' }, { status: 500 });
   }
@@ -50,9 +48,7 @@ export async function POST(req: Request) {
     body.updatedAt = new Date().toISOString();
     body.isManual = true;
 
-    const bookings = await loadBookings();
-    bookings.push(body);
-    await saveBookings(bookings);
+    await addBooking(body);
 
     return NextResponse.json(body, { status: 201 });
   } catch {

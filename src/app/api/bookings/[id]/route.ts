@@ -1,34 +1,25 @@
 import { NextResponse } from 'next/server';
-import { loadBookings, saveBookings } from '@/lib/storage';
+import { updateBooking, deleteBooking } from '@/lib/storage';
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
     const body = await req.json();
-    const bookings = await loadBookings();
-    const idx = bookings.findIndex(b => b.id === id);
+    const updated = await updateBooking(id, { ...body, updatedAt: new Date().toISOString(), isManual: true });
 
-    if (idx < 0) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
-
-    bookings[idx] = { ...bookings[idx], ...body, id, updatedAt: new Date().toISOString(), isManual: true };
-    await saveBookings(bookings);
-    return NextResponse.json(bookings[idx]);
+    if (!updated) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
+    return NextResponse.json(updated);
   } catch {
     return NextResponse.json({ error: 'Failed to update booking' }, { status: 500 });
   }
 }
 
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await params;
-    const bookings = await loadBookings();
-    const filtered = bookings.filter(b => b.id !== id);
+    const found = await deleteBooking(id);
 
-    if (filtered.length === bookings.length) {
-      return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
-    }
-
-    await saveBookings(filtered);
+    if (!found) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json({ error: 'Failed to delete booking' }, { status: 500 });

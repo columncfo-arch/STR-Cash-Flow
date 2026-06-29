@@ -74,12 +74,14 @@ export interface Booking {
 
 export interface Expense {
   id: string;
-  date: string;          // YYYY-MM-DD
+  date: string;          // YYYY-MM-DD, first occurrence for recurring expenses
   category: ExpenseCategory;
   subcategory?: string;  // for utilities: Electric, Water, etc.
   description: string;
   amount: number;
   bookingId?: string;    // optional link to a specific booking
+  recurring?: boolean;       // repeats monthly starting at `date`
+  recurrenceEnd?: string | null; // YYYY-MM-DD, optional last month it applies to
   createdAt: string;
   updatedAt: string;
 }
@@ -89,7 +91,8 @@ export interface Settings {
   propertyName: string;
   monthlyPITI: number;
   cleaningFeePerBooking: number;
-  forecastGrowthPct: number; // AirDNA-driven YoY revenue growth assumption (%)
+  forecastGrowthPct: number;                      // default YoY growth if no year-specific rate set
+  forecastGrowthByYear: Record<string, number>;    // year string → growth %, e.g. {"2026": 4, "2027": 3}
 }
 
 export interface PnLSummary {

@@ -9,6 +9,8 @@ interface FormState {
   category: ExpenseCategory;
   description: string;
   amount: string;
+  recurring: boolean;
+  recurrenceEnd: string;
 }
 
 function emptyForm(): FormState {
@@ -17,7 +19,68 @@ function emptyForm(): FormState {
     category: 'cleaning',
     description: '',
     amount: '',
+    recurring: false,
+    recurrenceEnd: '',
   };
+}
+
+function ExpenseForm({ f, onChange, onSave, onCancel }: {
+  f: FormState;
+  onChange: (patch: Partial<FormState>) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div>
+        <label className="text-xs text-slate-500 block mb-1">Date</label>
+        <input type="date" value={f.date} onChange={e => onChange({ date: e.target.value })}
+          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
+      </div>
+      <div>
+        <label className="text-xs text-slate-500 block mb-1">Category</label>
+        <select value={f.category} onChange={e => onChange({ category: e.target.value as ExpenseCategory })}
+          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2">
+          {EXPENSE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+        </select>
+      </div>
+      <div>
+        <label className="text-xs text-slate-500 block mb-1">Description</label>
+        <input type="text" value={f.description} onChange={e => onChange({ description: e.target.value })}
+          placeholder="e.g. April electric bill"
+          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
+      </div>
+      <div>
+        <label className="text-xs text-slate-500 block mb-1">Amount ($)</label>
+        <input type="number" value={f.amount} onChange={e => onChange({ amount: e.target.value })}
+          placeholder="0.00" min="0" step="0.01"
+          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
+      </div>
+      <div className="col-span-2 md:col-span-4 flex flex-wrap items-end gap-4">
+        <label className="flex items-center gap-2 text-sm text-slate-600">
+          <input type="checkbox" checked={f.recurring} onChange={e => onChange({ recurring: e.target.checked })} />
+          Recurring monthly expense
+        </label>
+        {f.recurring && (
+          <div>
+            <label className="text-xs text-slate-500 block mb-1">Ends (optional)</label>
+            <input type="date" value={f.recurrenceEnd} onChange={e => onChange({ recurrenceEnd: e.target.value })}
+              className="text-sm border border-slate-200 rounded-lg px-3 py-2" />
+          </div>
+        )}
+      </div>
+      <div className="flex items-end gap-2 col-span-2 md:col-span-4">
+        <button onClick={onSave}
+          className="flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700">
+          <Check className="w-3.5 h-3.5" /> Save
+        </button>
+        <button onClick={onCancel}
+          className="flex items-center gap-1.5 border border-slate-200 px-4 py-2 rounded-lg text-sm hover:bg-slate-50">
+          <X className="w-3.5 h-3.5" /> Cancel
+        </button>
+      </div>
+    </div>
+  );
 }
 
 export default function ExpensesPage() {
@@ -56,6 +119,8 @@ export default function ExpensesPage() {
         category: form.category,
         description: form.description,
         amount: parseFloat(form.amount) || 0,
+        recurring: form.recurring,
+        recurrenceEnd: form.recurring && form.recurrenceEnd ? form.recurrenceEnd : undefined,
       }),
     });
     setShowAdd(false);
@@ -72,6 +137,8 @@ export default function ExpensesPage() {
         category: editForm.category,
         description: editForm.description,
         amount: parseFloat(editForm.amount) || 0,
+        recurring: editForm.recurring,
+        recurrenceEnd: editForm.recurring && editForm.recurrenceEnd ? editForm.recurrenceEnd : null,
       }),
     });
     setEditId(null);
@@ -91,6 +158,8 @@ export default function ExpensesPage() {
       category: e.category,
       description: e.description,
       amount: String(e.amount),
+      recurring: e.recurring ?? false,
+      recurrenceEnd: e.recurrenceEnd ?? '',
     });
   }
 
@@ -104,52 +173,6 @@ export default function ExpensesPage() {
 
   const pitiMonthly = settings?.monthlyPITI ?? 0;
   const pitiAnnual = pitiMonthly * 12;
-
-  function ExpenseForm({ f, onChange, onSave, onCancel }: {
-    f: FormState;
-    onChange: (patch: Partial<FormState>) => void;
-    onSave: () => void;
-    onCancel: () => void;
-  }) {
-    return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <div>
-          <label className="text-xs text-slate-500 block mb-1">Date</label>
-          <input type="date" value={f.date} onChange={e => onChange({ date: e.target.value })}
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
-        </div>
-        <div>
-          <label className="text-xs text-slate-500 block mb-1">Category</label>
-          <select value={f.category} onChange={e => onChange({ category: e.target.value as ExpenseCategory })}
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2">
-            {EXPENSE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-          </select>
-        </div>
-        <div>
-          <label className="text-xs text-slate-500 block mb-1">Description</label>
-          <input type="text" value={f.description} onChange={e => onChange({ description: e.target.value })}
-            placeholder="e.g. April electric bill"
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
-        </div>
-        <div>
-          <label className="text-xs text-slate-500 block mb-1">Amount ($)</label>
-          <input type="number" value={f.amount} onChange={e => onChange({ amount: e.target.value })}
-            placeholder="0.00" min="0" step="0.01"
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
-        </div>
-        <div className="flex items-end gap-2 col-span-2 md:col-span-4">
-          <button onClick={onSave}
-            className="flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700">
-            <Check className="w-3.5 h-3.5" /> Save
-          </button>
-          <button onClick={onCancel}
-            className="flex items-center gap-1.5 border border-slate-200 px-4 py-2 rounded-lg text-sm hover:bg-slate-50">
-            <X className="w-3.5 h-3.5" /> Cancel
-          </button>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -233,7 +256,14 @@ export default function ExpensesPage() {
                   <td className="px-4 py-3 capitalize text-slate-700">
                     {EXPENSE_CATEGORIES.find(c => c.value === e.category)?.label ?? e.category}
                   </td>
-                  <td className="px-4 py-3 text-slate-700">{e.description}</td>
+                  <td className="px-4 py-3 text-slate-700">
+                    {e.description}
+                    {e.recurring && (
+                      <span className="ml-2 text-[10px] uppercase tracking-wide bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">
+                        Recurring
+                      </span>
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right font-semibold text-red-600">({fmt(e.amount)})</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center justify-end gap-1">

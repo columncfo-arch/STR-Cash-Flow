@@ -45,7 +45,8 @@ export default function Dashboard() {
     : 0;
   const adr = ytdNights > 0 ? ytdGross / ytdNights : null;
 
-  const growthFactor = (settings?.forecastGrowthPct ?? 0) / 100;
+  const growthPct = settings?.forecastGrowthByYear?.[String(year)] ?? settings?.forecastGrowthPct ?? 0;
+  const growthFactor = growthPct / 100;
 
   const chartData = statement?.months.map((m, i) => {
     const actualNetIncome: number | null = i <= currentMonthIdx ? m.netIncome : null;

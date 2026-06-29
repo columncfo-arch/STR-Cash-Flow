@@ -16,6 +16,24 @@ function emptyExpensesByCategory(): Record<ExpenseCategory, number> {
   return Object.fromEntries(EXPENSE_CATS.map(c => [c, 0])) as Record<ExpenseCategory, number>;
 }
 
+// Expands recurring expenses into one occurrence per applicable month (YYYY-MM prefix)
+// so their amount is counted once per month rather than once total.
+function expandExpenses(expenses: Expense[], monthPrefixes: string[]): Expense[] {
+  const result: Expense[] = [];
+  for (const e of expenses) {
+    if (!e.recurring) {
+      if (monthPrefixes.some(p => e.date.startsWith(p))) result.push(e);
+      continue;
+    }
+    const startPrefix = e.date.slice(0, 7);
+    const endPrefix = e.recurrenceEnd ? e.recurrenceEnd.slice(0, 7) : null;
+    for (const p of monthPrefixes) {
+      if (p >= startPrefix && (!endPrefix || p <= endPrefix)) result.push(e);
+    }
+  }
+  return result;
+}
+
 function buildPnL(
   bookings: Booking[],
   expenses: Expense[],
@@ -81,7 +99,8 @@ function buildMonthly(
   // Use string prefix to avoid timezone shifts from Date parsing
   const prefix = `${year}-${String(month).padStart(2, '0')}`;
   const monthBookings = bookings.filter(b => b.checkIn.startsWith(prefix));
-  const monthExpenses = expenses.filter(e => e.date.startsWith(prefix));
+  const daysInMonth = getDaysInMonth(new Date(year, month - 1));
+  const monthExpenses = expandExpenses(expenses, [prefix]);
 
   const byPlatform = emptyPlatformBreakdown();
   let totalNights = 0;
@@ -92,8 +111,6 @@ function buildMonthly(
     byPlatform[b.platform].nights += b.nights;
     byPlatform[b.platform].bookings += 1;
   }
-
-  const daysInMonth = getDaysInMonth(new Date(year, month - 1));
   const pnl = buildPnL(monthBookings, monthExpenses, monthlyPITI, 1, cleaningFeePerBooking);
 
   return {
@@ -124,7 +141,8 @@ export async function GET(req: Request) {
     }
 
     const yearBookings = allBookings.filter(b => b.checkIn.startsWith(String(year)));
-    const yearExpenses = allExpenses.filter(e => e.date.startsWith(String(year)));
+    const yearMonthPrefixes = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
+    const yearExpenses = expandExpenses(allExpenses, yearMonthPrefixes);
 
     const byPlatform = emptyPlatformBreakdown();
     let totalNights = 0;

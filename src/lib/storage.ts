@@ -13,7 +13,19 @@ const DEFAULT_SETTINGS: Settings = {
   monthlyPITI: 0,
   cleaningFeePerBooking: 0,
   forecastGrowthPct: 0,
+  forecastGrowthByYear: {},
 };
+
+// ─── In-process write lock (serializes read-modify-write on the file backend) ──
+
+const locks = new Map<string, Promise<unknown>>();
+
+async function withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+  const prev = locks.get(key) ?? Promise.resolve();
+  const run = prev.then(fn, fn);
+  locks.set(key, run.catch(() => undefined));
+  return run;
+}
 
 // ─── Redis backend ─────────────────────────────────────────────────────────────
 
@@ -37,6 +49,32 @@ async function redisGet<T>(key: string, fallback: T): Promise<T> {
 async function redisSet(key: string, value: unknown): Promise<void> {
   const client = await getRedis();
   await client.set(key, JSON.stringify(value));
+}
+
+// Hash-backed collections: each record lives in its own field, keyed by id.
+// This makes add/update/delete atomic per-record — concurrent writes to
+// different records never clobber each other (unlike a single JSON blob).
+
+async function redisHashAll<T>(key: string): Promise<T[]> {
+  const client = await getRedis();
+  const all = await client.hGetAll(key);
+  return Object.values(all).map(v => JSON.parse(v) as T);
+}
+
+async function redisHashSet(key: string, id: string, value: unknown): Promise<void> {
+  const client = await getRedis();
+  await client.hSet(key, id, JSON.stringify(value));
+}
+
+async function redisHashDel(key: string, id: string): Promise<void> {
+  const client = await getRedis();
+  await client.hDel(key, id);
+}
+
+async function redisHashClear(key: string, ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const client = await getRedis();
+  await client.hDel(key, ids);
 }
 
 // ─── File backend (local dev) ──────────────────────────────────────────────────
@@ -65,6 +103,17 @@ async function fileSave(file: string, value: unknown): Promise<void> {
   await writeFile(file, JSON.stringify(value, null, 2));
 }
 
+// file-backend mutation: locked read-modify-write so same-process concurrent
+// requests (e.g. a double click) can't race and drop a record.
+async function fileMutate<T extends { id: string }>(file: string, fn: (items: T[]) => T[]): Promise<T[]> {
+  return withLock(file, async () => {
+    const items = await fileLoad<T[]>(file, []);
+    const next = fn(items);
+    await fileSave(file, next);
+    return next;
+  });
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 const useRedis = Boolean(process.env.REDIS_URL);
@@ -84,61 +133,151 @@ export async function saveSettings(settings: Settings): Promise<void> {
 
 export async function loadBookings(): Promise<Booking[]> {
   return useRedis
-    ? redisGet<Booking[]>(REDIS_BOOKINGS_KEY, [])
+    ? redisHashAll<Booking>(REDIS_BOOKINGS_KEY)
     : fileLoad<Booking[]>(BOOKINGS_FILE, []);
 }
 
-export async function saveBookings(bookings: Booking[]): Promise<void> {
-  useRedis
-    ? await redisSet(REDIS_BOOKINGS_KEY, bookings)
-    : await fileSave(BOOKINGS_FILE, bookings);
+export async function addBooking(booking: Booking): Promise<void> {
+  if (useRedis) {
+    await redisHashSet(REDIS_BOOKINGS_KEY, booking.id, booking);
+  } else {
+    await fileMutate<Booking>(BOOKINGS_FILE, items => [...items, booking]);
+  }
+}
+
+export async function updateBooking(id: string, patch: Partial<Booking>): Promise<Booking | null> {
+  if (useRedis) {
+    const bookings = await redisHashAll<Booking>(REDIS_BOOKINGS_KEY);
+    const existing = bookings.find(b => b.id === id);
+    if (!existing) return null;
+    const updated = { ...existing, ...patch, id };
+    await redisHashSet(REDIS_BOOKINGS_KEY, id, updated);
+    return updated;
+  }
+  let updated: Booking | null = null;
+  await fileMutate<Booking>(BOOKINGS_FILE, items => items.map(b => {
+    if (b.id !== id) return b;
+    updated = { ...b, ...patch, id };
+    return updated;
+  }));
+  return updated;
+}
+
+export async function deleteBooking(id: string): Promise<boolean> {
+  if (useRedis) {
+    const bookings = await redisHashAll<Booking>(REDIS_BOOKINGS_KEY);
+    if (!bookings.some(b => b.id === id)) return false;
+    await redisHashDel(REDIS_BOOKINGS_KEY, id);
+    return true;
+  }
+  let found = false;
+  await fileMutate<Booking>(BOOKINGS_FILE, items => {
+    const next = items.filter(b => b.id !== id);
+    found = next.length !== items.length;
+    return next;
+  });
+  return found;
+}
+
+export async function deleteBookings(predicate: (b: Booking) => boolean): Promise<number> {
+  if (useRedis) {
+    const bookings = await redisHashAll<Booking>(REDIS_BOOKINGS_KEY);
+    const toDelete = bookings.filter(predicate).map(b => b.id);
+    await redisHashClear(REDIS_BOOKINGS_KEY, toDelete);
+    return toDelete.length;
+  }
+  let deleted = 0;
+  await fileMutate<Booking>(BOOKINGS_FILE, items => {
+    const next = items.filter(b => !predicate(b));
+    deleted = items.length - next.length;
+    return next;
+  });
+  return deleted;
+}
+
+// Bulk replace for the CSV importer, which builds the full next-state array
+// in memory across hundreds of rows before persisting once.
+export async function replaceAllBookings(bookings: Booking[]): Promise<void> {
+  if (useRedis) {
+    const client = await getRedis();
+    const pipeline = client.multi();
+    pipeline.del(REDIS_BOOKINGS_KEY);
+    for (const b of bookings) pipeline.hSet(REDIS_BOOKINGS_KEY, b.id, JSON.stringify(b));
+    await pipeline.exec();
+  } else {
+    await withLock(BOOKINGS_FILE, async () => fileSave(BOOKINGS_FILE, bookings));
+  }
 }
 
 export async function upsertBooking(booking: Booking): Promise<void> {
   const bookings = await loadBookings();
-  const idx = bookings.findIndex(b =>
+  const existing = bookings.find(b =>
     (b.uid === booking.uid && b.sourceId === booking.sourceId) ||
     (booking.confirmationCode && b.confirmationCode === booking.confirmationCode && b.platform === booking.platform)
   );
-  if (idx >= 0) {
-    const existing = bookings[idx];
-    bookings[idx] = {
+  if (existing) {
+    const merged: Booking = {
       ...booking,
+      id: existing.id,
       income: existing.income > 0 ? existing.income : booking.income,
       platformFee: existing.platformFee ?? booking.platformFee,
       isManual: existing.isManual,
       notes: existing.notes ?? booking.notes,
     };
+    if (useRedis) {
+      await redisHashSet(REDIS_BOOKINGS_KEY, existing.id, merged);
+    } else {
+      await fileMutate<Booking>(BOOKINGS_FILE, items => items.map(b => b.id === existing.id ? merged : b));
+    }
   } else {
-    bookings.push(booking);
+    await addBooking(booking);
   }
-  await saveBookings(bookings);
 }
 
 export async function loadExpenses(): Promise<Expense[]> {
   return useRedis
-    ? redisGet<Expense[]>(REDIS_EXPENSES_KEY, [])
+    ? redisHashAll<Expense>(REDIS_EXPENSES_KEY)
     : fileLoad<Expense[]>(EXPENSES_FILE, []);
 }
 
-export async function saveExpenses(expenses: Expense[]): Promise<void> {
-  useRedis
-    ? await redisSet(REDIS_EXPENSES_KEY, expenses)
-    : await fileSave(EXPENSES_FILE, expenses);
-}
-
-export async function upsertExpense(expense: Expense): Promise<void> {
-  const expenses = await loadExpenses();
-  const idx = expenses.findIndex(e => e.id === expense.id);
-  if (idx >= 0) {
-    expenses[idx] = { ...expense, updatedAt: new Date().toISOString() };
+export async function addExpense(expense: Expense): Promise<void> {
+  if (useRedis) {
+    await redisHashSet(REDIS_EXPENSES_KEY, expense.id, expense);
   } else {
-    expenses.push(expense);
+    await fileMutate<Expense>(EXPENSES_FILE, items => [...items, expense]);
   }
-  await saveExpenses(expenses);
 }
 
-export async function deleteExpense(id: string): Promise<void> {
-  const expenses = await loadExpenses();
-  await saveExpenses(expenses.filter(e => e.id !== id));
+export async function updateExpense(id: string, patch: Partial<Expense>): Promise<Expense | null> {
+  if (useRedis) {
+    const expenses = await redisHashAll<Expense>(REDIS_EXPENSES_KEY);
+    const existing = expenses.find(e => e.id === id);
+    if (!existing) return null;
+    const updated = { ...existing, ...patch, id, updatedAt: new Date().toISOString() };
+    await redisHashSet(REDIS_EXPENSES_KEY, id, updated);
+    return updated;
+  }
+  let updated: Expense | null = null;
+  await fileMutate<Expense>(EXPENSES_FILE, items => items.map(e => {
+    if (e.id !== id) return e;
+    updated = { ...e, ...patch, id, updatedAt: new Date().toISOString() };
+    return updated;
+  }));
+  return updated;
+}
+
+export async function deleteExpense(id: string): Promise<boolean> {
+  if (useRedis) {
+    const expenses = await redisHashAll<Expense>(REDIS_EXPENSES_KEY);
+    if (!expenses.some(e => e.id === id)) return false;
+    await redisHashDel(REDIS_EXPENSES_KEY, id);
+    return true;
+  }
+  let found = false;
+  await fileMutate<Expense>(EXPENSES_FILE, items => {
+    const next = items.filter(e => e.id !== id);
+    found = next.length !== items.length;
+    return next;
+  });
+  return found;
 }
