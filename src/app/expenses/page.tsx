@@ -107,6 +107,8 @@ export default function ExpensesPage() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<FormState>(emptyForm());
+  const [pitiEdit, setPitiEdit] = useState(false);
+  const [pitiDraft, setPitiDraft] = useState('');
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', {
@@ -166,6 +168,18 @@ export default function ExpensesPage() {
     load();
   }
 
+  async function savePiti() {
+    if (!settings) return;
+    const updated = { ...settings, monthlyPITI: parseFloat(pitiDraft) || 0 };
+    await fetch('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updated),
+    });
+    setSettings(updated);
+    setPitiEdit(false);
+  }
+
   function startEdit(e: Expense) {
     setEditId(e.id);
     setEditForm({
@@ -210,18 +224,58 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      {pitiMonthly > 0 && (
-        <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6 flex items-center justify-between">
-          <div>
-            <p className="text-sm font-medium text-slate-700">PITI (Mortgage, Tax, Insurance)</p>
-            <p className="text-xs text-slate-500 mt-0.5">Fixed monthly cost set in Settings — applied automatically to P&amp;L</p>
+      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
+        {pitiEdit ? (
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-slate-700">Monthly PITI ($)</p>
+              <p className="text-xs text-slate-500 mt-0.5">Mortgage P&amp;I + property tax + insurance</p>
+            </div>
+            <input
+              type="number"
+              value={pitiDraft}
+              onChange={e => setPitiDraft(e.target.value)}
+              autoFocus
+              placeholder="0"
+              min="0"
+              className="w-32 text-sm border border-slate-300 rounded-lg px-3 py-2 text-right"
+              onKeyDown={e => { if (e.key === 'Enter') savePiti(); if (e.key === 'Escape') setPitiEdit(false); }}
+            />
+            <button onClick={savePiti}
+              className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-emerald-700">
+              <Check className="w-3.5 h-3.5" /> Save
+            </button>
+            <button onClick={() => setPitiEdit(false)}
+              className="flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 rounded-lg text-sm hover:bg-slate-50">
+              <X className="w-3.5 h-3.5" /> Cancel
+            </button>
           </div>
-          <div className="text-right">
-            <p className="font-bold text-slate-800">{fmt(pitiMonthly)}<span className="text-xs font-normal text-slate-500">/mo</span></p>
-            {filterYear !== 'all' && <p className="text-xs text-slate-400">{fmt(pitiAnnual)}/yr</p>}
+        ) : (
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-700">PITI (Mortgage, Tax, Insurance)</p>
+              <p className="text-xs text-slate-500 mt-0.5">Fixed monthly cost applied automatically to P&amp;L</p>
+            </div>
+            <div className="flex items-center gap-2">
+              {pitiMonthly > 0 ? (
+                <div className="text-right">
+                  <p className="font-bold text-slate-800">{fmt(pitiMonthly)}<span className="text-xs font-normal text-slate-500">/mo</span></p>
+                  {filterYear !== 'all' && <p className="text-xs text-slate-400">{fmt(pitiAnnual)}/yr</p>}
+                </div>
+              ) : (
+                <span className="text-sm text-slate-400">Not set</span>
+              )}
+              <button
+                onClick={() => { setPitiDraft(pitiMonthly > 0 ? String(pitiMonthly) : ''); setPitiEdit(true); }}
+                className="p-1.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
+                title="Edit PITI"
+              >
+                <Pencil className="w-3.5 h-3.5" />
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
 
       {showAdd && (
         <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6 shadow-sm">
@@ -250,7 +304,7 @@ export default function ExpensesPage() {
             {expenses.length === 0 ? (
               <tr>
                 <td colSpan={5} className="text-center py-12 text-slate-400">
-                  No expenses yet. Add variable expenses above; set PITI in Settings.
+                  No expenses yet. Add variable expenses above; PITI is set via the pencil above.
                 </td>
               </tr>
             ) : expenses.map(e => (
