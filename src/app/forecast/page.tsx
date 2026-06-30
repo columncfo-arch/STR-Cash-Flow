@@ -3,8 +3,8 @@ import { useEffect, useState, useCallback } from 'react';
 import { ForecastYear, Settings, ForecastOverride } from '@/types';
 import { Pencil, Check, X, Plus, Trash2, TrendingUp } from 'lucide-react';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend, Cell,
+  ComposedChart, Bar, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Cell, ReferenceLine,
 } from 'recharts';
 
 const EXPENSE_DETAIL_KEYS: { key: string; label: string }[] = [
@@ -33,6 +33,28 @@ interface AddYearDraft {
 
 function emptyAddYearDraft(defaultYear: number): AddYearDraft {
   return { year: String(defaultYear), mode: 'simple', revenue: '', expenses: '', piti: '', detail: {} };
+}
+
+type EnrichedRow = ForecastYear & { cumulative: number };
+
+// ── KPI Card ─────────────────────────────────────────────────────────────────
+
+interface KpiCardProps {
+  label: string;
+  value: string;
+  sub?: string;
+  positive?: boolean | null;
+  large?: boolean;
+}
+function KpiCard({ label, value, sub, positive, large }: KpiCardProps) {
+  const color = positive === true ? 'text-emerald-600' : positive === false ? 'text-red-500' : 'text-slate-900';
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
+      <p className="text-xs font-medium text-slate-500 uppercase tracking-wide mb-2">{label}</p>
+      <p className={`font-bold ${large ? 'text-3xl' : 'text-2xl'} ${color}`}>{value}</p>
+      {sub && <p className="text-xs text-slate-400 mt-1.5">{sub}</p>}
+    </div>
+  );
 }
 
 export default function ForecastPage() {
@@ -157,26 +179,55 @@ export default function ForecastPage() {
   const currentYear = new Date().getFullYear();
   const growthByYear: Record<string, number> = configDraft.forecastGrowthByYear ?? {};
 
-  const chartData = rows.map(r => ({
+  // Enrich each row with running cumulative cash flow
+  let running = 0;
+  const enriched: EnrichedRow[] = rows.map(r => {
+    running += r.netIncome;
+    return { ...r, cumulative: running };
+  });
+
+  // Split index for chart: last non-forecast row
+  const lastActualIdx = enriched.reduce((best, r, i) => r.type !== 'forecast' ? i : best, -1);
+
+  const actualRows = enriched.filter(r => r.type !== 'forecast');
+  const forecastRows = enriched.filter(r => r.type === 'forecast');
+  const currentYearRow = enriched.find(r => r.year === currentYear);
+  const finalRow = enriched[enriched.length - 1];
+
+  const cashToDate = actualRows.reduce((s, r) => s + r.netIncome, 0);
+  const projectedCash = forecastRows.reduce((s, r) => s + r.netIncome, 0);
+  const avgAnnual = actualRows.length ? cashToDate / actualRows.length : 0;
+
+  // Wealth chart: split into actual (solid) vs forecast (lighter, dashed)
+  const wealthData = enriched.map((r, i) => ({
     year: String(r.year),
-    Revenue: r.grossRevenue,
-    Expenses: r.operatingExpenses + r.piti,
-    'Net Income': r.netIncome,
-    isForecast: r.type === 'forecast',
+    actual:   i <= lastActualIdx ? r.cumulative : null,
+    forecast: i >= lastActualIdx ? r.cumulative : null,
   }));
 
-  // ── Computed totals ─────────────────────────────────────────────────────────
+  // Annual cash flow bars
+  const annualData = enriched.map(r => ({
+    year: String(r.year),
+    cashFlow: r.netIncome,
+    isForecast: r.type === 'forecast',
+  }));
 
   const detailTotal = Object.entries(addYearDraft.detail)
     .reduce((s, [, v]) => s + (parseFloat(v) || 0), 0);
 
+  const hasData = enriched.length > 0;
+
   return (
     <div className="max-w-5xl mx-auto">
+
+      {/* ── Header ── */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Long Term Forecast</h1>
           <p className="text-slate-500 text-sm mt-1">
-            Historical actuals + {rows.filter(r => r.type === 'forecast').length}-year projection
+            {actualRows.length > 0
+              ? `${actualRows.length} year${actualRows.length !== 1 ? 's' : ''} of actuals · ${forecastRows.length}-year projection`
+              : `${forecastRows.length}-year projection`}
           </p>
         </div>
         <button
@@ -280,49 +331,153 @@ export default function ForecastPage() {
         </div>
       )}
 
-      {/* ── Chart ── */}
-      {rows.length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
-          <h2 className="font-semibold text-slate-800 mb-4">Revenue, Expenses &amp; Net Income</h2>
-          <ResponsiveContainer width="100%" height={260}>
-            <ComposedChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="year" tick={{ fontSize: 12 }} />
-              <YAxis yAxisId="left" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v) => fmt(Number(v))} />
-              <Legend />
-              <Bar yAxisId="left" dataKey="Revenue" stackId="a">
-                {chartData.map((d, i) => <Cell key={i} fill={d.isForecast ? '#a7f3d0' : '#10b981'} />)}
-              </Bar>
-              <Bar yAxisId="left" dataKey="Expenses" stackId="b">
-                {chartData.map((d, i) => <Cell key={i} fill={d.isForecast ? '#fecaca' : '#f87171'} />)}
-              </Bar>
-              <Line yAxisId="right" type="monotone" dataKey="Net Income" stroke="#f97316" strokeWidth={3}
-                dot={{ r: 4, fill: '#f97316', strokeWidth: 0 }} connectNulls />
-            </ComposedChart>
-          </ResponsiveContainer>
-          <p className="text-xs text-slate-400 mt-2">Lighter bars = forecasted years. Net Income line uses right axis.</p>
+      {/* ── Hero KPI Cards ── */}
+      {hasData && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <KpiCard
+            label="Cash Generated to Date"
+            value={fmt(cashToDate)}
+            sub={`${actualRows.length} actual year${actualRows.length !== 1 ? 's' : ''}`}
+            positive={cashToDate >= 0}
+            large
+          />
+          <KpiCard
+            label={`${currentYear} Net Cash Flow`}
+            value={currentYearRow ? fmt(currentYearRow.netIncome) : '—'}
+            sub={currentYearRow?.blended ? 'YTD actuals + projected remainder' : currentYearRow?.type === 'forecast' ? 'Projected' : 'Actual'}
+            positive={currentYearRow ? currentYearRow.netIncome >= 0 : null}
+          />
+          <KpiCard
+            label="Avg Annual Cash Flow"
+            value={actualRows.length ? fmt(avgAnnual) : '—'}
+            sub={actualRows.length ? `Avg across ${actualRows.length} actual year${actualRows.length !== 1 ? 's' : ''}` : 'No actuals yet'}
+            positive={avgAnnual >= 0}
+          />
+          <KpiCard
+            label={`${forecastRows.length}-Year Projected`}
+            value={fmt(projectedCash)}
+            sub="Additional from forecast years"
+            positive={projectedCash >= 0}
+          />
         </div>
       )}
 
-      {/* ── Table ── */}
+      {/* ── Cumulative Cash Flow (Wealth Building) Chart ── */}
+      {hasData && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
+          <div className="flex items-start justify-between mb-1">
+            <div>
+              <h2 className="font-semibold text-slate-800">Cumulative Net Cash Flow</h2>
+              <p className="text-xs text-slate-400 mt-0.5">Total cash this property has put in your pocket, accumulating over time</p>
+            </div>
+            {finalRow && (
+              <div className="text-right">
+                <p className="text-xs text-slate-400">End of projection</p>
+                <p className={`text-lg font-bold ${finalRow.cumulative >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                  {fmt(finalRow.cumulative)}
+                </p>
+              </div>
+            )}
+          </div>
+
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart data={wealthData} margin={{ top: 16, right: 8, left: 0, bottom: 0 }}>
+              <defs>
+                <linearGradient id="fillActual" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0.02} />
+                </linearGradient>
+                <linearGradient id="fillForecast" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#10b981" stopOpacity={0.07} />
+                  <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="year" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+              <Tooltip
+                formatter={(value: unknown, name: unknown) => [
+                  fmt(Number(value)),
+                  name === 'actual' ? 'Cumulative (Actual)' : 'Cumulative (Forecast)',
+                ]}
+                labelFormatter={(label: unknown) => `Year ${label}`}
+              />
+              <ReferenceLine y={0} stroke="#cbd5e1" strokeWidth={1.5} />
+              <Area
+                type="monotone"
+                dataKey="actual"
+                stroke="#10b981"
+                strokeWidth={2.5}
+                fill="url(#fillActual)"
+                connectNulls={false}
+                name="actual"
+                dot={{ r: 4, fill: '#10b981', strokeWidth: 0 }}
+                activeDot={{ r: 5 }}
+              />
+              <Area
+                type="monotone"
+                dataKey="forecast"
+                stroke="#10b981"
+                strokeWidth={2}
+                strokeDasharray="6 3"
+                fill="url(#fillForecast)"
+                connectNulls={false}
+                name="forecast"
+                dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }}
+                activeDot={{ r: 5 }}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <p className="text-xs text-slate-400 mt-2">Solid = actuals · Dashed = projected</p>
+        </div>
+      )}
+
+      {/* ── Annual Net Cash Flow Chart ── */}
+      {hasData && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
+          <h2 className="font-semibold text-slate-800 mb-0.5">Annual Net Cash Flow</h2>
+          <p className="text-xs text-slate-400 mb-4">Revenue minus all expenses and PITI — what actually hits the bank each year</p>
+          <ResponsiveContainer width="100%" height={220}>
+            <ComposedChart data={annualData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="year" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+              <Tooltip formatter={(v: unknown) => [fmt(Number(v)), 'Net Cash Flow']} labelFormatter={(l: unknown) => `Year ${l}`} />
+              <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={1.5} />
+              <Bar dataKey="cashFlow" name="Net Cash Flow" radius={[3, 3, 0, 0]}>
+                {annualData.map((d, i) => (
+                  <Cell
+                    key={i}
+                    fill={d.cashFlow >= 0
+                      ? (d.isForecast ? '#a7f3d0' : '#10b981')
+                      : (d.isForecast ? '#fecaca' : '#f87171')}
+                  />
+                ))}
+              </Bar>
+            </ComposedChart>
+          </ResponsiveContainer>
+          <p className="text-xs text-slate-400 mt-2">Green = positive · Red = negative · Lighter = forecasted</p>
+        </div>
+      )}
+
+      {/* ── Year-by-Year Table ── */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-left">
               <th className="px-4 py-3 font-medium">Year</th>
               <th className="px-4 py-3 font-medium">Type</th>
+              <th className="px-4 py-3 font-medium text-right">Net Cash Flow</th>
+              <th className="px-4 py-3 font-medium text-right">Cumulative</th>
               <th className="px-4 py-3 font-medium text-right">Gross Revenue</th>
               <th className="px-4 py-3 font-medium text-right">Op. Expenses</th>
               <th className="px-4 py-3 font-medium text-right">PITI</th>
-              <th className="px-4 py-3 font-medium text-right">Net Income</th>
               <th className="px-4 py-3 font-medium text-right">Growth</th>
               <th className="px-4 py-3 font-medium w-20" />
             </tr>
           </thead>
           <tbody>
-            {rows.map(row => {
+            {enriched.map(row => {
               const isEditing = editingYear === row.year;
               const isCurrent = row.year === currentYear;
               const hasOverride = row.isManualRevenue || row.isManualExpenses || row.isManualPiti;
@@ -332,6 +487,8 @@ export default function ForecastPage() {
                   <tr key={row.year} className="border-b border-slate-100 bg-emerald-50">
                     <td className="px-4 py-3 font-bold text-slate-800">{row.year}</td>
                     <td className="px-4 py-3"><TypeBadge type={row.type} manual={row.isManualEntry} blended={row.blended} /></td>
+                    <td className="px-4 py-3 text-right text-slate-400 text-xs">recalc on save</td>
+                    <td className="px-4 py-3 text-right text-slate-400 text-xs">—</td>
                     <td className="px-4 py-3">
                       <EditCell value={overrideDraft.revenue} placeholder={String(row.grossRevenue)}
                         onChange={v => setOverrideDraft(d => ({ ...d, revenue: v }))} />
@@ -344,7 +501,6 @@ export default function ForecastPage() {
                       <EditCell value={overrideDraft.piti} placeholder={String(row.piti)}
                         onChange={v => setOverrideDraft(d => ({ ...d, piti: v }))} />
                     </td>
-                    <td className="px-4 py-3 text-right text-slate-400 text-xs">recalc on save</td>
                     <td className="px-4 py-3" />
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-1">
@@ -373,7 +529,18 @@ export default function ForecastPage() {
                   <td className="px-4 py-3">
                     <TypeBadge type={row.type} manual={row.isManualEntry} blended={row.blended} />
                   </td>
-                  <td className="px-4 py-3 text-right font-medium text-slate-700">
+
+                  {/* Net Cash Flow — hero column */}
+                  <td className={`px-4 py-3 text-right font-bold text-base ${row.netIncome >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                    {row.netIncome >= 0 ? fmt(row.netIncome) : `(${fmt(Math.abs(row.netIncome))})`}
+                  </td>
+
+                  {/* Cumulative */}
+                  <td className={`px-4 py-3 text-right font-semibold ${row.cumulative >= 0 ? 'text-slate-700' : 'text-red-500'}`}>
+                    {fmt(row.cumulative)}
+                  </td>
+
+                  <td className="px-4 py-3 text-right text-slate-600">
                     {fmt(row.grossRevenue)}
                     {row.isManualRevenue && <span className="ml-1 text-[10px] text-amber-600">manual</span>}
                     {row.blended && !row.isManualRevenue && row.ytdGross !== undefined && row.forecastGross !== undefined && (
@@ -382,7 +549,7 @@ export default function ForecastPage() {
                       </div>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right text-slate-600">
+                  <td className="px-4 py-3 text-right text-slate-500">
                     ({fmt(row.operatingExpenses)})
                     {row.isManualExpenses && <span className="ml-1 text-[10px] text-amber-600">manual</span>}
                     {row.blended && !row.isManualExpenses && row.ytdOpEx !== undefined && row.forecastOpEx !== undefined && (
@@ -394,9 +561,6 @@ export default function ForecastPage() {
                   <td className="px-4 py-3 text-right text-slate-500">
                     ({fmt(row.piti)})
                     {row.isManualPiti && <span className="ml-1 text-[10px] text-amber-600">manual</span>}
-                  </td>
-                  <td className={`px-4 py-3 text-right font-semibold ${row.netIncome >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                    {row.netIncome >= 0 ? fmt(row.netIncome) : `(${fmt(Math.abs(row.netIncome))})`}
                   </td>
                   <td className="px-4 py-3 text-right">
                     {row.growthPct !== null ? (
