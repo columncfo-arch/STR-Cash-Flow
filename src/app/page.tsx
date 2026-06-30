@@ -3,8 +3,10 @@ import { useEffect, useState } from 'react';
 import { AnnualStatement, MonthlyStatement, Settings, Platform } from '@/types';
 import StatCard from '@/components/StatCard';
 import { TrendingUp, X } from 'lucide-react';
+import { format } from 'date-fns';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine,
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
+  Legend, ReferenceLine, Cell,
 } from 'recharts';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -113,9 +115,7 @@ function MonthPnL({ m, fmt }: { m: MonthlyStatement; fmt: (n: number) => string 
     ...(m.taxRemitted > 0 ? [{ label: 'Tax Remitted by Platform', value: m.taxRemitted, indent: true, negative: true }] : []),
     ...(m.refunds > 0 ? [{ label: 'Guest Refunds', value: m.refunds, indent: true, negative: true }] : []),
     { label: 'Net Revenue', value: m.netRevenue, bold: true, separator: true },
-    ...(m.totalOperatingExpenses > 0 ? [
-      { label: 'Operating Expenses', value: m.totalOperatingExpenses, negative: true, indent: true },
-    ] : []),
+    ...(m.totalOperatingExpenses > 0 ? [{ label: 'Operating Expenses', value: m.totalOperatingExpenses, negative: true, indent: true }] : []),
     { label: 'Operating Income', value: m.operatingIncome, bold: true, separator: true, accent: true },
     ...(m.piti > 0 ? [{ label: 'PITI', value: m.piti, negative: true, indent: true }] : []),
     { label: 'Net Income', value: m.netIncome, bold: true, separator: true, accent: true },
@@ -126,8 +126,8 @@ function MonthPnL({ m, fmt }: { m: MonthlyStatement; fmt: (n: number) => string 
       <tbody>
         {rows.map((r, i) => (
           <tr key={i} className={`${r.separator ? 'border-t-2 border-slate-200' : 'border-t border-slate-50'} ${r.bold ? 'font-semibold' : ''}`}>
-            <td className={`px-0 py-2 text-slate-700 ${r.indent ? 'pl-6 text-slate-500 text-xs' : ''}`}>{r.label}</td>
-            <td className={`px-0 py-2 text-right text-sm ${
+            <td className={`py-2 text-slate-700 ${r.indent ? 'pl-6 text-slate-500 text-xs' : ''}`}>{r.label}</td>
+            <td className={`py-2 text-right text-sm ${
               r.accent ? (r.value >= 0 ? 'text-emerald-700' : 'text-red-600') :
               r.negative ? 'text-red-500' :
               r.bold ? 'text-slate-800' : 'text-slate-600'
@@ -164,12 +164,15 @@ export default function Dashboard() {
   const ytdGross = ytdMonths.reduce((s, m) => s + m.grossRevenue, 0);
   const ytdNetIncome = ytdMonths.reduce((s, m) => s + m.netIncome, 0);
   const ytdNights = ytdMonths.reduce((s, m) => s + m.totalNights, 0);
+  const ytdBookingCount = ytdMonths.reduce((s, m) => s + m.bookings.length, 0);
   const ytdOccupancy = ytdMonths.length > 0 ? ytdMonths.reduce((s, m) => s + m.occupancyRate, 0) / ytdMonths.length : 0;
   const ytdAdr = ytdNights > 0 ? ytdGross / ytdNights : null;
+  const ytdAvgStay = ytdBookingCount > 0 ? ytdNights / ytdBookingCount : null;
 
   // Selected month data
   const selMonth: MonthlyStatement | null = (selectedMonth !== null && statement) ? statement.months[selectedMonth] : null;
   const selAdr = selMonth && selMonth.totalNights > 0 ? selMonth.grossRevenue / selMonth.totalNights : null;
+  const selAvgStay = selMonth && selMonth.bookings.length > 0 ? selMonth.totalNights / selMonth.bookings.length : null;
 
   const growthPct = settings?.forecastGrowthByYear?.[String(year)] ?? settings?.forecastGrowthPct ?? 0;
   const growthFactor = growthPct / 100;
@@ -190,7 +193,6 @@ export default function Dashboard() {
       'Revenue Forecast': forecastRevenue,
       _gross: isActual ? m.grossRevenue : null,
       _expenses: isActual ? m.grossRevenue - m.netIncome : null,
-      _idx: i,
     };
   }) ?? [];
 
@@ -203,12 +205,13 @@ export default function Dashboard() {
     if (idx != null) setSelectedMonth(prev => prev === idx ? null : idx);
   }
 
-  // KPI values depend on whether a month is selected
+  // KPI values — switch between YTD and selected month
   const kpiGross = selMonth ? selMonth.grossRevenue : ytdGross;
   const kpiNetIncome = selMonth ? selMonth.netIncome : ytdNetIncome;
   const kpiNights = selMonth ? selMonth.totalNights : ytdNights;
   const kpiOccupancy = selMonth ? selMonth.occupancyRate : ytdOccupancy;
   const kpiAdr = selMonth ? selAdr : ytdAdr;
+  const kpiAvgStay = selMonth ? selAvgStay : ytdAvgStay;
   const kpiSuffix = selMonth ? '' : ' YTD';
 
   return (
@@ -218,14 +221,17 @@ export default function Dashboard() {
         <p className="text-slate-500 text-sm mt-1">{year} overview</p>
       </div>
 
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+      {/* KPI cards — 6 across on large screens */}
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
         <StatCard label={`Gross Revenue${kpiSuffix}`} value={fmt(kpiGross)} color="text-emerald-700" />
         <StatCard label={`Net Income${kpiSuffix}`} value={fmt(kpiNetIncome)} color={kpiNetIncome >= 0 ? 'text-emerald-700' : 'text-red-600'} />
         <StatCard label="Nights Booked" value={kpiNights.toString()} sub={`nights${kpiSuffix}`} />
         <StatCard label="Avg Occupancy" value={`${kpiOccupancy.toFixed(1)}%`} sub={kpiSuffix.trim() || 'this month'} />
         <StatCard label="ADR" value={kpiAdr != null ? fmt(kpiAdr) : '—'} sub={`per night${kpiSuffix}`} color="text-emerald-700" />
+        <StatCard label="Avg Stay" value={kpiAvgStay != null ? `${kpiAvgStay.toFixed(1)} nts` : '—'} sub="per booking" />
       </div>
 
+      {/* Chart */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
         <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-emerald-600" />
@@ -235,13 +241,28 @@ export default function Dashboard() {
         {hasData ? (
           <>
             <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart
-                data={chartData}
-                onClick={handleChartClick}
-                style={{ cursor: 'pointer' }}
-              >
+              <ComposedChart data={chartData} onClick={handleChartClick} style={{ cursor: 'pointer' }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <XAxis dataKey="name" tick={(props) => {
+                  const { x, y, payload, index } = props;
+                  const isSelected = index === selectedMonth;
+                  return (
+                    <g transform={`translate(${x},${y})`}>
+                      <text
+                        x={0} y={0} dy={16}
+                        textAnchor="middle"
+                        fontSize={12}
+                        fontWeight={isSelected ? 700 : 400}
+                        fill={isSelected ? '#0f172a' : '#94a3b8'}
+                      >
+                        {payload.value}
+                      </text>
+                      {isSelected && (
+                        <line x1={-20} y1={4} x2={20} y2={4} stroke="#0f172a" strokeWidth={2} />
+                      )}
+                    </g>
+                  );
+                }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
                 <Tooltip content={(props) => (
@@ -255,14 +276,14 @@ export default function Dashboard() {
                 <Legend />
                 <ReferenceLine yAxisId="right" y={0} stroke="#e2e8f0" />
                 {(['Airbnb', 'Booking.com', 'VRBO'] as const).map(p => (
-                  <Bar
-                    key={p}
-                    yAxisId="left"
-                    dataKey={p}
-                    stackId="a"
-                    fill={PLATFORM_COLORS[p.toLowerCase().replace('.com', '')]}
-                    opacity={selectedMonth !== null ? 0.5 : 1}
-                  />
+                  <Bar key={p} yAxisId="left" dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com', '')]}>
+                    {chartData.map((_, i) => (
+                      <Cell
+                        key={i}
+                        opacity={selectedMonth === null || selectedMonth === i ? 1 : 0.18}
+                      />
+                    ))}
+                  </Bar>
                 ))}
                 <Line
                   yAxisId="right" type="monotone" dataKey="Net Income" stroke="#f97316"
@@ -289,41 +310,90 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ── Selected month detail ── */}
+      {/* ── Selected month detail — stacked ── */}
       {selMonth && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
+        <div className="space-y-6 mb-8">
+          {/* Header with clear button */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-slate-800">
+              {MONTHS_LONG[selectedMonth!]} {year}
+            </h2>
+            <button
+              onClick={() => setSelectedMonth(null)}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg px-2 py-1"
+            >
+              <X className="w-3 h-3" /> Clear selection
+            </button>
+          </div>
+
+          {/* P&L table */}
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-slate-800">
-                {MONTHS_LONG[selectedMonth!]} {year} — P&amp;L
-              </h2>
-              <button
-                onClick={() => setSelectedMonth(null)}
-                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 border border-slate-200 rounded-lg px-2 py-1"
-              >
-                <X className="w-3 h-3" /> Clear
-              </button>
-            </div>
+            <h3 className="font-semibold text-slate-700 mb-4 text-sm uppercase tracking-wide text-slate-400">Profit &amp; Loss</h3>
             <MonthPnL m={selMonth} fmt={fmt} />
           </div>
 
+          {/* Platform breakdown */}
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-            <h2 className="font-semibold text-slate-800 mb-4">Platform Breakdown — {MONTHS[selectedMonth!]}</h2>
+            <h3 className="font-semibold text-slate-700 mb-4 text-sm uppercase tracking-wide text-slate-400">Platform Breakdown</h3>
             <PlatformTable byPlatform={selMonth.byPlatform} totalRevenue={selMonth.grossRevenue} fmt={fmt} />
-            {selMonth.bookings.length > 0 && (
-              <div className="mt-4 pt-4 border-t border-slate-100">
-                <p className="text-xs font-medium text-slate-500 mb-2">Bookings ({selMonth.bookings.length})</p>
-                <div className="space-y-1">
-                  {selMonth.bookings.map(b => (
-                    <div key={b.id} className="flex justify-between text-xs text-slate-600">
-                      <span>{b.guestName ?? b.confirmationCode ?? 'Guest'} · {b.nights}n</span>
-                      <span className="font-medium">{fmt(b.income)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
+
+          {/* Bookings table */}
+          {selMonth.bookings.length > 0 && (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 border-b border-slate-100">
+                <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold">
+                  Bookings — {selMonth.bookings.length} booking{selMonth.bookings.length !== 1 ? 's' : ''} · {selMonth.totalNights} nights · avg {selAvgStay?.toFixed(1)} nights/stay
+                </h3>
+              </div>
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-left">
+                    <th className="px-6 py-3 font-medium">Guest</th>
+                    <th className="px-6 py-3 font-medium">Platform</th>
+                    <th className="px-6 py-3 font-medium">Check-in</th>
+                    <th className="px-6 py-3 font-medium">Check-out</th>
+                    <th className="px-6 py-3 font-medium text-right">Nights</th>
+                    <th className="px-6 py-3 font-medium text-right">Gross Revenue</th>
+                    <th className="px-6 py-3 font-medium text-right">Net Revenue</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {selMonth.bookings.map(b => (
+                    <tr key={b.id} className="border-b border-slate-50 hover:bg-slate-50">
+                      <td className="px-6 py-3 font-medium text-slate-800">
+                        {b.guestName ?? b.confirmationCode ?? 'Guest'}
+                      </td>
+                      <td className="px-6 py-3 capitalize text-slate-600">
+                        {b.platform === 'booking' ? 'Booking.com' : b.platform}
+                      </td>
+                      <td className="px-6 py-3 text-slate-600">
+                        {format(new Date(b.checkIn), 'MMM d')}
+                      </td>
+                      <td className="px-6 py-3 text-slate-600">
+                        {format(new Date(b.checkOut), 'MMM d')}
+                      </td>
+                      <td className="px-6 py-3 text-right text-slate-600">{b.nights}</td>
+                      <td className="px-6 py-3 text-right font-semibold text-slate-800">
+                        {fmt(b.income)}
+                      </td>
+                      <td className="px-6 py-3 text-right text-emerald-700 font-medium">
+                        {fmt(b.income - (b.platformFee ?? 0))}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-slate-50 border-t-2 border-slate-200 font-semibold text-sm">
+                    <td colSpan={4} className="px-6 py-3 text-slate-700">Total</td>
+                    <td className="px-6 py-3 text-right text-slate-700">{selMonth.totalNights}</td>
+                    <td className="px-6 py-3 text-right text-slate-800">{fmt(selMonth.grossRevenue)}</td>
+                    <td className="px-6 py-3 text-right text-emerald-700">{fmt(selMonth.netRevenue)}</td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
