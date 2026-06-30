@@ -49,6 +49,47 @@ function InsightCard({ icon: Icon, label, value, sub, color = 'text-slate-800', 
   );
 }
 
+// ── Scenario model ─────────────────────────────────────────────────────────────
+
+interface ScenarioResult {
+  target: number;
+  stays: number;
+  nights: number;
+  occupancy: number;
+  grossRevenue: number;
+  cleaningCollected: number;
+  cleaningPaidOut: number;
+  annualPITI: number;
+  trueBankPayout: number;
+}
+
+function computeScenario(
+  target: number,
+  adr: number,
+  avgStay: number,
+  cleaningFee: number,
+  cleaningCost: number,
+  annualPITI: number,
+): ScenarioResult | null {
+  const netCleaningPerStay = cleaningFee - cleaningCost;
+  const totalPerStay = adr * avgStay + netCleaningPerStay;
+  if (totalPerStay <= 0) return null;
+
+  const stays = (target + annualPITI) / totalPerStay;
+  const nights = stays * avgStay;
+  return {
+    target,
+    stays,
+    nights,
+    occupancy: (nights / 365) * 100,
+    grossRevenue: adr * nights,
+    cleaningCollected: cleaningFee * stays,
+    cleaningPaidOut: cleaningCost * stays,
+    annualPITI,
+    trueBankPayout: annualPITI + target,
+  };
+}
+
 export default function OptimizationPage() {
   const [statement, setStatement] = useState<AnnualStatement | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -58,6 +99,14 @@ export default function OptimizationPage() {
   const [benchmarkAdrDraft, setBenchmarkAdrDraft] = useState('');
   const [benchmarkExpDraft, setBenchmarkExpDraft] = useState('');
   const [saved, setSaved] = useState(false);
+
+  // Scenario modeling inputs
+  const [modelAdr, setModelAdr] = useState('');
+  const [modelAvgStay, setModelAvgStay] = useState('');
+  const [modelCleaningFee, setModelCleaningFee] = useState('');
+  const [modelCleaningCost, setModelCleaningCost] = useState('');
+  const [scenarioTargets, setScenarioTargets] = useState<[string, string, string]>(['0', '5000', '10000']);
+  const [modelInitialized, setModelInitialized] = useState(false);
 
   useEffect(() => {
     fetch(`/api/income-statement?year=${year}`)
@@ -78,8 +127,27 @@ export default function OptimizationPage() {
     });
   }, []);
 
+  // Initialise scenario model inputs from actual data once loaded
+  useEffect(() => {
+    if (modelInitialized || !statement || !settings) return;
+    const actMonths = statement.months.filter(m => m.grossRevenue > 0);
+    if (!actMonths.length) return;
+    const totalNights = actMonths.reduce((s, m) => s + m.totalNights, 0);
+    const totalRevenue = actMonths.reduce((s, m) => s + m.grossRevenue, 0);
+    const totalBookings = actMonths.reduce((s, m) => s + m.bookings.length, 0);
+    const avgAdr = totalNights > 0 ? totalRevenue / totalNights : 0;
+    const avgStay = totalBookings > 0 ? totalNights / totalBookings : 3;
+    setModelAdr(Math.round(avgAdr).toString());
+    setModelAvgStay(avgStay.toFixed(1));
+    setModelCleaningFee((settings.cleaningFeePerBooking ?? 0).toString());
+    setModelInitialized(true);
+  }, [statement, settings, modelInitialized]);
+
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: settings?.currency ?? 'USD', maximumFractionDigits: 0 }).format(n);
+
+  const fmt2 = (n: number) =>
+    new Intl.NumberFormat('en-US', { style: 'currency', currency: settings?.currency ?? 'USD', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
   async function saveBenchmarks() {
     if (!settings) return;
@@ -140,6 +208,16 @@ export default function OptimizationPage() {
 
   const overallAdrs = activeMonths.map(m => m.totalNights > 0 ? m.grossRevenue / m.totalNights : 0).filter(v => v > 0);
   const overallAvgAdr = overallAdrs.length ? mean(overallAdrs) : 0;
+
+  // Scenario model derived values
+  const mAdr = parseFloat(modelAdr) || 0;
+  const mAvgStay = parseFloat(modelAvgStay) || 1;
+  const mCleaningFee = parseFloat(modelCleaningFee) || 0;
+  const mCleaningCost = parseFloat(modelCleaningCost) || 0;
+  const annualPITI = (settings?.monthlyPITI ?? 0) * 12;
+  const scenarios: ScenarioResult[] = scenarioTargets
+    .map(t => computeScenario(parseFloat(t) || 0, mAdr, mAvgStay, mCleaningFee, mCleaningCost, annualPITI))
+    .filter((s): s is ScenarioResult => s !== null);
 
   // Expense ratio analysis
   const expenseRatios = activeMonths.map(m => (m.totalOperatingExpenses / m.grossRevenue) * 100);
@@ -548,6 +626,199 @@ export default function OptimizationPage() {
           </section>
         </>
       )}
+
+      {/* ── Section 3: Profitability Sensitivity Table ──────────────────────────── */}
+      <section className="mb-8">
+        <h2 className="text-base font-semibold text-slate-800 mb-1">Profitability Sensitivity Table</h2>
+        <p className="text-xs text-slate-400 mb-5">
+          Model what occupancy, nights, and revenue are required to hit each profit target.
+          Edit the assumptions below — the table recalculates live.
+        </p>
+
+        {/* Model assumption inputs */}
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-5">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-4">Model Assumptions</p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">ADR ($/night)</label>
+              <input type="number" value={modelAdr} onChange={e => setModelAdr(e.target.value)}
+                placeholder="e.g. 250" min="0"
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Avg Stay (nights)</label>
+              <input type="number" value={modelAvgStay} onChange={e => setModelAvgStay(e.target.value)}
+                placeholder="e.g. 3.0" min="1" step="0.1"
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Cleaning Fee / Stay</label>
+              <input type="number" value={modelCleaningFee} onChange={e => setModelCleaningFee(e.target.value)}
+                placeholder="charged to guest" min="0"
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
+              <p className="text-xs text-slate-400 mt-0.5">Charged to guest</p>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Cleaning Cost / Stay</label>
+              <input type="number" value={modelCleaningCost} onChange={e => setModelCleaningCost(e.target.value)}
+                placeholder="paid to cleaner" min="0"
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
+              <p className="text-xs text-slate-400 mt-0.5">Paid to cleaner</p>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Annual PITI</label>
+              <div className="text-sm border border-slate-100 bg-slate-50 rounded-lg px-3 py-2 text-slate-500">
+                {fmt(annualPITI)}
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">From Settings</p>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Net Cleaning / Stay</label>
+              <div className={`text-sm border rounded-lg px-3 py-2 font-medium ${mCleaningFee - mCleaningCost >= 0 ? 'border-emerald-200 bg-emerald-50 text-emerald-700' : 'border-red-200 bg-red-50 text-red-600'}`}>
+                {fmt(mCleaningFee - mCleaningCost)}
+              </div>
+              <p className="text-xs text-slate-400 mt-0.5">Fee minus cost</p>
+            </div>
+          </div>
+
+          {/* Scenario target inputs */}
+          <div className="mt-4 pt-4 border-t border-slate-100">
+            <p className="text-xs text-slate-500 mb-3">Profit Targets (columns)</p>
+            <div className="flex flex-wrap gap-4">
+              {scenarioTargets.map((t, i) => (
+                <div key={i} className="flex items-center gap-2">
+                  <span className="text-xs text-slate-400">Scenario {i + 1}</span>
+                  <div className="relative">
+                    <span className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-sm">$</span>
+                    <input
+                      type="number"
+                      value={t}
+                      onChange={e => {
+                        const next: [string, string, string] = [...scenarioTargets];
+                        next[i] = e.target.value;
+                        setScenarioTargets(next);
+                      }}
+                      className="pl-6 w-28 text-sm border border-slate-200 rounded-lg px-3 py-1.5"
+                      min="0"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+
+        {/* Sensitivity table */}
+        {scenarios.length > 0 && (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+            <div className="px-6 py-3 bg-slate-800 border-b border-slate-700">
+              <h3 className="text-sm font-bold text-white">{year} STR Profitability Sensitivity Table</h3>
+            </div>
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-slate-50 border-b border-slate-200">
+                  <th className="px-5 py-3 text-left font-semibold text-slate-600 w-48">Key Financial Metrics</th>
+                  {scenarios.map((s, i) => (
+                    <th key={i} className="px-5 py-3 text-right font-semibold text-slate-800">
+                      {s.target === 0
+                        ? 'Break-Even Scenario ($0)'
+                        : `${fmt(s.target)} Profit Scenario`}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                <tr className="border-b border-slate-100 bg-emerald-50">
+                  <td className="px-5 py-2.5 text-xs font-semibold text-emerald-700 uppercase tracking-wide">Target Net Cash Flow</td>
+                  {scenarios.map((s, i) => (
+                    <td key={i} className="px-5 py-2.5 text-right font-bold text-emerald-700">
+                      {s.target === 0 ? '$0.00' : `+${fmt2(s.target)}`}
+                    </td>
+                  ))}
+                </tr>
+                <tr className="border-b border-slate-100">
+                  <td className="px-5 py-3 text-slate-600">Annual Occupancy Rate</td>
+                  {scenarios.map((s, i) => (
+                    <td key={i} className="px-5 py-3 text-right font-semibold text-slate-800">
+                      {pct(s.occupancy)}
+                    </td>
+                  ))}
+                </tr>
+                <tr className="border-b border-slate-100 bg-slate-50">
+                  <td className="px-5 py-3 text-slate-600">Nights Booked / Year</td>
+                  {scenarios.map((s, i) => (
+                    <td key={i} className="px-5 py-3 text-right text-slate-700">
+                      {s.nights.toFixed(1)} Nights
+                    </td>
+                  ))}
+                </tr>
+                <tr className="border-b border-slate-100">
+                  <td className="px-5 py-3 text-slate-600">Total Reservations / Year</td>
+                  {scenarios.map((s, i) => (
+                    <td key={i} className="px-5 py-3 text-right text-slate-700">
+                      {s.stays.toFixed(1)} Stays
+                    </td>
+                  ))}
+                </tr>
+                <tr className="border-b border-slate-200 bg-slate-50">
+                  <td className="px-5 py-3 font-semibold text-slate-700">Gross Rental Revenue</td>
+                  {scenarios.map((s, i) => (
+                    <td key={i} className="px-5 py-3 text-right font-semibold text-slate-800">
+                      {fmt2(s.grossRevenue)}
+                    </td>
+                  ))}
+                </tr>
+                {mCleaningFee > 0 && (
+                  <tr className="border-b border-slate-100">
+                    <td className="px-5 py-3 text-slate-600 pl-8 text-xs">Cleaning Fees Collected</td>
+                    {scenarios.map((s, i) => (
+                      <td key={i} className="px-5 py-3 text-right text-emerald-600 text-xs">
+                        +{fmt2(s.cleaningCollected)}
+                      </td>
+                    ))}
+                  </tr>
+                )}
+                {mCleaningCost > 0 && (
+                  <tr className="border-b border-slate-100">
+                    <td className="px-5 py-3 text-slate-600 pl-8 text-xs">Cleaning Costs Paid Out</td>
+                    {scenarios.map((s, i) => (
+                      <td key={i} className="px-5 py-3 text-right text-red-500 text-xs">
+                        ({fmt2(s.cleaningPaidOut)})
+                      </td>
+                    ))}
+                  </tr>
+                )}
+                <tr className="border-b border-slate-100">
+                  <td className="px-5 py-3 text-slate-600">Total Hard Fixed Costs</td>
+                  {scenarios.map((s, i) => (
+                    <td key={i} className="px-5 py-3 text-right text-red-500">
+                      ({fmt2(s.annualPITI)})
+                    </td>
+                  ))}
+                </tr>
+                <tr className="bg-slate-800">
+                  <td className="px-5 py-4 font-bold text-white">True Bank Payout Position</td>
+                  {scenarios.map((s, i) => (
+                    <td key={i} className="px-5 py-4 text-right font-bold text-emerald-400 text-base">
+                      {fmt2(s.trueBankPayout)}
+                    </td>
+                  ))}
+                </tr>
+              </tbody>
+            </table>
+
+            <div className="px-5 py-3 bg-slate-50 border-t border-slate-200 flex flex-wrap gap-4 text-xs text-slate-400">
+              <span>ADR: {fmt(mAdr)}/night</span>
+              <span>·</span>
+              <span>Avg Stay: {mAvgStay} nights</span>
+              <span>·</span>
+              <span>Net Cleaning: {fmt(mCleaningFee - mCleaningCost)}/stay</span>
+              <span>·</span>
+              <span>Annual PITI: {fmt(annualPITI)}</span>
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* ── Benchmark Configuration ───────────────────────────────────────────── */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm">
