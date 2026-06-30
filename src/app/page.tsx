@@ -108,16 +108,20 @@ function PlatformTable({
   );
 }
 
-type PnLData = Pick<MonthlyStatement, 'grossRevenue' | 'platformFees' | 'taxRemitted' | 'refunds' | 'netRevenue' | 'totalOperatingExpenses' | 'operatingIncome' | 'piti' | 'netIncome'>;
+type PnLData = Pick<MonthlyStatement, 'grossRevenue' | 'platformFees' | 'fastPayFees' | 'taxRemitted' | 'refunds' | 'netRevenue' | 'ownerTaxes' | 'totalOperatingExpenses' | 'operatingIncome' | 'piti' | 'netIncome'>;
 
 function PnLTable({ m, fmt }: { m: PnLData; fmt: (n: number) => string }) {
+  // Operating expenses minus the owner-remitted taxes shown separately above the total
+  const otherOpEx = m.totalOperatingExpenses - m.ownerTaxes;
   const rows: { label: string; value: number; indent?: boolean; negative?: boolean; bold?: boolean; separator?: boolean; accent?: boolean }[] = [
     { label: 'Gross Revenue', value: m.grossRevenue },
     ...(m.platformFees > 0 ? [{ label: 'Platform Fees', value: m.platformFees, indent: true, negative: true }] : []),
-    ...(m.taxRemitted > 0 ? [{ label: 'Tax Remitted by Platform', value: m.taxRemitted, indent: true, negative: true }] : []),
+    ...(m.fastPayFees > 0 ? [{ label: 'Fast Pay Fees', value: m.fastPayFees, indent: true, negative: true }] : []),
+    ...(m.taxRemitted > 0 ? [{ label: 'Tax Retained by Platform', value: m.taxRemitted, indent: true, negative: true }] : []),
     ...(m.refunds > 0 ? [{ label: 'Guest Refunds', value: m.refunds, indent: true, negative: true }] : []),
     { label: 'Net Revenue', value: m.netRevenue, bold: true, separator: true },
-    ...(m.totalOperatingExpenses > 0 ? [{ label: 'Operating Expenses', value: m.totalOperatingExpenses, negative: true, indent: true }] : []),
+    ...(m.ownerTaxes > 0 ? [{ label: 'State & Local Taxes (Owner Remits)', value: m.ownerTaxes, indent: true, negative: true }] : []),
+    ...(otherOpEx > 0 ? [{ label: 'Other Operating Expenses', value: otherOpEx, indent: true, negative: true }] : []),
     { label: 'Operating Income', value: m.operatingIncome, bold: true, separator: true, accent: true },
     ...(m.piti > 0 ? [{ label: 'PITI', value: m.piti, negative: true, indent: true }] : []),
     { label: 'Net Income', value: m.netIncome, bold: true, separator: true, accent: true },
@@ -177,9 +181,11 @@ export default function Dashboard() {
   const ytdPnL: PnLData = {
     grossRevenue: ytdGross,
     platformFees: ytdMonths.reduce((s, m) => s + m.platformFees, 0),
+    fastPayFees: ytdMonths.reduce((s, m) => s + m.fastPayFees, 0),
     taxRemitted: ytdMonths.reduce((s, m) => s + m.taxRemitted, 0),
     refunds: ytdMonths.reduce((s, m) => s + m.refunds, 0),
     netRevenue: ytdMonths.reduce((s, m) => s + m.netRevenue, 0),
+    ownerTaxes: ytdMonths.reduce((s, m) => s + m.ownerTaxes, 0),
     totalOperatingExpenses: ytdMonths.reduce((s, m) => s + m.totalOperatingExpenses, 0),
     operatingIncome: ytdMonths.reduce((s, m) => s + m.operatingIncome, 0),
     piti: ytdMonths.reduce((s, m) => s + m.piti, 0),

@@ -302,6 +302,11 @@ function parseBookingCom(rows: Record<string, string>[]): ParsedRow[] {
         people: parseInt(col(r, 'people', 'guests', 'num_guests', 'total_guests')) || undefined,
         referenceCode: confirmationCode || undefined,
         details: col(r, 'remarks', 'notes', 'special_requests') || undefined,
+        // Taxes Booking.com does NOT withhold — owner must remit directly
+        lodgingTaxOwnerRemits: parseMoney(col(r,
+          'tax', 'taxes', 'vat', 'local_tax', 'city_tax', 'occupancy_tax',
+          'tourist_tax', 'lodging_tax', 'tax_amount', 'sales_tax'
+        )) || undefined,
       };
     })
     .filter(r => !!r.checkIn);
