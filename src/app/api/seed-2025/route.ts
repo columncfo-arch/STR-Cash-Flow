@@ -1,9 +1,6 @@
 import { NextResponse } from 'next/server';
-import { loadBookings, loadExpenses, replaceAllBookings } from '@/lib/storage';
+import { loadBookings, loadExpenses, replaceAllBookings, replaceAllExpenses } from '@/lib/storage';
 import { Booking, Expense } from '@/types';
-import path from 'path';
-import { readFile, writeFile, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
 
 // 2025 monthly actuals from property spreadsheet (Jan–Oct)
 const MONTHS_DATA = [
@@ -71,8 +68,9 @@ function buildSeedData(now: string): { bookings: Booking[]; expenses: Expense[] 
     }
     if (row.adjustments > 0) {
       expenses.push({
-        id: `seed25-adj-${row.m}-${uid()}`, date: d(row.m),
-        category: 'refund', description: 'Platform adjustment / refund (2025 baseline)',
+        id: `seed25-adj-${row.m}-${uid()}`,
+        date: d(row.m), category: 'refund',
+        description: 'Platform adjustment / refund (2025 baseline)',
         amount: row.adjustments, createdAt: now, updatedAt: now,
       });
     }
@@ -81,15 +79,15 @@ function buildSeedData(now: string): { bookings: Booking[]; expenses: Expense[] 
   for (const row of EXPENSES_DATA) {
     const month = MONTHS_DATA.find(m => m.m === row.m)!;
     const items: { slug: string; cat: Expense['category']; desc: string; amt: number }[] = [
-      { slug: 'cln', cat: 'cleaning',     desc: 'Cleaning (2025 baseline)',             amt: 100 * month.reservations },
-      { slug: 'sup', cat: 'supplies',     desc: 'Amenities / supplies (2025 baseline)', amt: row.amenities },
-      { slug: 'elc', cat: 'electric',     desc: 'FPL electric (2025 baseline)',          amt: row.fpl       },
-      { slug: 'wtr', cat: 'water',        desc: 'Water, sewer & trash (2025 baseline)',  amt: row.water     },
-      { slug: 'net', cat: 'internet',     desc: 'Internet (2025 baseline)',              amt: row.internet  },
-      { slug: 'yrd', cat: 'yard_care',    desc: 'Pest & lawn (2025 baseline)',           amt: row.pest + row.lawn },
-      { slug: 'fin', cat: 'other',        desc: 'Financing excl PITI (2025 baseline)',   amt: row.financing },
-      ...(row.wheelhouse > 0 ? [{ slug: 'whl', cat: 'other' as const,        desc: 'Wheelhouse (2025 baseline)', amt: row.wheelhouse }] : []),
-      ...(row.mnr > 0        ? [{ slug: 'mnr', cat: 'maintenance' as const,  desc: 'M&R (2025 baseline)',        amt: row.mnr }]        : []),
+      { slug: 'cln', cat: 'cleaning',   desc: 'Cleaning (2025 baseline)',             amt: 100 * month.reservations },
+      { slug: 'sup', cat: 'supplies',   desc: 'Amenities / supplies (2025 baseline)', amt: row.amenities },
+      { slug: 'elc', cat: 'electric',   desc: 'FPL electric (2025 baseline)',          amt: row.fpl       },
+      { slug: 'wtr', cat: 'water',      desc: 'Water, sewer & trash (2025 baseline)',  amt: row.water     },
+      { slug: 'net', cat: 'internet',   desc: 'Internet (2025 baseline)',              amt: row.internet  },
+      { slug: 'yrd', cat: 'yard_care',  desc: 'Pest & lawn (2025 baseline)',           amt: row.pest + row.lawn },
+      { slug: 'fin', cat: 'other',      desc: 'Financing excl PITI (2025 baseline)',   amt: row.financing },
+      ...(row.wheelhouse > 0 ? [{ slug: 'whl', cat: 'other' as const,       desc: 'Wheelhouse (2025 baseline)', amt: row.wheelhouse }] : []),
+      ...(row.mnr > 0        ? [{ slug: 'mnr', cat: 'maintenance' as const, desc: 'M&R (2025 baseline)',        amt: row.mnr }]        : []),
     ];
     for (const item of items) {
       expenses.push({
@@ -108,78 +106,44 @@ export async function POST(req: Request) {
   try {
     const force = new URL(req.url).searchParams.get('force') === 'true';
 
-    if (!force) {
-      const [existing, existingExp] = await Promise.all([loadBookings(), loadExpenses()]);
-      const has2025 = existing.some(b => b.checkIn.startsWith('2025'))
-        || existingExp.some(e => e.date.startsWith('2025'));
-      if (has2025) {
-        return NextResponse.json({
-          error: '2025 data already exists.',
-          hint: 'Append ?force=true to the request to overwrite it.',
-        }, { status: 409 });
-      }
+    // loadBookings/loadExpenses go through the storage module which auto-migrates
+    // any old STRING-format Redis keys to Hash format before we read or write.
+    const [existingBookings, existingExpenses] = await Promise.all([
+      loadBookings(),
+      loadExpenses(),
+    ]);
+
+    const has2025 = existingBookings.some(b => b.checkIn.startsWith('2025'))
+      || existingExpenses.some(e => e.date.startsWith('2025'));
+
+    if (has2025 && !force) {
+      return NextResponse.json({
+        error: '2025 data already exists.',
+        hint: 'Append ?force=true to overwrite it.',
+      }, { status: 409 });
     }
 
     const now = new Date().toISOString();
-    const { bookings: newBookings, expenses: newExpenses } = buildSeedData(now);
+    const { bookings: seedBookings, expenses: seedExpenses } = buildSeedData(now);
 
-    const useRedis = Boolean(process.env.REDIS_URL);
+    const keptBookings = force
+      ? existingBookings.filter(b => !b.checkIn.startsWith('2025'))
+      : existingBookings;
+    const keptExpenses = force
+      ? existingExpenses.filter(e => !e.date.startsWith('2025'))
+      : existingExpenses;
 
-    if (useRedis) {
-      // Single pipeline for all Redis operations — one round-trip
-      const { createClient } = await import('redis');
-      const client = createClient({ url: process.env.REDIS_URL });
-      client.on('error', e => console.error('Redis seed error:', e));
-      await client.connect();
-
-      const existing = await Promise.all([
-        client.hGetAll('str:bookings'),
-        client.hGetAll('str:expenses'),
-      ]);
-      const pipeline = client.multi();
-      // Keep non-2025 records; replace/add 2025 ones
-      const existingBookings = Object.values(existing[0]).map(v => JSON.parse(v) as Booking);
-      const existingExpenses = Object.values(existing[1]).map(v => JSON.parse(v) as Expense);
-      const keptBookings = force ? existingBookings.filter(b => !b.checkIn.startsWith('2025')) : existingBookings;
-      const keptExpenses = force ? existingExpenses.filter(e => !e.date.startsWith('2025')) : existingExpenses;
-
-      for (const b of [...keptBookings, ...newBookings]) {
-        pipeline.hSet('str:bookings', b.id, JSON.stringify(b));
-      }
-      for (const e of [...keptExpenses, ...newExpenses]) {
-        pipeline.hSet('str:expenses', e.id, JSON.stringify(e));
-      }
-      await pipeline.exec();
-      await client.quit();
-    } else {
-      // File backend: read existing, merge, write once
-      const IS_VERCEL = Boolean(process.env.VERCEL);
-      const DATA_DIR = IS_VERCEL ? '/tmp/str-data' : path.join(process.cwd(), 'data');
-      if (!existsSync(DATA_DIR)) await mkdir(DATA_DIR, { recursive: true });
-
-      const readJson = async <T>(file: string, fb: T): Promise<T> => {
-        try { return JSON.parse(await readFile(file, 'utf-8')) as T; } catch { return fb; }
-      };
-
-      const bFile = path.join(DATA_DIR, 'bookings.json');
-      const eFile = path.join(DATA_DIR, 'expenses.json');
-      const [existB, existE] = await Promise.all([
-        readJson<Booking[]>(bFile, []),
-        readJson<Expense[]>(eFile, []),
-      ]);
-      const keptB = force ? existB.filter(b => !b.checkIn.startsWith('2025')) : existB;
-      const keptE = force ? existE.filter(e => !e.date.startsWith('2025')) : existE;
-      await Promise.all([
-        writeFile(bFile, JSON.stringify([...keptB, ...newBookings], null, 2)),
-        writeFile(eFile, JSON.stringify([...keptE, ...newExpenses], null, 2)),
-      ]);
-    }
+    // replaceAll uses a single pipeline — one Redis round-trip each
+    await Promise.all([
+      replaceAllBookings([...keptBookings, ...seedBookings]),
+      replaceAllExpenses([...keptExpenses, ...seedExpenses]),
+    ]);
 
     return NextResponse.json({
       ok: true,
-      bookingsAdded: newBookings.length,
-      expensesAdded: newExpenses.length,
-      note: 'PITI not seeded — set monthlyPITI in Settings ($3,676/mo for Apr–Oct 2025; $4,027–4,059 for Jan–Mar 2025).',
+      bookingsAdded: seedBookings.length,
+      expensesAdded: seedExpenses.length,
+      note: 'PITI not seeded — confirm monthlyPITI in Settings ($3,676/mo). Also set Cleaning Fee per Booking to $0 since cleaning costs are included in the seeded expenses.',
     });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Seed failed' }, { status: 500 });

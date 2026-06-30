@@ -224,6 +224,18 @@ export async function replaceAllBookings(bookings: Booking[]): Promise<void> {
   }
 }
 
+export async function replaceAllExpenses(expenses: Expense[]): Promise<void> {
+  if (useRedis) {
+    const client = await getRedis();
+    const pipeline = client.multi();
+    pipeline.del(REDIS_EXPENSES_KEY);
+    for (const e of expenses) pipeline.hSet(REDIS_EXPENSES_KEY, e.id, JSON.stringify(e));
+    await pipeline.exec();
+  } else {
+    await withLock(EXPENSES_FILE, async () => fileSave(EXPENSES_FILE, expenses));
+  }
+}
+
 export async function upsertBooking(booking: Booking): Promise<void> {
   const bookings = await loadBookings();
   const existing = bookings.find(b =>

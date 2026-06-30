@@ -54,9 +54,12 @@ export default function Dashboard() {
     if (i >= currentMonthIdx && prevStatement) {
       const prev = prevStatement.months[i];
       // At current month: connect to actual; beyond: project using prev year net income + growth on prev revenue
+      // No prior-year revenue means no meaningful baseline — skip those months
       forecast = i === currentMonthIdx
         ? m.netIncome
-        : prev.netIncome + prev.grossRevenue * growthFactor;
+        : prev.grossRevenue > 0
+          ? prev.netIncome + prev.grossRevenue * growthFactor
+          : null;
     }
     return {
       name: MONTHS[i],
