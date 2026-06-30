@@ -108,7 +108,9 @@ function PlatformTable({
   );
 }
 
-function MonthPnL({ m, fmt }: { m: MonthlyStatement; fmt: (n: number) => string }) {
+type PnLData = Pick<MonthlyStatement, 'grossRevenue' | 'platformFees' | 'taxRemitted' | 'refunds' | 'netRevenue' | 'totalOperatingExpenses' | 'operatingIncome' | 'piti' | 'netIncome'>;
+
+function PnLTable({ m, fmt }: { m: PnLData; fmt: (n: number) => string }) {
   const rows: { label: string; value: number; indent?: boolean; negative?: boolean; bold?: boolean; separator?: boolean; accent?: boolean }[] = [
     { label: 'Gross Revenue', value: m.grossRevenue },
     ...(m.platformFees > 0 ? [{ label: 'Platform Fees', value: m.platformFees, indent: true, negative: true }] : []),
@@ -141,6 +143,10 @@ function MonthPnL({ m, fmt }: { m: MonthlyStatement; fmt: (n: number) => string 
   );
 }
 
+function MonthPnL({ m, fmt }: { m: MonthlyStatement; fmt: (n: number) => string }) {
+  return <PnLTable m={m} fmt={fmt} />;
+}
+
 export default function Dashboard() {
   const [statement, setStatement] = useState<AnnualStatement | null>(null);
   const [prevStatement, setPrevStatement] = useState<AnnualStatement | null>(null);
@@ -168,6 +174,28 @@ export default function Dashboard() {
   const ytdOccupancy = ytdMonths.length > 0 ? ytdMonths.reduce((s, m) => s + m.occupancyRate, 0) / ytdMonths.length : 0;
   const ytdAdr = ytdNights > 0 ? ytdGross / ytdNights : null;
   const ytdAvgStay = ytdBookingCount > 0 ? ytdNights / ytdBookingCount : null;
+  const ytdPnL: PnLData = {
+    grossRevenue: ytdGross,
+    platformFees: ytdMonths.reduce((s, m) => s + m.platformFees, 0),
+    taxRemitted: ytdMonths.reduce((s, m) => s + m.taxRemitted, 0),
+    refunds: ytdMonths.reduce((s, m) => s + m.refunds, 0),
+    netRevenue: ytdMonths.reduce((s, m) => s + m.netRevenue, 0),
+    totalOperatingExpenses: ytdMonths.reduce((s, m) => s + m.totalOperatingExpenses, 0),
+    operatingIncome: ytdMonths.reduce((s, m) => s + m.operatingIncome, 0),
+    piti: ytdMonths.reduce((s, m) => s + m.piti, 0),
+    netIncome: ytdNetIncome,
+  };
+
+  // Aggregate YTD byPlatform for the platform table
+  const ytdByPlatform = ytdMonths.reduce((acc, m) => {
+    (Object.keys(m.byPlatform) as Platform[]).forEach(p => {
+      if (!acc[p]) acc[p] = { income: 0, nights: 0, bookings: 0 };
+      acc[p].income += m.byPlatform[p].income;
+      acc[p].nights += m.byPlatform[p].nights;
+      acc[p].bookings += m.byPlatform[p].bookings;
+    });
+    return acc;
+  }, {} as Record<Platform, { income: number; nights: number; bookings: number }>);
 
   // Selected month data
   const selMonth: MonthlyStatement | null = (selectedMonth !== null && statement) ? statement.months[selectedMonth] : null;
@@ -397,11 +425,20 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── YTD platform breakdown (shown when no month selected) ── */}
+      {/* ── YTD summary (shown when no month selected) ── */}
       {hasData && !selMonth && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-          <h2 className="font-semibold text-slate-800 mb-4">Platform Breakdown (YTD)</h2>
-          <PlatformTable byPlatform={statement!.byPlatform} totalRevenue={statement!.grossRevenue} fmt={fmt} />
+        <div className="space-y-6 mb-8">
+          <h2 className="text-lg font-semibold text-slate-800">Year-to-Date Summary</h2>
+
+          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+            <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Profit &amp; Loss</h3>
+            <PnLTable m={ytdPnL} fmt={fmt} />
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+            <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Platform Breakdown</h3>
+            <PlatformTable byPlatform={ytdByPlatform} totalRevenue={ytdGross} fmt={fmt} />
+          </div>
         </div>
       )}
     </div>
