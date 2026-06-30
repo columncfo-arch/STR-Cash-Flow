@@ -4,8 +4,8 @@ import { AnnualStatement, MonthlyStatement, Platform, PnLSummary, Settings } fro
 import { format, getMonth, getYear } from 'date-fns';
 import { Download, ChevronDown, ChevronRight } from 'lucide-react';
 import {
-  ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-  LineChart, Line, ReferenceLine,
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  ReferenceLine,
 } from 'recharts';
 
 const MONTHS_LONG = [
@@ -23,7 +23,7 @@ const PLATFORM_COLORS: Record<string, string> = {
 };
 const PLATFORMS = ['airbnb','booking','vrbo','direct','other'] as Platform[];
 
-type View = 'mtd' | 'ytd' | 'monthly';
+type Mode = 'month' | 'ytd' | 'prior_year' | 'full_year';
 
 function emptyBreakdown() {
   return Object.fromEntries(
@@ -86,7 +86,8 @@ export default function IncomeStatementPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [years, setYears] = useState<number[]>([]);
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
-  const [view, setView] = useState<View>('ytd');
+  const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
+  const [mode, setMode] = useState<Mode>('ytd');
   const [expandedMonths, setExpandedMonths] = useState<Set<number>>(new Set());
 
   const today = new Date();
@@ -104,16 +105,20 @@ export default function IncomeStatementPage() {
     fetch('/api/settings').then(r => r.json()).then(setSettings);
   }, []);
 
+  const fetchYear = mode === 'prior_year' ? currentYear - 1
+    : mode === 'ytd' ? currentYear
+    : selectedYear;
+
   useEffect(() => {
-    fetch(`/api/income-statement?year=${selectedYear}`)
+    fetch(`/api/income-statement?year=${fetchYear}`)
       .then(r => r.json())
       .then(d => {
         setStatement(d.statement);
         const available = d.years as number[];
-        if (!available.includes(selectedYear)) available.push(selectedYear);
+        if (!available.includes(fetchYear)) available.push(fetchYear);
         setYears(available.sort((a, b) => b - a));
       });
-  }, [selectedYear]);
+  }, [fetchYear]);
 
   function toggleMonth(m: number) {
     setExpandedMonths(prev => {
@@ -123,17 +128,14 @@ export default function IncomeStatementPage() {
     });
   }
 
-  const mtdMonth = statement?.months[currentMonthIdx];
-  const mtdStats = mtdMonth ? sumMonths([mtdMonth]) : null;
-
-  const ytdSlice = statement
-    ? selectedYear < currentYear
-      ? statement.months
-      : statement.months.slice(0, currentMonthIdx + 1)
+  // Slice of months to display based on selected mode
+  const activeMonthsSlice: MonthlyStatement[] = statement
+    ? mode === 'month'
+      ? ([statement.months[selectedMonth - 1]].filter(Boolean) as MonthlyStatement[])
+      : mode === 'ytd'
+      ? statement.months.slice(0, currentMonthIdx + 1)
+      : statement.months
     : [];
-  const ytdStats = sumMonths(ytdSlice);
-
-  const annualStats = statement ? sumMonths(statement.months) : null;
 
   function PnLTable({ pnl, label, months: monthCount }: { pnl: ReturnType<typeof sumMonths>; label: string; months: number }) {
     const hasData = pnl.grossRevenue > 0 || pnl.totalOperatingExpenses > 0 || pnl.piti > 0;
@@ -387,25 +389,23 @@ export default function IncomeStatementPage() {
     const csv = rows.map(r => r.join(',')).join('\n');
     const a = document.createElement('a');
     a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
-    a.download = `pnl-${view}-${selectedYear}.csv`;
+    a.download = `pnl-${mode}-${fetchYear}.csv`;
     a.click();
   }
 
-  const TAB: { key: View; label: string }[] = [
-    { key: 'mtd', label: 'MTD' },
-    { key: 'ytd', label: 'YTD' },
-    { key: 'monthly', label: 'Monthly' },
-  ];
+  const yearOptions = [...new Set([...years, currentYear, currentYear + 1, currentYear + 2])].sort((a, b) => b - a);
 
-  const activePnL = view === 'mtd' ? mtdStats : view === 'ytd' ? ytdStats : annualStats;
-  const activeMonths = view === 'mtd' ? (mtdMonth ? [mtdMonth] : []) : view === 'ytd' ? ytdSlice : (statement?.months ?? []);
-  const activeLabel = view === 'mtd'
-    ? `${MONTHS_LONG[currentMonthIdx]} ${selectedYear} MTD`
-    : view === 'ytd'
-    ? `Jan – ${MONTHS_SHORT[Math.min(currentMonthIdx, ytdSlice.length - 1)]} ${selectedYear} YTD`
+  const activePnL = activeMonthsSlice.length > 0 ? sumMonths(activeMonthsSlice) : null;
+
+  const activeLabel = mode === 'month'
+    ? `${MONTHS_LONG[selectedMonth - 1]} ${fetchYear}`
+    : mode === 'ytd'
+    ? `Jan – ${MONTHS_SHORT[currentMonthIdx]} ${currentYear} YTD`
+    : mode === 'prior_year'
+    ? `Full Year ${currentYear - 1}`
     : `Full Year ${selectedYear}`;
 
-  const pitiMonths = view === 'mtd' ? 1 : view === 'ytd' ? ytdSlice.length : 12;
+  const pitiMonths = mode === 'month' ? 1 : mode === 'ytd' ? currentMonthIdx + 1 : 12;
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -413,53 +413,80 @@ export default function IncomeStatementPage() {
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Income Statement</h1>
-          <p className="text-slate-500 text-sm mt-1">{settings?.propertyName} — {selectedYear}</p>
+          <p className="text-slate-500 text-sm mt-1">{settings?.propertyName}</p>
         </div>
-        <div className="flex items-center gap-3">
+        <button
+          onClick={() => activePnL && exportCSV(activePnL, activeLabel)}
+          className="flex items-center gap-2 border border-slate-200 bg-white text-slate-700 px-4 py-2 rounded-lg text-sm hover:bg-slate-50"
+        >
+          <Download className="w-4 h-4" /> Export CSV
+        </button>
+      </div>
+
+      {/* Mode selector */}
+      <div className="flex flex-wrap items-center gap-3 mb-6">
+        <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
+          {([
+            { key: 'month' as Mode, label: 'Month' },
+            { key: 'ytd' as Mode, label: 'YTD' },
+            { key: 'prior_year' as Mode, label: 'Prior Year' },
+            { key: 'full_year' as Mode, label: 'Full Year' },
+          ]).map(m => (
+            <button
+              key={m.key}
+              onClick={() => setMode(m.key)}
+              className={`px-5 py-2 rounded-md text-sm font-medium transition-colors ${
+                mode === m.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+
+        {mode === 'month' && (
+          <div className="flex items-center gap-2">
+            <select
+              value={selectedMonth}
+              onChange={e => setSelectedMonth(parseInt(e.target.value))}
+              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+            >
+              {MONTHS_LONG.map((name, i) => <option key={i} value={i + 1}>{name}</option>)}
+            </select>
+            <select
+              value={selectedYear}
+              onChange={e => setSelectedYear(parseInt(e.target.value))}
+              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+            >
+              {yearOptions.map(y => <option key={y}>{y}</option>)}
+            </select>
+          </div>
+        )}
+
+        {mode === 'full_year' && (
           <select
             value={selectedYear}
             onChange={e => setSelectedYear(parseInt(e.target.value))}
             className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
           >
-            {(years.length ? years : [selectedYear]).map(y => <option key={y}>{y}</option>)}
+            {yearOptions.map(y => <option key={y}>{y}</option>)}
           </select>
-          <button
-            onClick={() => activePnL && exportCSV(activePnL, activeLabel)}
-            className="flex items-center gap-2 border border-slate-200 bg-white text-slate-700 px-4 py-2 rounded-lg text-sm hover:bg-slate-50"
-          >
-            <Download className="w-4 h-4" /> Export CSV
-          </button>
-        </div>
+        )}
       </div>
 
-      {/* View tabs */}
-      <div className="flex gap-1 bg-slate-100 rounded-lg p-1 w-fit mb-6">
-        {TAB.map(t => (
-          <button
-            key={t.key}
-            onClick={() => setView(t.key)}
-            className={`px-5 py-2 rounded-md text-sm font-medium transition-colors ${
-              view === t.key ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
-
-      <div className="mb-2">
-        <span className="text-xs font-medium text-slate-400 uppercase tracking-wide">{activeLabel}</span>
+      <div className="mb-4">
+        <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{activeLabel}</span>
       </div>
 
       {activePnL && <KPICards pnl={activePnL} />}
       {activePnL && <PnLTable pnl={activePnL} label={activeLabel} months={pitiMonths} />}
 
-      {/* Chart */}
-      {activeMonths.length > 1 && (
+      {/* Monthly chart — shown for multi-month views */}
+      {activeMonthsSlice.length > 1 && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mt-4">
           <h2 className="font-semibold text-slate-800 mb-4">Monthly Revenue &amp; Net Income</h2>
           <ResponsiveContainer width="100%" height={220}>
-            <ComposedChart data={activeMonths.map(m => ({
+            <ComposedChart data={activeMonthsSlice.map(m => ({
               name: MONTHS_SHORT[m.month - 1],
               Airbnb: m.byPlatform.airbnb.income,
               'Booking.com': m.byPlatform.booking.income,
@@ -484,25 +511,7 @@ export default function IncomeStatementPage() {
         </div>
       )}
 
-      {view === 'monthly' && statement && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mt-4">
-          <h2 className="font-semibold text-slate-800 mb-4">Net Income by Month</h2>
-          <ResponsiveContainer width="100%" height={180}>
-            <LineChart data={statement.months.map(m => ({
-              name: MONTHS_SHORT[m.month - 1],
-              'Net Income': m.netIncome,
-            }))}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(Number(v)/1000).toFixed(0)}k`} />
-              <Tooltip formatter={v => fmt(Number(v))} />
-              <Line type="monotone" dataKey="Net Income" stroke="#10b981" strokeWidth={2} dot={{ r: 4 }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      <MonthTable months={activeMonths} />
+      <MonthTable months={activeMonthsSlice} />
       {activePnL && <PlatformTable byPlatform={activePnL.byPlatform} total={activePnL.grossRevenue} />}
     </div>
   );
