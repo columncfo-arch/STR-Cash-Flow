@@ -87,8 +87,11 @@ export interface Expense {
 }
 
 export interface ForecastOverride {
-  revenue?: number;   // manual annual gross revenue override
-  expenses?: number;  // manual annual operating expenses override
+  revenue?: number;
+  expenses?: number;
+  piti?: number;
+  isManualYear?: boolean;
+  expenseDetail?: Record<string, number>; // category key → amount (platformFees, cleaning, electric…)
 }
 
 export interface Settings {
@@ -112,6 +115,8 @@ export interface ForecastYear {
   growthPct: number | null;
   isManualRevenue: boolean;
   isManualExpenses: boolean;
+  isManualPiti: boolean;
+  isManualEntry: boolean;
 }
 
 export interface PnLSummary {

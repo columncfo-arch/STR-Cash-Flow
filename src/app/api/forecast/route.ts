@@ -20,6 +20,10 @@ function expandExpensesForYear(expenses: Expense[], year: number): Expense[] {
   return result;
 }
 
+function sumExpenseDetail(detail: Record<string, number>): number {
+  return Object.values(detail).reduce((s, v) => s + (v ?? 0), 0);
+}
+
 export async function GET() {
   try {
     const [allBookings, allExpenses, settings] = await Promise.all([
@@ -30,17 +34,20 @@ export async function GET() {
 
     const now = new Date();
     const currentYear = getYear(now);
-    const currentMonthIdx = now.getMonth(); // 0-indexed
 
-    // Find all historical years from booking data
+    // Historical years from booking data
     const historicalYears = [...new Set(allBookings.map(b => getYear(new Date(b.checkIn))))].sort();
 
-    // Build set of years to show: historical + current + next 5
-    // Minimum total of 5 years shown; if fewer historical, fill forward
-    const futureYears = [currentYear + 1, currentYear + 2, currentYear + 3, currentYear + 4, currentYear + 5];
-    const allYears = [...new Set([...historicalYears, currentYear, ...futureYears])].sort();
+    // Manually-added years (prior year entries with no booking data)
+    const manualYears = Object.entries(settings.forecastOverrides ?? {})
+      .filter(([, v]) => v?.isManualYear)
+      .map(([yr]) => parseInt(yr))
+      .filter(yr => !isNaN(yr));
 
-    // Compute actuals per historical/current year
+    const futureYears = [1, 2, 3, 4, 5].map(n => currentYear + n);
+    const allYears = [...new Set([...historicalYears, ...manualYears, currentYear, ...futureYears])].sort();
+
+    // Actuals from booking + expense data
     const actualsByYear = new Map<number, { grossRevenue: number; operatingExpenses: number }>();
     for (const yr of [...historicalYears, currentYear]) {
       const yrBookings = allBookings.filter(b => b.checkIn.startsWith(String(yr)));
@@ -48,21 +55,15 @@ export async function GET() {
       const platformFees = yrBookings.reduce((s, b) => s + (b.platformFee ?? 0), 0);
       const fastPayFees = yrBookings.reduce((s, b) => s + (b.fastPayFee ?? 0), 0);
       const taxRemitted = yrBookings.reduce((s, b) => s + (b.taxRemitted ?? 0) + (b.taxWithheld ?? 0), 0);
-      const refunds = yrBookings.reduce((s, b) => s + (b.lodgingTaxOwnerRemits ?? 0), 0);
+      const lodgingTax = yrBookings.reduce((s, b) => s + (b.lodgingTaxOwnerRemits ?? 0), 0);
       const cleaningAuto = (settings.cleaningFeePerBooking ?? 0) * yrBookings.length;
-
       const yrExpenses = expandExpensesForYear(allExpenses, yr);
-      const manualExpenses = yrExpenses
-        .filter(e => e.category !== 'refund')
-        .reduce((s, e) => s + e.amount, 0);
-
-      const deductions = platformFees + fastPayFees + taxRemitted + refunds;
-      const totalOpEx = manualExpenses + cleaningAuto + deductions;
-
-      actualsByYear.set(yr, { grossRevenue: gross, operatingExpenses: totalOpEx });
+      const manualExpenses = yrExpenses.filter(e => e.category !== 'refund').reduce((s, e) => s + e.amount, 0);
+      const deductions = platformFees + fastPayFees + taxRemitted + lodgingTax;
+      actualsByYear.set(yr, { grossRevenue: gross, operatingExpenses: manualExpenses + cleaningAuto + deductions });
     }
 
-    // Find the best base year for forecasting: last full historical year before current
+    // Last full historical year before current = base for forecasting
     const lastFullYear = historicalYears.filter(y => y < currentYear).slice(-1)[0] ?? currentYear;
 
     const rows: ForecastYear[] = [];
@@ -70,10 +71,11 @@ export async function GET() {
     let prevOpEx: number | null = null;
 
     for (const yr of allYears) {
-      const overrides = settings.forecastOverrides?.[String(yr)] ?? {};
+      const override = settings.forecastOverrides?.[String(yr)] ?? {};
       const isPast = yr < currentYear;
       const isCurrent = yr === currentYear;
       const isFuture = yr > currentYear;
+      const isManualEntry = Boolean(override.isManualYear) && !actualsByYear.has(yr);
 
       const growthPct = settings.forecastGrowthByYear?.[String(yr)] ?? settings.forecastGrowthPct ?? 0;
       const growthFactor = 1 + growthPct / 100;
@@ -84,28 +86,38 @@ export async function GET() {
       let isManualRevenue = false;
       let isManualExpenses = false;
 
-      if (isPast || isCurrent) {
+      if (isManualEntry) {
+        // Fully manual prior year — no booking data
+        grossRevenue = override.revenue ?? 0;
+        if (override.expenseDetail && Object.keys(override.expenseDetail).length > 0) {
+          operatingExpenses = sumExpenseDetail(override.expenseDetail);
+          isManualExpenses = true;
+        } else {
+          operatingExpenses = override.expenses ?? 0;
+          isManualExpenses = override.expenses !== undefined;
+        }
+        isManualRevenue = override.revenue !== undefined;
+        type = 'actual';
+      } else if (isPast || isCurrent) {
         const actuals = actualsByYear.get(yr) ?? { grossRevenue: 0, operatingExpenses: 0 };
-        grossRevenue = overrides.revenue ?? actuals.grossRevenue;
-        operatingExpenses = overrides.expenses ?? actuals.operatingExpenses;
-        isManualRevenue = overrides.revenue !== undefined;
-        isManualExpenses = overrides.expenses !== undefined;
-        type = isPast ? 'actual' : (currentMonthIdx < 11 ? 'partial' : 'actual');
+        grossRevenue = override.revenue ?? actuals.grossRevenue;
+        operatingExpenses = override.expenses ?? actuals.operatingExpenses;
+        isManualRevenue = override.revenue !== undefined;
+        isManualExpenses = override.expenses !== undefined;
+        type = isPast ? 'actual' : 'partial';
       } else {
-        // Forecast: apply growth to last known year's figures
         const baseGross = prevGross ?? actualsByYear.get(lastFullYear)?.grossRevenue ?? 0;
         const baseOpEx = prevOpEx ?? actualsByYear.get(lastFullYear)?.operatingExpenses ?? 0;
-        const projectedGross = Math.round(baseGross * growthFactor);
-        const projectedOpEx = Math.round(baseOpEx * growthFactor);
-        grossRevenue = overrides.revenue ?? projectedGross;
-        operatingExpenses = overrides.expenses ?? projectedOpEx;
-        isManualRevenue = overrides.revenue !== undefined;
-        isManualExpenses = overrides.expenses !== undefined;
+        grossRevenue = override.revenue ?? Math.round(baseGross * growthFactor);
+        operatingExpenses = override.expenses ?? Math.round(baseOpEx * growthFactor);
+        isManualRevenue = override.revenue !== undefined;
+        isManualExpenses = override.expenses !== undefined;
         type = 'forecast';
       }
 
-      const pitiMonths = (isPast || (isCurrent && currentMonthIdx >= 11)) ? 12 : isCurrent ? currentMonthIdx + 1 : 12;
-      const piti = settings.monthlyPITI * pitiMonths;
+      // PITI: always full 12 months for long-term view; override available
+      const isManualPiti = override.piti !== undefined;
+      const piti = override.piti ?? settings.monthlyPITI * 12;
       const netIncome = grossRevenue - operatingExpenses - piti;
 
       rows.push({
@@ -118,6 +130,8 @@ export async function GET() {
         growthPct: isFuture ? growthPct : null,
         isManualRevenue,
         isManualExpenses,
+        isManualPiti,
+        isManualEntry,
       });
 
       prevGross = grossRevenue;
