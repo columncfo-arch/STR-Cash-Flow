@@ -86,6 +86,11 @@ export interface Expense {
   updatedAt: string;
 }
 
+export interface ForecastOverride {
+  revenue?: number;   // manual annual gross revenue override
+  expenses?: number;  // manual annual operating expenses override
+}
+
 export interface Settings {
   currency: string;
   propertyName: string;
@@ -93,6 +98,20 @@ export interface Settings {
   cleaningFeePerBooking: number;
   forecastGrowthPct: number;                      // default YoY growth if no year-specific rate set
   forecastGrowthByYear: Record<string, number>;    // year string → growth %, e.g. {"2026": 4, "2027": 3}
+  vacancyRate: number;                             // % of gross revenue lost to vacancy/unbooked nights
+  forecastOverrides: Record<string, ForecastOverride>; // year string → manual overrides
+}
+
+export interface ForecastYear {
+  year: number;
+  type: 'actual' | 'partial' | 'forecast';
+  grossRevenue: number;
+  operatingExpenses: number;
+  piti: number;
+  netIncome: number;
+  growthPct: number | null;
+  isManualRevenue: boolean;
+  isManualExpenses: boolean;
 }
 
 export interface PnLSummary {

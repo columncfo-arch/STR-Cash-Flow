@@ -1,13 +1,14 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, Upload } from 'lucide-react';
+import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, Upload, TrendingUp } from 'lucide-react';
 
 const links = [
   { href: '/', label: 'Dashboard', icon: Home },
   { href: '/bookings', label: 'Bookings', icon: CalendarDays },
   { href: '/expenses', label: 'Expenses', icon: Receipt },
   { href: '/income-statement', label: 'P&L Statement', icon: BarChart3 },
+  { href: '/forecast', label: 'Long Term Forecast', icon: TrendingUp },
   { href: '/import', label: 'Import Earnings', icon: Upload },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];

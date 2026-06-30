@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Settings } from '@/types';
-import { Check, AlertTriangle, Plus, Trash2 } from 'lucide-react';
+import { Check, AlertTriangle } from 'lucide-react';
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -99,98 +99,10 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm mb-6">
-        <h2 className="font-semibold text-slate-800 mb-1">Revenue Forecast</h2>
-        <p className="text-xs text-slate-500 mb-4">
-          Year-over-year growth assumptions used to project future months. Set based on AirDNA or similar market data.
-          The dashboard uses last year&apos;s actuals × (1 + growth%) to forecast remaining months.
-        </p>
-
-        <div className="mb-5">
-          <label className="text-xs text-slate-500 block mb-1">
-            Default Growth Rate (fallback if no year-specific rate is set)
-          </label>
-          <div className="flex items-center gap-3">
-            <input
-              type="range" min="-50" max="100" step="1"
-              value={settings.forecastGrowthPct ?? 0}
-              onChange={e => setSettings({ ...settings, forecastGrowthPct: parseFloat(e.target.value) })}
-              className="flex-1"
-            />
-            <span className={`text-sm font-semibold w-14 text-right ${
-              (settings.forecastGrowthPct ?? 0) > 0 ? 'text-emerald-600' :
-              (settings.forecastGrowthPct ?? 0) < 0 ? 'text-red-500' : 'text-slate-600'
-            }`}>
-              {(settings.forecastGrowthPct ?? 0) > 0 ? '+' : ''}{settings.forecastGrowthPct ?? 0}%
-            </span>
-          </div>
-        </div>
-
-        <div>
-          <div className="flex items-center justify-between mb-2">
-            <label className="text-xs font-medium text-slate-600">Year-Specific Rates</label>
-            <button
-              onClick={() => {
-                const nextYear = String(new Date().getFullYear() + 1);
-                const existing = settings.forecastGrowthByYear ?? {};
-                if (existing[nextYear] !== undefined) return;
-                setSettings({ ...settings, forecastGrowthByYear: { ...existing, [nextYear]: 0 } });
-              }}
-              className="flex items-center gap-1 text-xs text-emerald-600 hover:text-emerald-700"
-            >
-              <Plus className="w-3 h-3" /> Add Year
-            </button>
-          </div>
-          {Object.keys(settings.forecastGrowthByYear ?? {}).length === 0 && (
-            <p className="text-xs text-slate-400">No year-specific rates. Using default above.</p>
-          )}
-          <div className="space-y-2">
-            {Object.entries(settings.forecastGrowthByYear ?? {})
-              .sort(([a], [b]) => a.localeCompare(b))
-              .map(([yr, pct]) => (
-                <div key={yr} className="flex items-center gap-3">
-                  <input
-                    type="number" value={yr}
-                    onChange={e => {
-                      const next = { ...settings.forecastGrowthByYear };
-                      delete next[yr];
-                      next[e.target.value] = pct;
-                      setSettings({ ...settings, forecastGrowthByYear: next });
-                    }}
-                    className="w-20 text-sm border border-slate-200 rounded-lg px-2 py-1.5"
-                  />
-                  <input
-                    type="range" min="-50" max="100" step="1"
-                    value={pct}
-                    onChange={e => setSettings({
-                      ...settings,
-                      forecastGrowthByYear: { ...settings.forecastGrowthByYear, [yr]: parseFloat(e.target.value) },
-                    })}
-                    className="flex-1"
-                  />
-                  <span className={`text-sm font-semibold w-14 text-right ${
-                    pct > 0 ? 'text-emerald-600' : pct < 0 ? 'text-red-500' : 'text-slate-600'
-                  }`}>
-                    {pct > 0 ? '+' : ''}{pct}%
-                  </span>
-                  <button
-                    onClick={() => {
-                      const next = { ...settings.forecastGrowthByYear };
-                      delete next[yr];
-                      setSettings({ ...settings, forecastGrowthByYear: next });
-                    }}
-                    className="text-slate-400 hover:text-red-500"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-          </div>
-          <p className="text-xs text-slate-400 mt-2">
-            AirDNA showing +4% ADR for Cocoa Beach in 2026? Add year 2026 → +4%.
-          </p>
-        </div>
-      </section>
+      <p className="text-xs text-slate-500 mb-4">
+        Growth rates and vacancy assumptions are configured on the{' '}
+        <a href="/forecast" className="text-emerald-600 underline font-medium">Long Term Forecast</a> page.
+      </p>
 
       <div className="flex items-center gap-3">
         <button

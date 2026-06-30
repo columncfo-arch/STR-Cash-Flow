@@ -14,6 +14,8 @@ const DEFAULT_SETTINGS: Settings = {
   cleaningFeePerBooking: 0,
   forecastGrowthPct: 0,
   forecastGrowthByYear: {},
+  vacancyRate: 0,
+  forecastOverrides: {},
 };
 
 // ─── In-process write lock (serializes read-modify-write on the file backend) ──
