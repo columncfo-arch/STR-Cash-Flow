@@ -103,8 +103,12 @@ export interface Settings {
   forecastGrowthByYear: Record<string, number>;    // year string → growth %, e.g. {"2026": 4, "2027": 3}
   vacancyRate: number;                             // % of gross revenue lost to vacancy/unbooked nights
   forecastOverrides: Record<string, ForecastOverride>; // year string → manual overrides
-  benchmarkAdr?: number;          // sub-market ADR ($/night) for optimization benchmarking
-  benchmarkExpenseRatio?: number; // sub-market operating expense ratio (%) for benchmarking
+  benchmarkAdr?: number;
+  benchmarkExpenseRatio?: number;
+  benchmarkCleaningFee?: number;  // sub-market cleaning fee per stay
+  mortgageRate?: number;          // current interest rate %
+  propertyValue?: number;         // estimated current value
+  loanBalance?: number;           // current outstanding balance
 }
 
 export interface ForecastYear {

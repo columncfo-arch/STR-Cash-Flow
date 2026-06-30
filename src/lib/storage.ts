@@ -18,6 +18,10 @@ const DEFAULT_SETTINGS: Settings = {
   forecastOverrides: {},
   benchmarkAdr: undefined,
   benchmarkExpenseRatio: undefined,
+  benchmarkCleaningFee: undefined,
+  mortgageRate: undefined,
+  propertyValue: undefined,
+  loanBalance: undefined,
 };
 
 // ─── In-process write lock (serializes read-modify-write on the file backend) ──
