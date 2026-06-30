@@ -13,9 +13,58 @@ const PLATFORM_COLORS: Record<string, string> = {
   airbnb: '#f43f5e',
   booking: '#3b82f6',
   vrbo: '#6366f1',
-  direct: '#10b981',
-  other: '#94a3b8',
 };
+
+type TooltipEntry = { payload: Record<string, number | null> };
+
+function ChartTooltip({
+  active, payload, label, fmt,
+}: {
+  active?: boolean;
+  payload?: TooltipEntry[];
+  label?: string;
+  fmt: (n: number) => string;
+}) {
+  if (!active || !payload?.length) return null;
+  const d = payload[0].payload;
+  const gross = d._gross;
+  const expenses = d._expenses;
+  const netIncome = d['Net Income'];
+  const forecast = d['Revenue Forecast'];
+  const hasActual = gross != null && gross > 0;
+  const hasForecast = forecast != null;
+  if (!hasActual && !hasForecast) return null;
+
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm min-w-[175px]">
+      <p className="font-semibold text-slate-800 mb-2">{label}</p>
+      {hasActual && (
+        <>
+          <div className="flex justify-between gap-6">
+            <span className="text-slate-500">Revenue</span>
+            <span className="font-medium">{fmt(gross!)}</span>
+          </div>
+          <div className="flex justify-between gap-6">
+            <span className="text-slate-500">Expenses</span>
+            <span className="font-medium text-red-600">({fmt(expenses!)})</span>
+          </div>
+          <div className="flex justify-between gap-6 border-t border-slate-100 mt-2 pt-2">
+            <span className="font-medium text-slate-700">Net Income</span>
+            <span className={`font-semibold ${(netIncome ?? 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              {fmt(netIncome ?? 0)}
+            </span>
+          </div>
+        </>
+      )}
+      {hasForecast && (
+        <div className={`flex justify-between gap-6 ${hasActual ? 'border-t border-slate-100 mt-2 pt-2' : ''}`}>
+          <span className="text-slate-500">Rev. Forecast</span>
+          <span className="font-medium text-slate-600">{fmt(forecast!)}</span>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function Dashboard() {
   const [statement, setStatement] = useState<AnnualStatement | null>(null);
@@ -49,8 +98,8 @@ export default function Dashboard() {
   const growthFactor = growthPct / 100;
 
   const chartData = statement?.months.map((m, i) => {
-    const actualNetIncome: number | null = i <= currentMonthIdx ? m.netIncome : null;
-    // Forecast = prior-year gross revenue × (1 + growth%), shown for future months only
+    const isActual = i <= currentMonthIdx;
+    const actualNetIncome: number | null = isActual ? m.netIncome : null;
     let forecastRevenue: number | null = null;
     if (i > currentMonthIdx && prevStatement) {
       const prev = prevStatement.months[i];
@@ -63,10 +112,11 @@ export default function Dashboard() {
       Airbnb: m.byPlatform.airbnb.income,
       'Booking.com': m.byPlatform.booking.income,
       VRBO: m.byPlatform.vrbo.income,
-      Direct: m.byPlatform.direct.income,
-      Other: m.byPlatform.other.income,
       'Net Income': actualNetIncome,
       'Revenue Forecast': forecastRevenue,
+      // tooltip-only: not tied to any chart element
+      _gross: isActual ? m.grossRevenue : null,
+      _expenses: isActual ? m.grossRevenue - m.netIncome : null,
     };
   }) ?? [];
 
@@ -101,10 +151,17 @@ export default function Dashboard() {
                 <XAxis dataKey="name" tick={{ fontSize: 12 }} />
                 <YAxis yAxisId="left" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(v, name) => [fmt(Number(v)), name]} />
+                <Tooltip content={(props) => (
+                  <ChartTooltip
+                    active={props.active}
+                    payload={props.payload as unknown as TooltipEntry[]}
+                    label={String(props.label ?? '')}
+                    fmt={fmt}
+                  />
+                )} />
                 <Legend />
                 <ReferenceLine yAxisId="right" y={0} stroke="#e2e8f0" />
-                {(['Airbnb', 'Booking.com', 'VRBO', 'Direct', 'Other'] as const).map(p => (
+                {(['Airbnb', 'Booking.com', 'VRBO'] as const).map(p => (
                   <Bar key={p} yAxisId="left" dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com', '')]} />
                 ))}
                 <Line
