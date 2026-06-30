@@ -221,7 +221,7 @@ export default function SettingsPage() {
         <p className="text-sm text-slate-500 mb-4">Seed historical data or clear the database.</p>
         <div className="flex flex-wrap gap-3">
           <button
-            onClick={seed2025}
+            onClick={() => seed2025()}
             className="flex items-center gap-2 border border-emerald-300 text-emerald-700 px-4 py-2 rounded-lg text-sm hover:bg-emerald-50 transition-colors"
           >
             Import 2025 Baseline Data

@@ -74,6 +74,7 @@ export default function Dashboard() {
   }) ?? [];
 
   const hasData = ytdGross > 0;
+  const prevHasData = prevStatement?.months.some(m => m.grossRevenue > 0) ?? false;
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -96,39 +97,48 @@ export default function Dashboard() {
           Monthly Revenue by Platform &amp; Net Income
         </h2>
         {hasData ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis yAxisId="left" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v, name) => [fmt(Number(v)), name]} />
-              <Legend />
-              <ReferenceLine yAxisId="right" y={0} stroke="#e2e8f0" />
-              {(['Airbnb', 'Booking.com', 'VRBO', 'Direct', 'Other'] as const).map(p => (
-                <Bar key={p} yAxisId="left" dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com', '')]} />
-              ))}
-              <Line
-                yAxisId="right"
-                type="monotone"
-                dataKey="Net Income"
-                stroke="#f97316"
-                strokeWidth={3}
-                dot={{ r: 4, fill: '#f97316', strokeWidth: 0 }}
-                connectNulls
-              />
-              <Line
-                yAxisId="right"
-                type="monotone"
-                dataKey="Forecast"
-                stroke="#f97316"
-                strokeWidth={2}
-                strokeDasharray="6 3"
-                dot={false}
-                connectNulls
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <>
+            <ResponsiveContainer width="100%" height={300}>
+              <ComposedChart data={chartData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                <YAxis yAxisId="left" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                <Tooltip formatter={(v, name) => [fmt(Number(v)), name]} />
+                <Legend />
+                <ReferenceLine yAxisId="right" y={0} stroke="#e2e8f0" />
+                {(['Airbnb', 'Booking.com', 'VRBO', 'Direct', 'Other'] as const).map(p => (
+                  <Bar key={p} yAxisId="left" dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com', '')]} />
+                ))}
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="Net Income"
+                  stroke="#f97316"
+                  strokeWidth={3}
+                  dot={{ r: 4, fill: '#f97316', strokeWidth: 0 }}
+                  connectNulls
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="Forecast"
+                  stroke="#f97316"
+                  strokeWidth={2}
+                  strokeDasharray="6 3"
+                  dot={false}
+                  connectNulls
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+            {!prevHasData && (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+                No prior-year data found — forecast line is hidden. Go to{' '}
+                <a href="/settings" className="underline font-medium">Settings</a>
+                {' '}→ Import 2025 Baseline Data to enable the forecast.
+              </p>
+            )}
+          </>
         ) : (
           <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
             No data yet. Import your earnings CSV to get started.
