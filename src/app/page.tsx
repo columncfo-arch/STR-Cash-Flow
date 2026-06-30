@@ -50,16 +50,13 @@ export default function Dashboard() {
 
   const chartData = statement?.months.map((m, i) => {
     const actualNetIncome: number | null = i <= currentMonthIdx ? m.netIncome : null;
-    let forecast: number | null = null;
-    if (i >= currentMonthIdx && prevStatement) {
+    // Forecast = prior-year gross revenue × (1 + growth%), shown for future months only
+    let forecastRevenue: number | null = null;
+    if (i > currentMonthIdx && prevStatement) {
       const prev = prevStatement.months[i];
-      // At current month: connect to actual; beyond: project using prev year net income + growth on prev revenue
-      // No prior-year revenue means no meaningful baseline — skip those months
-      forecast = i === currentMonthIdx
-        ? m.netIncome
-        : prev.grossRevenue > 0
-          ? prev.netIncome + prev.grossRevenue * growthFactor
-          : null;
+      forecastRevenue = prev.grossRevenue > 0
+        ? Math.round(prev.grossRevenue * (1 + growthFactor))
+        : null;
     }
     return {
       name: MONTHS[i],
@@ -69,7 +66,7 @@ export default function Dashboard() {
       Direct: m.byPlatform.direct.income,
       Other: m.byPlatform.other.income,
       'Net Income': actualNetIncome,
-      Forecast: forecast,
+      'Revenue Forecast': forecastRevenue,
     };
   }) ?? [];
 
@@ -120,14 +117,13 @@ export default function Dashboard() {
                   connectNulls
                 />
                 <Line
-                  yAxisId="right"
+                  yAxisId="left"
                   type="monotone"
-                  dataKey="Forecast"
-                  stroke="#f97316"
+                  dataKey="Revenue Forecast"
+                  stroke="#475569"
                   strokeWidth={2}
                   strokeDasharray="6 3"
-                  dot={false}
-                  connectNulls
+                  dot={{ r: 4, fill: '#475569', strokeWidth: 0 }}
                 />
               </ComposedChart>
             </ResponsiveContainer>
