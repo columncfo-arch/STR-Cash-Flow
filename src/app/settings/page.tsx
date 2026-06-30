@@ -16,13 +16,20 @@ export default function SettingsPage() {
     setTimeout(() => setCleared(false), 3000);
   }
 
-  async function seed2025() {
-    if (!confirm('Import 2025 baseline data (Jan–Oct bookings + expenses)? This will fail if 2025 data already exists.')) return;
-    const res = await fetch('/api/seed-2025', { method: 'POST' });
+  async function seed2025(force = false) {
+    const msg = force
+      ? 'This will DELETE existing 2025 data and re-import. Continue?'
+      : 'Import Jan–Oct 2025 baseline data (bookings + expenses)?';
+    if (!confirm(msg)) return;
+    const res = await fetch(`/api/seed-2025${force ? '?force=true' : ''}`, { method: 'POST' });
     const data = await res.json();
+    if (!res.ok && data.hint) {
+      if (confirm(`${data.error} Re-import and overwrite existing 2025 data?`)) seed2025(true);
+      return;
+    }
     if (!res.ok) { setSeeded(data.error ?? 'Error'); }
     else { setSeeded(`Done — ${data.bookingsAdded} bookings, ${data.expensesAdded} expenses added. ${data.note}`); }
-    setTimeout(() => setSeeded(null), 12000);
+    setTimeout(() => setSeeded(null), 15000);
   }
 
   useEffect(() => {
