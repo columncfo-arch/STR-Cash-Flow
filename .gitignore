@@ -40,5 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
-# Data files (user-specific — bookings are local only)
+# Data files (user-specific — all runtime data is local only)
 /data/bookings.json
+/data/expenses.json
+/data/settings.json
