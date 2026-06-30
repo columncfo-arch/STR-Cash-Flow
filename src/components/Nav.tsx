@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, Upload, TrendingUp } from 'lucide-react';
+import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, Upload, TrendingUp, Target } from 'lucide-react';
 
 const links = [
   { href: '/', label: 'Dashboard', icon: Home },
@@ -9,6 +9,7 @@ const links = [
   { href: '/expenses', label: 'Expenses', icon: Receipt },
   { href: '/income-statement', label: 'P&L Statement', icon: BarChart3 },
   { href: '/forecast', label: 'Long Term Forecast', icon: TrendingUp },
+  { href: '/optimization', label: 'Optimization', icon: Target },
   { href: '/import', label: 'Import Earnings', icon: Upload },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];

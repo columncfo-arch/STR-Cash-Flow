@@ -16,6 +16,8 @@ const DEFAULT_SETTINGS: Settings = {
   forecastGrowthByYear: {},
   vacancyRate: 0,
   forecastOverrides: {},
+  benchmarkAdr: undefined,
+  benchmarkExpenseRatio: undefined,
 };
 
 // ─── In-process write lock (serializes read-modify-write on the file backend) ──
