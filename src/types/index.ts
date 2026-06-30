@@ -117,6 +117,11 @@ export interface ForecastYear {
   isManualExpenses: boolean;
   isManualPiti: boolean;
   isManualEntry: boolean;
+  blended: boolean;          // current year: true = actuals + remainder forecast
+  ytdGross?: number;         // breakdown: actual portion
+  ytdOpEx?: number;
+  forecastGross?: number;    // breakdown: projected remainder
+  forecastOpEx?: number;
 }
 
 export interface PnLSummary {

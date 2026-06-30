@@ -331,7 +331,7 @@ export default function ForecastPage() {
                 return (
                   <tr key={row.year} className="border-b border-slate-100 bg-emerald-50">
                     <td className="px-4 py-3 font-bold text-slate-800">{row.year}</td>
-                    <td className="px-4 py-3"><TypeBadge type={row.type} manual={row.isManualEntry} /></td>
+                    <td className="px-4 py-3"><TypeBadge type={row.type} manual={row.isManualEntry} blended={row.blended} /></td>
                     <td className="px-4 py-3">
                       <EditCell value={overrideDraft.revenue} placeholder={String(row.grossRevenue)}
                         onChange={v => setOverrideDraft(d => ({ ...d, revenue: v }))} />
@@ -371,15 +371,25 @@ export default function ForecastPage() {
                     {isCurrent && <span className="ml-2 text-[10px] font-normal text-blue-500 uppercase tracking-wide">current</span>}
                   </td>
                   <td className="px-4 py-3">
-                    <TypeBadge type={row.type} manual={row.isManualEntry} />
+                    <TypeBadge type={row.type} manual={row.isManualEntry} blended={row.blended} />
                   </td>
                   <td className="px-4 py-3 text-right font-medium text-slate-700">
                     {fmt(row.grossRevenue)}
                     {row.isManualRevenue && <span className="ml-1 text-[10px] text-amber-600">manual</span>}
+                    {row.blended && !row.isManualRevenue && row.ytdGross !== undefined && row.forecastGross !== undefined && (
+                      <div className="text-[10px] text-slate-400 font-normal">
+                        {fmt(row.ytdGross)} act + {fmt(row.forecastGross)} proj
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right text-slate-600">
                     ({fmt(row.operatingExpenses)})
                     {row.isManualExpenses && <span className="ml-1 text-[10px] text-amber-600">manual</span>}
+                    {row.blended && !row.isManualExpenses && row.ytdOpEx !== undefined && row.forecastOpEx !== undefined && (
+                      <div className="text-[10px] text-slate-400 font-normal">
+                        {fmt(row.ytdOpEx)} act + {fmt(row.forecastOpEx)} proj
+                      </div>
+                    )}
                   </td>
                   <td className="px-4 py-3 text-right text-slate-500">
                     ({fmt(row.piti)})
@@ -534,9 +544,12 @@ function EditCell({ value, placeholder, onChange }: { value: string; placeholder
   );
 }
 
-function TypeBadge({ type, manual }: { type: ForecastYear['type']; manual?: boolean }) {
+function TypeBadge({ type, manual, blended }: { type: ForecastYear['type']; manual?: boolean; blended?: boolean }) {
   if (manual) return (
     <span className="text-[10px] uppercase tracking-wide bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-medium">Manual</span>
+  );
+  if (blended) return (
+    <span className="text-[10px] uppercase tracking-wide bg-violet-50 text-violet-700 px-1.5 py-0.5 rounded font-medium">YTD+Proj</span>
   );
   if (type === 'actual') return (
     <span className="text-[10px] uppercase tracking-wide bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-medium">Actual</span>
