@@ -30,6 +30,18 @@ function ExpenseForm({ f, onChange, onSave, onCancel }: {
   onSave: () => void;
   onCancel: () => void;
 }) {
+  const [attempted, setAttempted] = useState(false);
+  const err = {
+    description: attempted && !f.description,
+    amount: attempted && !f.amount,
+  };
+
+  function handleSave() {
+    setAttempted(true);
+    if (!f.amount || !f.date || !f.description) return;
+    onSave();
+  }
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
       <div>
@@ -45,16 +57,20 @@ function ExpenseForm({ f, onChange, onSave, onCancel }: {
         </select>
       </div>
       <div>
-        <label className="text-xs text-slate-500 block mb-1">Description</label>
+        <label className="text-xs text-slate-500 block mb-1">
+          Description {err.description && <span className="text-red-500 ml-1">required</span>}
+        </label>
         <input type="text" value={f.description} onChange={e => onChange({ description: e.target.value })}
           placeholder="e.g. April electric bill"
-          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
+          className={`w-full text-sm border rounded-lg px-3 py-2 ${err.description ? 'border-red-400 bg-red-50' : 'border-slate-200'}`} />
       </div>
       <div>
-        <label className="text-xs text-slate-500 block mb-1">Amount ($)</label>
+        <label className="text-xs text-slate-500 block mb-1">
+          Amount ($) {err.amount && <span className="text-red-500 ml-1">required</span>}
+        </label>
         <input type="number" value={f.amount} onChange={e => onChange({ amount: e.target.value })}
           placeholder="0.00" min="0" step="0.01"
-          className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
+          className={`w-full text-sm border rounded-lg px-3 py-2 ${err.amount ? 'border-red-400 bg-red-50' : 'border-slate-200'}`} />
       </div>
       <div className="col-span-2 md:col-span-4 flex flex-wrap items-end gap-4">
         <label className="flex items-center gap-2 text-sm text-slate-600">
@@ -70,7 +86,7 @@ function ExpenseForm({ f, onChange, onSave, onCancel }: {
         )}
       </div>
       <div className="flex items-end gap-2 col-span-2 md:col-span-4">
-        <button onClick={onSave}
+        <button onClick={handleSave}
           className="flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700">
           <Check className="w-3.5 h-3.5" /> Save
         </button>
@@ -110,7 +126,6 @@ export default function ExpensesPage() {
   }, [filterYear]);
 
   async function addExpense() {
-    if (!form.amount || !form.date || !form.description) return;
     await fetch('/api/expenses', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
