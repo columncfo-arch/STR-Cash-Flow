@@ -260,6 +260,13 @@ export default function OptimizationPage() {
   const benchmarkAdr = settings?.benchmarkAdr ?? 0;
   const benchmarkCleaningFee = settings?.benchmarkCleaningFee ?? 0;
 
+  // completedMonths = calendar months that have fully elapsed (excludes current & future months).
+  // activeMonths = any month with bookings, including future pre-booked stays.
+  // Use completedMonths for occupancy %, trajectory pacing, and PITI YTD coverage.
+  // Use activeMonths for ADR analysis and cleaning fee analysis (all confirmed bookings).
+  const currentMonthIdx = new Date().getMonth(); // 0-indexed: July = 6
+  const completedMonths = statement?.months.slice(0, currentMonthIdx) ?? [];
+
   const activeMonths = statement?.months.filter(m => m.grossRevenue > 0) ?? [];
   const allBookings = activeMonths.flatMap(m => m.bookings);
   const totalBookings = allBookings.length;
@@ -294,9 +301,11 @@ export default function OptimizationPage() {
 
   // ── Occupancy optimization ────────────────────────────────────────────────────
 
-  // YTD occupancy: denominator = calendar days in months with actual data (not 365)
-  const ytdDays = activeMonths.reduce((s, m) => s + new Date(m.year, m.month, 0).getDate(), 0);
-  const ytdOccPct = ytdDays > 0 ? (totalNights / ytdDays) * 100 : 0;
+  // YTD occupancy: denominator = calendar days in COMPLETED months only.
+  // Future months with pre-booked stays must be excluded so elapsed days = 181 (not 303).
+  const ytdDays = completedMonths.reduce((s, m) => s + new Date(m.year, m.month, 0).getDate(), 0);
+  const ytdActualNights = completedMonths.reduce((s, m) => s + m.totalNights, 0);
+  const ytdOccPct = ytdDays > 0 ? (ytdActualNights / ytdDays) * 100 : 0;
   // Nights at risk = remaining calendar days in the year not yet reached
   const nightsAtRisk = Math.max(0, 365 - ytdDays);
 
@@ -330,10 +339,11 @@ export default function OptimizationPage() {
   // ── PITI ──────────────────────────────────────────────────────────────────────
 
   const annualPITI = (settings?.monthlyPITI ?? 0) * 12;
-  // YTD PITI = months with actual data × monthly PITI; compare against YTD gross revenue
-  const ytdMonths = activeMonths.length;
+  // YTD PITI = completed months with actual revenue × monthly PITI
+  const ytdMonths = completedMonths.filter(m => m.grossRevenue > 0).length;
+  const ytdActualGross = completedMonths.reduce((s, m) => s + m.grossRevenue, 0);
   const ytdPITI = (settings?.monthlyPITI ?? 0) * ytdMonths;
-  const pitiCoverage = grossRevenue - ytdPITI;
+  const pitiCoverage = ytdActualGross - ytdPITI;
 
   const mortgageRate = parseFloat(draftRate) || 0;
   const propertyValue = parseFloat(draftValue) || 0;
@@ -394,17 +404,20 @@ export default function OptimizationPage() {
   opportunities.sort((a, b) => b.amount - a.amount);
   const totalOpportunity = opportunities.reduce((s, o) => s + o.amount, 0);
 
-  // ── Current trajectory (annualized YTD) ──────────────────────────────────────
+  // ── Current trajectory (annualized YTD, completed months only) ───────────────
 
   const annFactor = ytdMonths > 0 ? 12 / ytdMonths : 1;
-  const trajNights = totalNights * annFactor;
+  const ytdActualBookings = completedMonths.reduce((s, m) => s + m.bookings.filter(b => b.income > 0).length, 0);
+  const ytdActualCleaningCost = completedMonths.reduce((s, m) => s + m.expensesByCategory.cleaning, 0);
+  const ytdActualOtherOpEx = completedMonths.reduce((s, m) => s + m.totalOperatingExpenses, 0) - ytdActualCleaningCost;
+  const ytdActualCleaningFeeIncome = cleaningFeePerStay * ytdActualBookings;
+  const trajNights = ytdActualNights * annFactor;
   const trajOccupancy = (trajNights / 365) * 100;
-  const trajStays = totalBookings * annFactor;
-  const trajGrossRevenue = grossRevenue * annFactor;
-  const ytdOtherOpEx = (statement?.totalOperatingExpenses ?? 0) - (statement?.expensesByCategory.cleaning ?? 0);
-  const trajCleaningCollected = cleaningFeeIncome * annFactor;
-  const trajCleaningCost = cleaningCostPaid * annFactor;
-  const trajOpEx = ytdOtherOpEx * annFactor;
+  const trajStays = ytdActualBookings * annFactor;
+  const trajGrossRevenue = ytdActualGross * annFactor;
+  const trajCleaningCollected = ytdActualCleaningFeeIncome * annFactor;
+  const trajCleaningCost = ytdActualCleaningCost * annFactor;
+  const trajOpEx = ytdActualOtherOpEx * annFactor;
   const trajNetCash = trajGrossRevenue + trajCleaningCollected - trajCleaningCost - trajOpEx - annualPITI;
 
   // ── Sensitivity scenarios ─────────────────────────────────────────────────────
@@ -605,7 +618,7 @@ export default function OptimizationPage() {
                       {ytdMonths > 0 && <td className="px-5 py-3 text-right text-red-400 text-xs bg-indigo-50 border-l border-indigo-100">({fmt2(trajCleaningCost)})</td>}
                     </tr>
                   )}
-                  {(mOpEx > 0 || ytdOtherOpEx > 0) && (
+                  {(mOpEx > 0 || ytdActualOtherOpEx > 0) && (
                     <tr className="border-b border-slate-100">
                       <td className="px-5 py-3 text-slate-600">Other Operating Expenses</td>
                       {scenarios.map((s, i) => (
