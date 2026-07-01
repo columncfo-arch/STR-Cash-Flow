@@ -128,6 +128,11 @@ export interface Settings {
   loanOriginalBalance?: number;   // original loan amount (for amortization)
   loanTermYears?: number;         // loan term in years (for amortization)
   loanStructure?: LoanStructure;  // fixed / ARM / interest-only
+  // Guest welcome / in-stay capture
+  wifiNetwork?: string;
+  wifiPassword?: string;
+  welcomeMessage?: string;       // shown after guest registers
+  localGuideUrl?: string;        // optional link to local guide PDF or page
 }
 
 export interface ForecastYear {

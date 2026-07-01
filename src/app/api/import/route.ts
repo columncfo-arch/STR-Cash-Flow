@@ -129,6 +129,7 @@ interface ParsedRow {
   unitType?: string;
   cancellationDate?: string;
   address?: string;
+  email?: string;
   phone?: string;
   adults?: number;
   children?: number;
@@ -294,7 +295,8 @@ function parseBookingCom(rows: Record<string, string>[]): ParsedRow[] {
         unitType: col(r, 'unit_type', 'room_type', 'property_type') || undefined,
         cancellationDate: normalizeDate(col(r, 'cancellation_date')) || undefined,
         address: col(r, 'address') || undefined,
-        phone: col(r, 'phone_number', 'phone', 'contact_number') || undefined,
+        email: col(r, 'email_address', 'email', 'guest_email', 'contact_email', 'booker_email') || undefined,
+        phone: col(r, 'phone_number', 'phone', 'contact_number', 'mobile', 'telephone') || undefined,
         adults: parseInt(col(r, 'adults', 'adult_count', 'num_adults')) || undefined,
         children: parseInt(col(r, 'children', 'child_count', 'num_children')) || undefined,
         childrenAges: col(r, 'children_s_age_s', 'children_ages', 'child_ages') || undefined,
@@ -581,6 +583,7 @@ export async function POST(req: Request) {
           unitType: row.unitType || undefined,
           cancellationDate: row.cancellationDate || undefined,
           address: row.address || undefined,
+          email: row.email || undefined,
           phone: row.phone || undefined,
           adults: row.adults || undefined,
           children: row.children || undefined,

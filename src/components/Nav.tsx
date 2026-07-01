@@ -24,8 +24,11 @@ const links: NavLink[] = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
+const PUBLIC_PATHS = ['/welcome'];
+
 export default function Nav() {
   const pathname = usePathname();
+  if (PUBLIC_PATHS.some(p => pathname === p || pathname.startsWith(p + '/'))) return null;
   return (
     <nav className="bg-slate-900 text-white h-screen w-56 flex flex-col fixed left-0 top-0">
       <div className="px-4 py-5 border-b border-slate-700">

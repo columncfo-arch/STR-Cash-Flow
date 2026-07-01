@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { Geist } from 'next/font/google';
 import './globals.css';
 import Nav from '@/components/Nav';
+import MainWrapper from '@/components/MainWrapper';
 
 const geist = Geist({ subsets: ['latin'] });
 
@@ -15,7 +16,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en">
       <body className={`${geist.className} bg-slate-50`}>
         <Nav />
-        <main className="ml-56 min-h-screen p-8">{children}</main>
+        <MainWrapper>{children}</MainWrapper>
       </body>
     </html>
   );
