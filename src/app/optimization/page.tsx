@@ -151,10 +151,23 @@ export default function OptimizationPage() {
       setDraftLoanTerm(s.loanTermYears ? String(s.loanTermYears) : '');
       setDraftLoanStructure(s.loanStructure ?? 'fixed');
       setDraftFeePerStay(s.guestCleaningFeePerBooking ? String(s.guestCleaningFeePerBooking) : '');
+      setDraftYourAdr(s.yourAdr ? String(s.yourAdr) : '');
+      if (s.sensitivityAdr) setModelAdr(String(s.sensitivityAdr));
+      if (s.sensitivityAvgStay) setModelAvgStay(String(s.sensitivityAvgStay));
+      if (s.sensitivityCleaningFee != null) setModelCleaningFee(String(s.sensitivityCleaningFee));
+      if (s.sensitivityCleaningCost != null) setModelCleaningCost(String(s.sensitivityCleaningCost));
+      if (s.sensitivityOpEx != null) setModelOpEx(String(s.sensitivityOpEx));
+      if (s.sensitivityTarget1 != null || s.sensitivityTarget2 != null || s.sensitivityTarget3 != null) {
+        setScenarioTargets([
+          String(s.sensitivityTarget1 ?? 0),
+          String(s.sensitivityTarget2 ?? 5000),
+          String(s.sensitivityTarget3 ?? 10000),
+        ]);
+      }
     });
   }, []);
 
-  // Initialize sensitivity model from real data once both loads complete
+  // Seed sensitivity model from real data for fields the user hasn't saved yet
   useEffect(() => {
     if (modelInitialized || !settings || !statement) return;
     const activeMonths = statement.months.filter(m => m.grossRevenue > 0);
@@ -168,15 +181,29 @@ export default function OptimizationPage() {
     const avgStay = stays > 0 && nights > 0 ? nights / stays : 3;
     const cleaningCostPaid = statement.expensesByCategory.cleaning ?? 0;
     const cleaningCostPerStay = stays > 0 ? cleaningCostPaid / stays : 0;
-
     const otherOpEx = (statement.totalOperatingExpenses ?? 0) - (statement.expensesByCategory.cleaning ?? 0);
-    if (avgAdr > 0) setModelAdr(String(Math.round(avgAdr)));
-    setModelAvgStay(String(parseFloat(avgStay.toFixed(1))));
-    setModelCleaningFee(String(Math.round(settings.guestCleaningFeePerBooking ?? 0)));
-    setModelCleaningCost(String(Math.round(cleaningCostPerStay)));
-    if (otherOpEx > 0) setModelOpEx(String(Math.round(otherOpEx)));
+
+    // Only seed from data if user hasn't saved a value already
+    if (!settings.sensitivityAdr && avgAdr > 0) setModelAdr(String(Math.round(avgAdr)));
+    if (!settings.sensitivityAvgStay) setModelAvgStay(String(parseFloat(avgStay.toFixed(1))));
+    if (settings.sensitivityCleaningFee == null) setModelCleaningFee(String(Math.round(settings.guestCleaningFeePerBooking ?? 0)));
+    if (settings.sensitivityCleaningCost == null) setModelCleaningCost(String(Math.round(cleaningCostPerStay)));
+    if (settings.sensitivityOpEx == null && otherOpEx > 0) setModelOpEx(String(Math.round(otherOpEx)));
     setModelInitialized(true);
   }, [settings, statement, modelInitialized]);
+
+  function saveModel() {
+    saveSection('model', {
+      sensitivityAdr: parseFloat(modelAdr) || undefined,
+      sensitivityAvgStay: parseFloat(modelAvgStay) || undefined,
+      sensitivityCleaningFee: parseFloat(modelCleaningFee) || 0,
+      sensitivityCleaningCost: parseFloat(modelCleaningCost) || 0,
+      sensitivityOpEx: parseFloat(modelOpEx) || 0,
+      sensitivityTarget1: parseFloat(scenarioTargets[0]) || 0,
+      sensitivityTarget2: parseFloat(scenarioTargets[1]) || 5000,
+      sensitivityTarget3: parseFloat(scenarioTargets[2]) || 10000,
+    });
+  }
 
   function savePiti() {
     saveSection('piti', {
@@ -427,26 +454,26 @@ export default function OptimizationPage() {
               <div>
                 <label className="text-xs text-slate-500 block mb-1">ADR ($/night)</label>
                 <input type="number" value={modelAdr} onChange={e => setModelAdr(e.target.value)}
-                  placeholder="e.g. 250" min="0"
+                  onBlur={saveModel} placeholder="e.g. 250" min="0"
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
               </div>
               <div>
                 <label className="text-xs text-slate-500 block mb-1">Avg Stay (nights)</label>
                 <input type="number" value={modelAvgStay} onChange={e => setModelAvgStay(e.target.value)}
-                  placeholder="e.g. 3.0" min="1" step="0.1"
+                  onBlur={saveModel} placeholder="e.g. 3.0" min="1" step="0.1"
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
               </div>
               <div>
                 <label className="text-xs text-slate-500 block mb-1">Cleaning Fee / Stay</label>
                 <input type="number" value={modelCleaningFee} onChange={e => setModelCleaningFee(e.target.value)}
-                  placeholder="charged to guest" min="0"
+                  onBlur={saveModel} placeholder="charged to guest" min="0"
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
                 <p className="text-xs text-slate-400 mt-0.5">Charged to guest</p>
               </div>
               <div>
                 <label className="text-xs text-slate-500 block mb-1">Cleaning Cost / Stay</label>
                 <input type="number" value={modelCleaningCost} onChange={e => setModelCleaningCost(e.target.value)}
-                  placeholder="paid to cleaner" min="0"
+                  onBlur={saveModel} placeholder="paid to cleaner" min="0"
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
                 <p className="text-xs text-slate-400 mt-0.5">Paid to cleaner</p>
               </div>
@@ -460,7 +487,7 @@ export default function OptimizationPage() {
               <div>
                 <label className="text-xs text-slate-500 block mb-1">Other Annual Op Ex</label>
                 <input type="number" value={modelOpEx} onChange={e => setModelOpEx(e.target.value)}
-                  placeholder="e.g. 9000" min="0"
+                  onBlur={saveModel} placeholder="e.g. 9000" min="0"
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
                 <p className="text-xs text-slate-400 mt-0.5">Utilities, maintenance, etc. (excl. cleaning)</p>
               </div>
@@ -480,6 +507,7 @@ export default function OptimizationPage() {
                           next[i] = e.target.value;
                           setScenarioTargets(next);
                         }}
+                        onBlur={saveModel}
                         className="pl-6 w-28 text-sm border border-slate-200 rounded-lg px-3 py-1.5"
                         min="0"
                       />
@@ -680,6 +708,7 @@ export default function OptimizationPage() {
                   label="Your ADR Override"
                   value={draftYourAdr}
                   onChange={setDraftYourAdr}
+                  onBlur={() => saveSection('adr', { benchmarkAdr: parseFloat(draftAdr) || undefined, yourAdr: parseFloat(draftYourAdr) || undefined })}
                   unit="$" placeholder={overallAvgAdr > 0 ? String(Math.round(overallAvgAdr)) : 'calculated'}
                   note={`Calculated from data: ${fmt2(overallAvgAdr)}/night`}
                 />

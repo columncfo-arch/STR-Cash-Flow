@@ -109,6 +109,15 @@ export interface Settings {
   benchmarkExpenseRatio?: number;
   benchmarkCleaningFee?: number;  // sub-market cleaning fee per stay
   guestCleaningFeePerBooking?: number; // cleaning fee charged to guests (not an expense)
+  yourAdr?: number;              // user-overridden ADR for optimization display
+  sensitivityAdr?: number;       // sensitivity model assumption overrides
+  sensitivityAvgStay?: number;
+  sensitivityCleaningFee?: number;
+  sensitivityCleaningCost?: number;
+  sensitivityOpEx?: number;
+  sensitivityTarget1?: number;
+  sensitivityTarget2?: number;
+  sensitivityTarget3?: number;
   mortgageRate?: number;          // current interest rate %
   propertyValue?: number;         // estimated current value
   loanBalance?: number;           // current outstanding balance
