@@ -120,6 +120,7 @@ export default function OptimizationPage() {
   const [draftYourAdr, setDraftYourAdr] = useState('');
   const [draftFeePerStay, setDraftFeePerStay] = useState('');
   const [draftCleaningCostPerBooking, setDraftCleaningCostPerBooking] = useState('');
+  const [draftCapitalDeployed, setDraftCapitalDeployed] = useState('');
 
   // Sensitivity model state
   const [modelAdr, setModelAdr] = useState('');
@@ -153,6 +154,7 @@ export default function OptimizationPage() {
       setDraftLoanStructure(s.loanStructure ?? 'fixed');
       setDraftFeePerStay(s.guestCleaningFeePerBooking ? String(s.guestCleaningFeePerBooking) : '');
       setDraftCleaningCostPerBooking(s.cleaningFeePerBooking ? String(s.cleaningFeePerBooking) : '');
+      setDraftCapitalDeployed(s.totalCapitalDeployed ? String(s.totalCapitalDeployed) : '');
       setDraftYourAdr(s.yourAdr ? String(s.yourAdr) : '');
       if (s.sensitivityAdr) setModelAdr(String(s.sensitivityAdr));
       if (s.sensitivityAvgStay) setModelAvgStay(String(s.sensitivityAvgStay));
@@ -214,6 +216,7 @@ export default function OptimizationPage() {
       loanBalance: parseFloat(draftBalance) || undefined,
       loanTermYears: parseInt(draftLoanTerm) || undefined,
       loanStructure: draftLoanStructure,
+      totalCapitalDeployed: parseFloat(draftCapitalDeployed) || undefined,
     });
   }
 
@@ -925,7 +928,7 @@ export default function OptimizationPage() {
 
               {pitiOpen && (
                 <div className="pt-4 border-t border-slate-100">
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
                     <InlineInput label="Mortgage Rate" value={draftRate} onChange={setDraftRate} onBlur={savePiti}
                       unit="%" placeholder="e.g. 6.75" step="0.01" note="Current interest rate" />
                     <InlineInput label="Property Value" value={draftValue} onChange={setDraftValue} onBlur={savePiti}
@@ -934,6 +937,8 @@ export default function OptimizationPage() {
                       unit="$" placeholder="e.g. 320000" note="Current loan balance" />
                     <InlineInput label="Remaining Term" value={draftLoanTerm} onChange={setDraftLoanTerm} onBlur={savePiti}
                       placeholder="e.g. 27" note="Years remaining on loan" />
+                    <InlineInput label="Capital Deployed" value={draftCapitalDeployed} onChange={setDraftCapitalDeployed} onBlur={savePiti}
+                      unit="$" placeholder="e.g. 196000" note="Down payment + reno + startup" />
                   </div>
                   <div className="mt-4">
                     <p className="text-xs text-slate-500 mb-2">Loan Structure</p>

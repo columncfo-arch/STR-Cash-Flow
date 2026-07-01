@@ -156,15 +156,40 @@ export default function Dashboard() {
   const [prevStatement, setPrevStatement] = useState<AnnualStatement | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null); // 0-indexed
+  const [allYears, setAllYears] = useState<number[]>([]);
+  const [allTimeNetIncome, setAllTimeNetIncome] = useState<number | null>(null);
   const now = new Date();
   const year = now.getFullYear();
   const currentMonthIdx = now.getMonth();
 
   useEffect(() => {
-    fetch('/api/income-statement?year=' + year).then(r => r.json()).then(d => setStatement(d.statement));
+    fetch('/api/income-statement?year=' + year)
+      .then(r => r.json())
+      .then(d => {
+        setStatement(d.statement);
+        setAllYears(d.years ?? []);
+      });
     fetch('/api/income-statement?year=' + (year - 1)).then(r => r.json()).then(d => setPrevStatement(d.statement));
     fetch('/api/settings').then(r => r.json()).then(setSettings);
   }, []);
+
+  // Compute all-time cumulative net income across every available year
+  useEffect(() => {
+    if (!statement || allYears.length === 0) return;
+    const currentYtd = statement.months
+      .slice(0, currentMonthIdx + 1)
+      .reduce((s, m) => s + m.netIncome, 0);
+    const pastYears = allYears.filter(y => y < year);
+    if (pastYears.length === 0) {
+      setAllTimeNetIncome(currentYtd);
+      return;
+    }
+    Promise.all(
+      pastYears.map(y =>
+        fetch('/api/income-statement?year=' + y).then(r => r.json()).then(d => d.statement?.netIncome ?? 0)
+      )
+    ).then(past => setAllTimeNetIncome(past.reduce((s, n) => s + n, 0) + currentYtd));
+  }, [statement, allYears, year, currentMonthIdx]);
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: settings?.currency ?? 'USD', maximumFractionDigits: 0 }).format(n);
@@ -445,6 +470,68 @@ export default function Dashboard() {
             <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Platform Breakdown</h3>
             <PlatformTable byPlatform={ytdByPlatform} totalRevenue={ytdGross} fmt={fmt} />
           </div>
+
+          {/* Total Return card — only when equity settings are present */}
+          {settings?.propertyValue && settings?.loanBalance && (() => {
+            const equity = settings.propertyValue - settings.loanBalance;
+            const deployed = settings.totalCapitalDeployed ?? null;
+            const equityGain = deployed != null ? equity - deployed : null;
+            const totalReturn = deployed != null && allTimeNetIncome != null ? equityGain! + allTimeNetIncome : null;
+            const returnPct = totalReturn != null && deployed ? (totalReturn / deployed) * 100 : null;
+            return (
+              <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+                <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-1">Total Return Summary</h3>
+                <p className="text-xs text-slate-400 mb-5">Property equity + cumulative cash flow since acquisition</p>
+
+                <div className="grid grid-cols-3 gap-6 mb-5">
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Current Equity</p>
+                    <p className="text-2xl font-bold text-slate-900">{fmt(equity)}</p>
+                    <p className="text-[11px] text-slate-400 mt-1">{fmt(settings.propertyValue)} value − {fmt(settings.loanBalance)} mortgage</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Capital Deployed</p>
+                    {deployed != null ? (
+                      <>
+                        <p className="text-2xl font-bold text-slate-900">{fmt(deployed)}</p>
+                        <p className="text-[11px] text-slate-400 mt-1">Down payment + reno / startup</p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-slate-400 mt-1">Set in Optimization → PITI</p>
+                    )}
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-500 mb-1">Cumulative Cash Flow</p>
+                    {allTimeNetIncome != null ? (
+                      <>
+                        <p className={`text-2xl font-bold ${allTimeNetIncome >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{fmt(allTimeNetIncome)}</p>
+                        <p className="text-[11px] text-slate-400 mt-1">All years combined</p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-slate-400 mt-1">Loading…</p>
+                    )}
+                  </div>
+                </div>
+
+                {totalReturn != null && returnPct != null && (
+                  <div className="border-t border-slate-100 pt-4">
+                    <div className="flex flex-wrap items-baseline gap-3">
+                      <span className="text-xs text-slate-500 uppercase tracking-wide">Total Return</span>
+                      <span className={`text-2xl font-bold ${totalReturn >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                        {totalReturn >= 0 ? '+' : ''}{fmt(totalReturn)}
+                      </span>
+                      <span className={`text-sm font-semibold ${returnPct >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {returnPct >= 0 ? '+' : ''}{returnPct.toFixed(1)}% on capital deployed
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-400 mt-1.5">
+                      Equity {equityGain! >= 0 ? 'gain' : 'shortfall'} of {fmt(Math.abs(equityGain!))} {equityGain! >= 0 ? '+' : '−'} {fmt(Math.abs(allTimeNetIncome!))} cumulative cash flow
+                    </p>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
     </div>
