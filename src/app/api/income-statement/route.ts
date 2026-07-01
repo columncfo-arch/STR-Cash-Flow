@@ -39,7 +39,6 @@ function buildPnL(
   expenses: Expense[],
   monthlyPITI: number,
   months: number,
-  cleaningFeePerBooking: number,
 ): PnLSummary {
   const grossRevenue = bookings.reduce((s, b) => s + b.income, 0);
   const platformFees = bookings.reduce((s, b) => s + (b.platformFee ?? 0), 0);
@@ -51,8 +50,6 @@ function buildPnL(
   for (const e of expenses) {
     expensesByCategory[e.category] = (expensesByCategory[e.category] ?? 0) + e.amount;
   }
-  // Auto-add cleaning expense based on booking count
-  expensesByCategory.cleaning += cleaningFeePerBooking * bookings.length;
 
   const refunds = expensesByCategory.refund;
   const netRevenue = grossRevenue - platformFees - fastPayFees - taxRemitted - refunds;
@@ -94,7 +91,6 @@ function buildMonthly(
   bookings: Booking[],
   expenses: Expense[],
   monthlyPITI: number,
-  cleaningFeePerBooking: number,
 ): MonthlyStatement {
   // Use string prefix to avoid timezone shifts from Date parsing
   const prefix = `${year}-${String(month).padStart(2, '0')}`;
@@ -116,7 +112,7 @@ function buildMonthly(
   // show actual revenue/expenses without PITI so YTD doesn't crater on the 1st.
   const now = new Date();
   const monthElapsed = year < now.getFullYear() || month < now.getMonth() + 1;
-  const pnl = buildPnL(monthBookings, monthExpenses, monthElapsed ? monthlyPITI : 0, 1, cleaningFeePerBooking);
+  const pnl = buildPnL(monthBookings, monthExpenses, monthElapsed ? monthlyPITI : 0, 1);
 
   return {
     year,
@@ -142,7 +138,7 @@ export async function GET(req: Request) {
 
     const months: MonthlyStatement[] = [];
     for (let m = 1; m <= 12; m++) {
-      months.push(buildMonthly(year, m, allBookings, allExpenses, settings.monthlyPITI, settings.cleaningFeePerBooking ?? 0));
+      months.push(buildMonthly(year, m, allBookings, allExpenses, settings.monthlyPITI));
     }
 
     const yearBookings = allBookings.filter(b => b.checkIn.startsWith(String(year)));
@@ -165,7 +161,7 @@ export async function GET(req: Request) {
     // For the current year: count only completed months (getMonth() is 0-indexed, so June 30 = 5 = 6 complete months).
     // This prevents PITI from jumping on the 1st of the month before any revenue arrives.
     const pitiMonths = year < now.getFullYear() ? 12 : Math.min(now.getMonth(), 12);
-    const annualPnL = buildPnL(yearBookings, yearExpenses, settings.monthlyPITI, pitiMonths, settings.cleaningFeePerBooking ?? 0);
+    const annualPnL = buildPnL(yearBookings, yearExpenses, settings.monthlyPITI, pitiMonths);
 
     const statement: AnnualStatement = {
       year,
