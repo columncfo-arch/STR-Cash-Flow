@@ -216,10 +216,8 @@ export default function Dashboard() {
   const ytdGross = ytdMonths.reduce((s, m) => s + m.grossRevenue, 0);
   const ytdNetIncome = ytdMonths.reduce((s, m) => s + m.netIncome, 0);
   const ytdNights = ytdMonths.reduce((s, m) => s + m.totalNights, 0);
-  const ytdBookingCount = ytdMonths.reduce((s, m) => s + m.bookings.filter(b => b.income > 0).length, 0);
   const ytdOccupancy = ytdMonths.length > 0 ? ytdMonths.reduce((s, m) => s + m.occupancyRate, 0) / ytdMonths.length : 0;
   const ytdAdr = ytdNights > 0 ? ytdGross / ytdNights : null;
-  const ytdAvgStay = ytdBookingCount > 0 ? ytdNights / ytdBookingCount : null;
   const ytdPnL: PnLData = {
     grossRevenue: ytdGross,
     platformFees: ytdMonths.reduce((s, m) => s + m.platformFees, 0),
@@ -296,10 +294,8 @@ export default function Dashboard() {
   // KPI values — switch between YTD and selected month
   const kpiGross = selMonth ? selMonth.grossRevenue : ytdGross;
   const kpiNetIncome = selMonth ? selMonth.netIncome : ytdNetIncome;
-  const kpiNights = selMonth ? selMonth.totalNights : ytdNights;
   const kpiOccupancy = selMonth ? selMonth.occupancyRate : ytdOccupancy;
   const kpiAdr = selMonth ? selAdr : ytdAdr;
-  const kpiAvgStay = selMonth ? selAvgStay : ytdAvgStay;
   const kpiSuffix = selMonth ? '' : ' YTD';
 
   return (
@@ -309,15 +305,52 @@ export default function Dashboard() {
         <p className="text-slate-500 text-sm mt-1">{year} overview</p>
       </div>
 
-      {/* KPI cards — 6 across on large screens */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+      {/* KPI cards — 4 consequential metrics */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
         <StatCard label={`Gross Revenue${kpiSuffix}`} value={fmt(kpiGross)} color="text-emerald-700" />
         <StatCard label={`Net Income${kpiSuffix}`} value={fmt(kpiNetIncome)} color={kpiNetIncome >= 0 ? 'text-emerald-700' : 'text-red-600'} />
-        <StatCard label="Nights Booked" value={kpiNights.toString()} sub={`nights${kpiSuffix}`} />
         <StatCard label="Avg Occupancy" value={`${kpiOccupancy.toFixed(1)}%`} sub={kpiSuffix.trim() || 'this month'} />
         <StatCard label="ADR" value={kpiAdr != null ? fmt(kpiAdr) : '—'} sub={`per night${kpiSuffix}`} color="text-emerald-700" />
-        <StatCard label="Avg Stay" value={kpiAvgStay != null ? `${kpiAvgStay.toFixed(1)} nts` : '—'} sub="per booking" />
       </div>
+
+      {/* Pacing — the primary "am I on track?" answer */}
+      {prevHasData && annualForecast != null && !selMonth && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+            <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">This Year — On Track?</p>
+            <div className="flex items-baseline gap-2 mb-2">
+              <span className="text-2xl font-bold text-slate-900">{fmt(ytdGross)}</span>
+              <span className="text-sm text-slate-400">of {fmt(ytdForecast!)} target</span>
+            </div>
+            {pacingVariance != null && (
+              <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2.5 py-1 rounded-lg ${pacingVariance >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                {pacingVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(pacingVariance))}
+                {pacingVariancePct != null && <span className="font-normal text-xs">({Math.abs(pacingVariancePct).toFixed(1)}%) {pacingVariance >= 0 ? 'ahead' : 'behind'}</span>}
+              </span>
+            )}
+            <p className="text-xs text-slate-400 mt-3">Full-year target {fmt(annualForecast)}</p>
+          </div>
+
+          {monthlyForecasts[currentMonthIdx] != null && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">{MONTHS_LONG[currentMonthIdx]} — Monthly Target</p>
+              <div className="flex items-baseline gap-2 mb-3">
+                <span className="text-2xl font-bold text-slate-900">{fmt(statement?.months[currentMonthIdx].grossRevenue ?? 0)}</span>
+                <span className="text-sm text-slate-400">of {fmt(monthlyForecasts[currentMonthIdx]!)} target</span>
+              </div>
+              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-emerald-500 rounded-full"
+                  style={{ width: `${Math.min(100, ((statement?.months[currentMonthIdx].grossRevenue ?? 0) / monthlyForecasts[currentMonthIdx]!) * 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-400 mt-1.5">
+                {(((statement?.months[currentMonthIdx].grossRevenue ?? 0) / monthlyForecasts[currentMonthIdx]!) * 100).toFixed(0)}% of monthly target
+              </p>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Chart */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
@@ -326,30 +359,6 @@ export default function Dashboard() {
           Monthly Revenue by Platform &amp; Net Income
         </h2>
         <p className="text-xs text-slate-400 mb-4">Click a month to drill into its P&amp;L</p>
-        {prevHasData && annualForecast != null && (
-          <div className="flex flex-wrap gap-3 mb-4">
-            <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-              <span className="text-slate-500">Annual Target</span>
-              <span className="font-semibold text-slate-800 ml-2">{fmt(annualForecast)}</span>
-            </div>
-            <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-              <span className="text-slate-500">YTD Target</span>
-              <span className="font-semibold text-slate-800 ml-2">{fmt(ytdForecast!)}</span>
-            </div>
-            <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
-              <span className="text-slate-500">YTD Actual</span>
-              <span className="font-semibold text-slate-800 ml-2">{fmt(ytdGross)}</span>
-            </div>
-            {pacingVariance != null && (
-              <div className={`text-xs rounded-lg px-3 py-2 border ${pacingVariance >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
-                <span className={pacingVariance >= 0 ? 'text-emerald-700' : 'text-red-600'}>
-                  {pacingVariance >= 0 ? '▲ Ahead ' : '▼ Behind '}{fmt(Math.abs(pacingVariance))}
-                  {pacingVariancePct != null ? ` (${Math.abs(pacingVariancePct).toFixed(1)}%)` : ''}
-                </span>
-              </div>
-            )}
-          </div>
-        )}
         {hasData ? (
           <>
             <ResponsiveContainer width="100%" height={300}>
