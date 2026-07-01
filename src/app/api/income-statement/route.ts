@@ -39,6 +39,7 @@ function buildPnL(
   expenses: Expense[],
   monthlyPITI: number,
   months: number,
+  cleaningCostPerBooking: number = 0,
 ): PnLSummary {
   const grossRevenue = bookings.reduce((s, b) => s + b.income, 0);
   const platformFees = bookings.reduce((s, b) => s + (b.platformFee ?? 0), 0);
@@ -49,6 +50,10 @@ function buildPnL(
   const expensesByCategory = emptyExpensesByCategory();
   for (const e of expenses) {
     expensesByCategory[e.category] = (expensesByCategory[e.category] ?? 0) + e.amount;
+  }
+  // Auto-expense: cleaning cost per booking (set in Settings, separate from guest-facing fee)
+  if (cleaningCostPerBooking > 0) {
+    expensesByCategory.cleaning += cleaningCostPerBooking * bookings.length;
   }
 
   const refunds = expensesByCategory.refund;
@@ -91,6 +96,7 @@ function buildMonthly(
   bookings: Booking[],
   expenses: Expense[],
   monthlyPITI: number,
+  cleaningCostPerBooking: number = 0,
 ): MonthlyStatement {
   // Use string prefix to avoid timezone shifts from Date parsing
   const prefix = `${year}-${String(month).padStart(2, '0')}`;
@@ -108,7 +114,7 @@ function buildMonthly(
     byPlatform[b.platform].bookings += 1;
   }
 
-  const pnl = buildPnL(monthBookings, monthExpenses, monthlyPITI, 1);
+  const pnl = buildPnL(monthBookings, monthExpenses, monthlyPITI, 1, cleaningCostPerBooking);
 
   return {
     year,
@@ -132,9 +138,10 @@ export async function GET(req: Request) {
       loadSettings(),
     ]);
 
+    const cleaningCostPerBooking = settings.cleaningFeePerBooking ?? 0;
     const months: MonthlyStatement[] = [];
     for (let m = 1; m <= 12; m++) {
-      months.push(buildMonthly(year, m, allBookings, allExpenses, settings.monthlyPITI));
+      months.push(buildMonthly(year, m, allBookings, allExpenses, settings.monthlyPITI, cleaningCostPerBooking));
     }
 
     const yearBookings = allBookings.filter(b => b.checkIn.startsWith(String(year)));
@@ -155,7 +162,7 @@ export async function GET(req: Request) {
 
     const now = new Date();
     const pitiMonths = year < now.getFullYear() ? 12 : Math.min(now.getMonth() + 1, 12);
-    const annualPnL = buildPnL(yearBookings, yearExpenses, settings.monthlyPITI, pitiMonths);
+    const annualPnL = buildPnL(yearBookings, yearExpenses, settings.monthlyPITI, pitiMonths, cleaningCostPerBooking);
 
     const statement: AnnualStatement = {
       year,

@@ -119,6 +119,7 @@ export default function OptimizationPage() {
   const [pitiOpen, setPitiOpen] = useState(false);
   const [draftYourAdr, setDraftYourAdr] = useState('');
   const [draftFeePerStay, setDraftFeePerStay] = useState('');
+  const [draftCleaningCostPerBooking, setDraftCleaningCostPerBooking] = useState('');
 
   // Sensitivity model state
   const [modelAdr, setModelAdr] = useState('');
@@ -151,6 +152,7 @@ export default function OptimizationPage() {
       setDraftLoanTerm(s.loanTermYears ? String(s.loanTermYears) : '');
       setDraftLoanStructure(s.loanStructure ?? 'fixed');
       setDraftFeePerStay(s.guestCleaningFeePerBooking ? String(s.guestCleaningFeePerBooking) : '');
+      setDraftCleaningCostPerBooking(s.cleaningFeePerBooking ? String(s.cleaningFeePerBooking) : '');
       setDraftYourAdr(s.yourAdr ? String(s.yourAdr) : '');
       if (s.sensitivityAdr) setModelAdr(String(s.sensitivityAdr));
       if (s.sensitivityAvgStay) setModelAvgStay(String(s.sensitivityAvgStay));
@@ -219,7 +221,7 @@ export default function OptimizationPage() {
     saveSection('cleaning', {
       benchmarkCleaningFee: parseFloat(draftCleaningFee) || undefined,
       guestCleaningFeePerBooking: parseFloat(draftFeePerStay) || 0,
-      cleaningFeePerBooking: 0,  // clear any value mis-saved here previously
+      cleaningFeePerBooking: parseFloat(draftCleaningCostPerBooking) || 0,
     });
   }
 
@@ -847,7 +849,7 @@ export default function OptimizationPage() {
             {/* Cleaning fee card */}
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-4">
               <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-4">Cleaning Fee Analysis</p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 mb-4">
                 <InlineInput
                   label="Your Fee / Stay"
                   value={draftFeePerStay}
@@ -855,6 +857,14 @@ export default function OptimizationPage() {
                   onBlur={saveCleaningFee}
                   unit="$" placeholder="e.g. 150"
                   note="Charged to guest each booking"
+                />
+                <InlineInput
+                  label="Your Cost / Stay"
+                  value={draftCleaningCostPerBooking}
+                  onChange={setDraftCleaningCostPerBooking}
+                  onBlur={saveCleaningFee}
+                  unit="$" placeholder="e.g. 110"
+                  note="Paid to cleaner — auto-expensed in P&L"
                 />
                 <InlineInput
                   label="Sub-Market Benchmark"
