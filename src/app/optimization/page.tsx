@@ -5,17 +5,12 @@ import {
   Target, Check, DollarSign, ChevronDown, ChevronUp, AlertTriangle,
 } from 'lucide-react';
 import {
-  ComposedChart, Line, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend,
+  BarChart, Bar, Cell, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, ReferenceLine,
 } from 'recharts';
 
 const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-const PLATFORM_COLORS: Record<string, string> = {
-  Airbnb: '#f43f5e',
-  'Booking.com': '#3b82f6',
-  VRBO: '#6366f1',
-};
 
 function pct(n: number) { return `${n.toFixed(1)}%`; }
 function mean(arr: number[]) { return arr.length ? arr.reduce((s, v) => s + v, 0) / arr.length : 0; }
@@ -217,26 +212,19 @@ export default function OptimizationPage() {
 
   // ── ADR ───────────────────────────────────────────────────────────────────────
 
-  const adrChartData = activeMonths.map(m => {
-    const airbnbAdr = m.byPlatform.airbnb.nights > 0 ? m.byPlatform.airbnb.income / m.byPlatform.airbnb.nights : null;
-    const vrboAdr   = m.byPlatform.vrbo.nights   > 0 ? m.byPlatform.vrbo.income   / m.byPlatform.vrbo.nights   : null;
-    const bookAdr   = m.byPlatform.booking.nights > 0 ? m.byPlatform.booking.income / m.byPlatform.booking.nights : null;
-    const overallAdr = m.totalNights > 0 ? m.grossRevenue / m.totalNights : null;
-    return {
-      name: MONTHS[m.month - 1],
-      Airbnb:        airbnbAdr  != null ? Math.round(airbnbAdr)  : null,
-      VRBO:          vrboAdr    != null ? Math.round(vrboAdr)    : null,
-      'Booking.com': bookAdr    != null ? Math.round(bookAdr)    : null,
-      'Your ADR':    overallAdr != null ? Math.round(overallAdr) : null,
-      Benchmark:     benchmarkAdr > 0   ? benchmarkAdr           : undefined,
-    };
-  });
+  type PlatformKey = 'airbnb' | 'vrbo' | 'booking' | 'direct' | 'other';
+  const platformData = (['airbnb', 'vrbo', 'booking', 'direct', 'other'] as PlatformKey[]).map(p => {
+    const label = p === 'booking' ? 'Booking.com' : p === 'airbnb' ? 'Airbnb' : p === 'vrbo' ? 'VRBO' : p === 'direct' ? 'Direct' : 'Other';
+    const income   = activeMonths.reduce((s, m) => s + (m.byPlatform[p]?.income   ?? 0), 0);
+    const nights   = activeMonths.reduce((s, m) => s + (m.byPlatform[p]?.nights   ?? 0), 0);
+    const bookings = activeMonths.reduce((s, m) => s + (m.byPlatform[p]?.bookings ?? 0), 0);
+    const adr   = nights > 0 ? income / nights : 0;
+    const share = grossRevenue > 0 ? (income / grossRevenue) * 100 : 0;
+    return { platform: label, income, nights, bookings, adr, share };
+  }).filter(p => p.bookings > 0);
 
-  type PlatformKey = 'airbnb' | 'vrbo' | 'booking';
-  const platformStats = (['airbnb', 'vrbo', 'booking'] as PlatformKey[]).map(p => {
-    const label = p === 'booking' ? 'Booking.com' : p === 'airbnb' ? 'Airbnb' : 'VRBO';
-    return { platform: label, bookings: activeMonths.reduce((s, m) => s + m.byPlatform[p].bookings, 0) };
-  });
+  const topAdr = platformData.length > 0 ? Math.max(...platformData.map(p => p.adr)) : 0;
+  const topPlatform = platformData.find(p => p.adr === topAdr);
 
   const overallAdrs = activeMonths
     .map(m => m.totalNights > 0 ? m.grossRevenue / m.totalNights : 0)
@@ -247,6 +235,21 @@ export default function OptimizationPage() {
   const adrGap = benchmarkAdr > 0 ? effectiveAdr - benchmarkAdr : null;
   const adrOpportunity = adrGap != null && adrGap < 0 && totalNights > 0
     ? Math.abs(adrGap) * totalNights : null;
+
+  // ── Occupancy optimization ────────────────────────────────────────────────────
+
+  const annualOccPct = totalNights > 0 ? (totalNights / 365) * 100 : 0;
+  const nightsAtRisk = Math.max(0, 365 - totalNights);
+
+  const occupancyChartData = (statement?.months ?? []).map(m => {
+    const daysInMonth = new Date(m.year, m.month, 0).getDate();
+    const occ = parseFloat(((m.totalNights / daysInMonth) * 100).toFixed(1));
+    const monthAdr = m.totalNights > 0 ? m.grossRevenue / m.totalNights : 0;
+    const flag = m.totalNights > 0 && overallAvgAdr > 0 && monthAdr > overallAvgAdr * 1.1 && occ < annualOccPct * 0.85;
+    return { name: MONTHS[m.month - 1], occupancy: occ, nights: m.totalNights, monthAdr, flag };
+  });
+
+  const flaggedMonths = occupancyChartData.filter(d => d.flag);
 
   // ── Cleaning fee ──────────────────────────────────────────────────────────────
   // Use user-editable fee per stay (initialized from Settings); booking-record cleaningFee
@@ -271,7 +274,7 @@ export default function OptimizationPage() {
   // YTD PITI = months with actual data × monthly PITI; compare against YTD gross revenue
   const ytdMonths = activeMonths.length;
   const ytdPITI = (settings?.monthlyPITI ?? 0) * ytdMonths;
-  const pitiPctRevenue = grossRevenue > 0 ? (ytdPITI / grossRevenue) * 100 : 0;
+  const pitiCoverage = grossRevenue - ytdPITI;
 
   const mortgageRate = parseFloat(draftRate) || 0;
   const propertyValue = parseFloat(draftValue) || 0;
@@ -331,6 +334,19 @@ export default function OptimizationPage() {
 
   opportunities.sort((a, b) => b.amount - a.amount);
   const totalOpportunity = opportunities.reduce((s, o) => s + o.amount, 0);
+
+  // ── Current trajectory (annualized YTD) ──────────────────────────────────────
+
+  const annFactor = ytdMonths > 0 ? 12 / ytdMonths : 1;
+  const trajNights = totalNights * annFactor;
+  const trajOccupancy = (trajNights / 365) * 100;
+  const trajStays = totalBookings * annFactor;
+  const trajGrossRevenue = grossRevenue * annFactor;
+  const ytdOtherOpEx = (statement?.totalOperatingExpenses ?? 0) - (statement?.expensesByCategory.cleaning ?? 0);
+  const trajCleaningCollected = cleaningFeeIncome * annFactor;
+  const trajCleaningCost = cleaningCostPaid * annFactor;
+  const trajOpEx = ytdOtherOpEx * annFactor;
+  const trajNetCash = trajGrossRevenue + trajCleaningCollected - trajCleaningCost - trajOpEx - annualPITI;
 
   // ── Sensitivity scenarios ─────────────────────────────────────────────────────
 
@@ -431,36 +447,6 @@ export default function OptimizationPage() {
           {/* ══════════════════════════════════════════════════ */}
           <SectionHeader title="Revenue Optimization" />
 
-          {/* ADR chart */}
-          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-4">
-            <h3 className="text-sm font-semibold text-slate-700 mb-0.5">ADR by Platform — Monthly Trend</h3>
-            <p className="text-xs text-slate-400 mb-4">
-              Persistent gaps between platforms signal a pricing or listing quality opportunity on the lower-performing channel.
-            </p>
-            <ResponsiveContainer width="100%" height={260}>
-              <ComposedChart data={adrChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${v}`} />
-                <Tooltip formatter={(v: unknown) => v != null ? fmt(Number(v)) : '—'} />
-                <Legend />
-                {(['Airbnb', 'VRBO', 'Booking.com'] as const).map(p => (
-                  <Line key={p} type="monotone" dataKey={p}
-                    stroke={PLATFORM_COLORS[p]} strokeWidth={2}
-                    dot={{ r: 3, strokeWidth: 0 }} connectNulls={false}
-                    hide={!platformStats.some(s => s.platform === p && s.bookings > 0)}
-                  />
-                ))}
-                <Line type="monotone" dataKey="Your ADR" stroke="#10b981" strokeWidth={2.5}
-                  strokeDasharray="6 3" dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }} connectNulls />
-                {benchmarkAdr > 0 && (
-                  <Line type="monotone" dataKey="Benchmark" stroke="#94a3b8" strokeWidth={1.5}
-                    strokeDasharray="4 4" dot={false} name="Sub-Market ADR" />
-                )}
-              </ComposedChart>
-            </ResponsiveContainer>
-          </div>
-
           {/* ADR benchmark config */}
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-8">
             <div className="grid grid-cols-3 gap-4 mb-5">
@@ -510,6 +496,144 @@ export default function OptimizationPage() {
               </div>
             </div>
           </div>
+
+          {/* Platform Mix Optimization */}
+          {platformData.length > 1 && (
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-8">
+              <h3 className="text-sm font-semibold text-slate-700 mb-1">Platform Mix Optimization</h3>
+              <p className="text-xs text-slate-400 mb-4">
+                Compare ADR and revenue share across platforms — large gaps signal an under-priced or underlisted channel.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-200">
+                      <th className="text-left text-xs font-semibold text-slate-500 pb-2 pr-4">Platform</th>
+                      <th className="text-right text-xs font-semibold text-slate-500 pb-2 px-4">Revenue</th>
+                      <th className="text-right text-xs font-semibold text-slate-500 pb-2 px-4">Share</th>
+                      <th className="text-right text-xs font-semibold text-slate-500 pb-2 px-4">ADR</th>
+                      <th className="text-right text-xs font-semibold text-slate-500 pb-2 px-4">vs Best</th>
+                      <th className="text-left text-xs font-semibold text-slate-500 pb-2 pl-4">Signal</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {platformData.map((p, i) => {
+                      const gap = p.adr - topAdr;
+                      const gapPct = topAdr > 0 ? (gap / topAdr) * 100 : 0;
+                      const isBest = p.adr === topAdr && topAdr > 0;
+                      const isUnderpriced = gapPct < -15;
+                      const isLowVolume = p.share < 10 && platformData.length > 1;
+                      return (
+                        <tr key={i} className="border-b border-slate-100 last:border-0">
+                          <td className="py-3 pr-4 font-medium text-slate-700">{p.platform}</td>
+                          <td className="py-3 px-4 text-right text-slate-600">{fmt(p.income)}</td>
+                          <td className="py-3 px-4 text-right text-slate-600">{pct(p.share)}</td>
+                          <td className="py-3 px-4 text-right font-semibold text-slate-800">{fmt(p.adr)}/nt</td>
+                          <td className={`py-3 px-4 text-right font-medium ${isBest ? 'text-emerald-600' : gap < 0 ? 'text-amber-600' : 'text-slate-500'}`}>
+                            {isBest ? '★ Best' : `${gap >= 0 ? '+' : ''}${fmt(gap)}`}
+                          </td>
+                          <td className="py-3 pl-4 text-xs">
+                            {isBest ? (
+                              <span className="text-emerald-600">Top performer</span>
+                            ) : isUnderpriced && isLowVolume ? (
+                              <span className="text-amber-600">Low ADR + low volume — raise pricing or improve listing</span>
+                            ) : isUnderpriced ? (
+                              <span className="text-amber-600">ADR {pct(Math.abs(gapPct))} below best — consider raising price</span>
+                            ) : isLowVolume ? (
+                              <span className="text-blue-600">Low volume — consider expanding availability</span>
+                            ) : (
+                              <span className="text-slate-400">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+              {topPlatform && platformData.filter(p => p.adr < topAdr * 0.85).length > 0 && (
+                <p className="text-xs text-slate-500 mt-3 pt-3 border-t border-slate-100">
+                  <span className="font-medium">{topPlatform.platform}</span> leads at {fmt(topAdr)}/night.
+                  {platformData.filter(p => p.adr < topAdr * 0.85 && p.adr > 0).map(p =>
+                    ` ${p.platform} (${fmt(p.adr)}/nt) is ${pct(((topAdr - p.adr) / topAdr) * 100)} below — test higher rates there.`
+                  ).join('')}
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ══════════════════════════════════════════════════ */}
+          {/* OCCUPANCY OPTIMIZATION                             */}
+          {/* ══════════════════════════════════════════════════ */}
+          <SectionHeader title="Occupancy Optimization" />
+
+          <div className="grid grid-cols-3 gap-4 mb-4">
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 text-center">
+              <p className="text-xs text-slate-400 mb-1">Annual Occupancy</p>
+              <p className="text-2xl font-bold text-slate-900">
+                {totalNights > 0 ? pct(annualOccPct) : '—'}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-1">{totalNights} nights booked of 365</p>
+            </div>
+            <div className={`rounded-xl border shadow-sm p-4 text-center ${nightsAtRisk > 180 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
+              <p className="text-xs text-slate-400 mb-1">Nights at Risk</p>
+              <p className={`text-2xl font-bold ${nightsAtRisk > 180 ? 'text-amber-700' : 'text-slate-900'}`}>
+                {nightsAtRisk}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-1">unbooked days remaining</p>
+            </div>
+            <div className={`rounded-xl border shadow-sm p-4 text-center ${flaggedMonths.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
+              <p className="text-xs text-slate-400 mb-1">Price-Suppressed Months</p>
+              <p className={`text-2xl font-bold ${flaggedMonths.length > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                {flaggedMonths.length}
+              </p>
+              <p className="text-[10px] text-slate-400 mt-1">
+                {flaggedMonths.length > 0 ? flaggedMonths.map(d => d.name).join(', ') : 'none detected'}
+              </p>
+            </div>
+          </div>
+
+          {occupancyChartData.length > 0 && (
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-8">
+              <h3 className="text-sm font-semibold text-slate-700 mb-1">Monthly Occupancy Rate</h3>
+              <p className="text-xs text-slate-400 mb-4">
+                Amber bars have above-average ADR but below-average occupancy — a signal that pricing may be suppressing bookings.
+              </p>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={occupancyChartData} barSize={22}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
+                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+                  <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `${v}%`} domain={[0, 100]} />
+                  <Tooltip
+                    formatter={(v: unknown) => [`${Number(v).toFixed(1)}%`, 'Occupancy']}
+                    labelFormatter={label => {
+                      const d = occupancyChartData.find(x => x.name === label);
+                      return d ? `${label} · ${d.nights} nights · ADR ${d.monthAdr > 0 ? fmt(d.monthAdr) : '—'}` : label;
+                    }}
+                  />
+                  {annualOccPct > 0 && (
+                    <ReferenceLine y={annualOccPct} stroke="#94a3b8" strokeDasharray="4 4"
+                      label={{ value: `Avg ${annualOccPct.toFixed(0)}%`, position: 'insideTopRight', fontSize: 10, fill: '#94a3b8' }} />
+                  )}
+                  <Bar dataKey="occupancy" name="Occupancy" radius={[4, 4, 0, 0]}>
+                    {occupancyChartData.map((d, i) => (
+                      <Cell key={i} fill={d.flag ? '#f59e0b' : d.nights === 0 ? '#e2e8f0' : '#10b981'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              {flaggedMonths.length > 0 && (
+                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mt-4 flex items-start gap-2">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                  <p className="text-xs text-amber-800">
+                    <span className="font-semibold">{flaggedMonths.map(d => d.name).join(', ')}</span>
+                    {flaggedMonths.length === 1 ? ' has' : ' have'} above-average ADR but below-average occupancy —
+                    consider testing lower rates to capture more bookings in {flaggedMonths.length === 1 ? 'that month' : 'those months'}.
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ══════════════════════════════════════════════════ */}
           {/* EXPENSE OPTIMIZATION                               */}
@@ -610,16 +734,18 @@ export default function OptimizationPage() {
                 <p className="text-[10px] text-slate-400 mt-1">total fixed cost</p>
               </div>
               <div className={`rounded-lg p-4 text-center ${
-                pitiPctRevenue > 60 ? 'bg-red-50 border border-red-200'
-                : pitiPctRevenue > 40 ? 'bg-amber-50 border border-amber-200'
+                pitiCoverage < 0 ? 'bg-red-50 border border-red-200'
+                : pitiCoverage < (settings?.monthlyPITI ?? 0) * 2 ? 'bg-amber-50 border border-amber-200'
                 : 'bg-emerald-50 border border-emerald-200'
               }`}>
-                <p className="text-xs text-slate-400 mb-1">PITI % of YTD Revenue</p>
-                <p className={`text-2xl font-bold ${pitiPctRevenue > 60 ? 'text-red-700' : pitiPctRevenue > 40 ? 'text-amber-700' : 'text-emerald-700'}`}>
-                  {grossRevenue > 0 ? pct(pitiPctRevenue) : '—'}
+                <p className="text-xs text-slate-400 mb-1">YTD Revenue vs PITI</p>
+                <p className={`text-2xl font-bold ${pitiCoverage < 0 ? 'text-red-700' : pitiCoverage < (settings?.monthlyPITI ?? 0) * 2 ? 'text-amber-700' : 'text-emerald-700'}`}>
+                  {grossRevenue > 0
+                    ? (pitiCoverage >= 0 ? `+${fmt(pitiCoverage)}` : `(${fmt(Math.abs(pitiCoverage))})`)
+                    : '—'}
                 </p>
                 <p className="text-[10px] text-slate-400 mt-1">
-                  {ytdMonths}mo PITI ÷ YTD revenue
+                  {pitiCoverage >= 0 ? 'surplus after ' : 'shortfall vs '}{ytdMonths}mo PITI
                 </p>
               </div>
             </div>
@@ -856,6 +982,12 @@ export default function OptimizationPage() {
                         {s.target === 0 ? 'Break-Even ($0)' : `${fmt(s.target)} Profit`}
                       </th>
                     ))}
+                    {ytdMonths > 0 && (
+                      <th className="px-5 py-3 text-right font-semibold text-indigo-700 bg-indigo-50 border-l border-indigo-100">
+                        Your Pace ×12
+                        <div className="text-[10px] font-normal text-indigo-400">{ytdMonths}mo annualized</div>
+                      </th>
+                    )}
                   </tr>
                 </thead>
                 <tbody>
@@ -866,30 +998,35 @@ export default function OptimizationPage() {
                         {s.target === 0 ? '$0.00' : `+${fmt2(s.target)}`}
                       </td>
                     ))}
+                    {ytdMonths > 0 && <td className="px-5 py-2.5 text-right font-bold text-indigo-600 bg-indigo-50 border-l border-indigo-100 text-xs italic">projected</td>}
                   </tr>
                   <tr className="border-b border-slate-100">
                     <td className="px-5 py-3 text-slate-600">Annual Occupancy Rate</td>
                     {scenarios.map((s, i) => (
                       <td key={i} className="px-5 py-3 text-right font-semibold text-slate-800">{s.occupancy.toFixed(1)}%</td>
                     ))}
+                    {ytdMonths > 0 && <td className="px-5 py-3 text-right font-semibold text-indigo-700 bg-indigo-50 border-l border-indigo-100">{trajOccupancy.toFixed(1)}%</td>}
                   </tr>
                   <tr className="border-b border-slate-100 bg-slate-50">
                     <td className="px-5 py-3 text-slate-600">Nights Booked / Year</td>
                     {scenarios.map((s, i) => (
                       <td key={i} className="px-5 py-3 text-right text-slate-700">{s.nights.toFixed(1)} nights</td>
                     ))}
+                    {ytdMonths > 0 && <td className="px-5 py-3 text-right text-indigo-700 bg-indigo-50 border-l border-indigo-100">{trajNights.toFixed(1)} nights</td>}
                   </tr>
                   <tr className="border-b border-slate-100">
                     <td className="px-5 py-3 text-slate-600">Total Reservations / Year</td>
                     {scenarios.map((s, i) => (
                       <td key={i} className="px-5 py-3 text-right text-slate-700">{s.stays.toFixed(1)} stays</td>
                     ))}
+                    {ytdMonths > 0 && <td className="px-5 py-3 text-right text-indigo-700 bg-indigo-50 border-l border-indigo-100">{trajStays.toFixed(1)} stays</td>}
                   </tr>
                   <tr className="border-b border-slate-200 bg-slate-50">
                     <td className="px-5 py-3 font-semibold text-slate-700">Gross Rental Revenue</td>
                     {scenarios.map((s, i) => (
                       <td key={i} className="px-5 py-3 text-right font-semibold text-slate-800">{fmt2(s.grossRevenue)}</td>
                     ))}
+                    {ytdMonths > 0 && <td className="px-5 py-3 text-right font-semibold text-indigo-700 bg-indigo-50 border-l border-indigo-100">{fmt2(trajGrossRevenue)}</td>}
                   </tr>
                   {mCleaningFee > 0 && (
                     <tr className="border-b border-slate-100">
@@ -897,6 +1034,7 @@ export default function OptimizationPage() {
                       {scenarios.map((s, i) => (
                         <td key={i} className="px-5 py-3 text-right text-emerald-600 text-xs">+{fmt2(s.cleaningCollected)}</td>
                       ))}
+                      {ytdMonths > 0 && <td className="px-5 py-3 text-right text-indigo-500 text-xs bg-indigo-50 border-l border-indigo-100">+{fmt2(trajCleaningCollected)}</td>}
                     </tr>
                   )}
                   {mCleaningCost > 0 && (
@@ -905,14 +1043,16 @@ export default function OptimizationPage() {
                       {scenarios.map((s, i) => (
                         <td key={i} className="px-5 py-3 text-right text-red-500 text-xs">({fmt2(s.cleaningPaidOut)})</td>
                       ))}
+                      {ytdMonths > 0 && <td className="px-5 py-3 text-right text-red-400 text-xs bg-indigo-50 border-l border-indigo-100">({fmt2(trajCleaningCost)})</td>}
                     </tr>
                   )}
-                  {mOpEx > 0 && (
+                  {(mOpEx > 0 || ytdOtherOpEx > 0) && (
                     <tr className="border-b border-slate-100">
                       <td className="px-5 py-3 text-slate-600">Other Operating Expenses</td>
                       {scenarios.map((s, i) => (
                         <td key={i} className="px-5 py-3 text-right text-red-500">({fmt2(s.annualOpEx)})</td>
                       ))}
+                      {ytdMonths > 0 && <td className="px-5 py-3 text-right text-red-400 bg-indigo-50 border-l border-indigo-100">({fmt2(trajOpEx)})</td>}
                     </tr>
                   )}
                   <tr className="border-b border-slate-100">
@@ -920,6 +1060,7 @@ export default function OptimizationPage() {
                     {scenarios.map((s, i) => (
                       <td key={i} className="px-5 py-3 text-right text-red-500">({fmt2(s.annualPITI)})</td>
                     ))}
+                    {ytdMonths > 0 && <td className="px-5 py-3 text-right text-red-400 bg-indigo-50 border-l border-indigo-100">({fmt2(annualPITI)})</td>}
                   </tr>
                   <tr className="bg-slate-800">
                     <td className="px-5 py-4 font-bold text-white">Net Cash Flow</td>
@@ -928,6 +1069,11 @@ export default function OptimizationPage() {
                         {s.netCashFlow === 0 ? '$0.00' : `+${fmt2(s.netCashFlow)}`}
                       </td>
                     ))}
+                    {ytdMonths > 0 && (
+                      <td className={`px-5 py-4 text-right font-bold text-base bg-indigo-900 border-l border-indigo-700 ${trajNetCash >= 0 ? 'text-indigo-300' : 'text-red-400'}`}>
+                        {trajNetCash >= 0 ? `+${fmt2(trajNetCash)}` : `(${fmt2(Math.abs(trajNetCash))})`}
+                      </td>
+                    )}
                   </tr>
                 </tbody>
               </table>
