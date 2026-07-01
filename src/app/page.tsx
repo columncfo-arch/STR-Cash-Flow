@@ -177,6 +177,8 @@ export default function Dashboard() {
   const [allTimeNetIncome, setAllTimeNetIncome] = useState<number | null>(null);
   const [editingTarget, setEditingTarget] = useState(false);
   const [targetInput, setTargetInput] = useState('');
+  const [editingSeasonality, setEditingSeasonality] = useState(false);
+  const [seasonalityInputs, setSeasonalityInputs] = useState<string[]>(Array(12).fill(''));
   const now = new Date();
   const year = now.getFullYear();
   const currentMonthIdx = now.getMonth();
@@ -252,10 +254,18 @@ export default function Dashboard() {
 
   const growthPct = settings?.forecastGrowthByYear?.[String(year)] ?? settings?.forecastGrowthPct ?? 0;
   const growthFactor = growthPct / 100;
-  const prevHasData = prevStatement?.months.some(m => m.grossRevenue > 0) ?? false;
 
   // Manual annual target from forecast overrides (same field the LT Forecast page uses)
   const manualTarget = settings?.forecastOverrides?.[String(year)]?.revenue ?? null;
+
+  // Stored prior-year monthly actuals for seasonality — takes precedence over database records
+  const storedPriorMonthly = settings?.forecastOverrides?.[String(year - 1)]?.monthlyRevenue ?? null;
+  const effectivePriorMonthly: number[] | null =
+    storedPriorMonthly ?? (prevStatement ? prevStatement.months.map(m => m.grossRevenue) : null);
+  const effectivePriorAnnual = effectivePriorMonthly?.reduce((s, v) => s + v, 0) ?? 0;
+  const effectiveMonthsWithData = effectivePriorMonthly?.filter(v => v > 0).length ?? 0;
+  const prevHasData = effectiveMonthsWithData > 0;
+  const useSeasonality = effectivePriorAnnual > 0 && effectiveMonthsWithData >= 6;
 
   async function saveTarget() {
     if (!settings) return;
@@ -269,28 +279,39 @@ export default function Dashboard() {
     setEditingTarget(false);
   }
 
-  // Only use prior-year seasonality when we have data for most months; sparse data skews badly
-  const prevAnnualGross = prevStatement?.months.reduce((s, m) => s + m.grossRevenue, 0) ?? 0;
-  const monthsWithPriorRevenue = prevStatement?.months.filter(m => m.grossRevenue > 0).length ?? 0;
-  const useSeasonality = prevAnnualGross > 0 && monthsWithPriorRevenue >= 6;
+  async function saveSeasonality() {
+    if (!settings) return;
+    const values = seasonalityInputs.map(v => parseFloat(v.replace(/,/g, '')) || 0);
+    const priorYear = String(year - 1);
+    const overrides = { ...(settings.forecastOverrides ?? {}) };
+    overrides[priorYear] = { ...(overrides[priorYear] ?? {}), monthlyRevenue: values };
+    const updated = { ...settings, forecastOverrides: overrides };
+    await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+    setSettings(updated);
+    setEditingSeasonality(false);
+  }
+
+  function openSeasonalityEditor() {
+    const existing = storedPriorMonthly ?? effectivePriorMonthly ?? Array(12).fill(0);
+    setSeasonalityInputs(existing.map(v => v > 0 ? String(v) : ''));
+    setEditingSeasonality(true);
+    setEditingTarget(false);
+  }
 
   const monthlyForecasts: (number | null)[] = Array.from({ length: 12 }, (_, i) => {
     if (manualTarget) {
-      if (useSeasonality) {
-        const ratio = prevStatement!.months[i].grossRevenue / prevAnnualGross;
-        return Math.round(manualTarget * ratio);
+      if (useSeasonality && effectivePriorMonthly) {
+        return Math.round(manualTarget * (effectivePriorMonthly[i] / effectivePriorAnnual));
       }
       return Math.round(manualTarget / 12);
     }
-    if (!prevStatement) return null;
-    const prev = prevStatement.months[i].grossRevenue;
-    const straightLine = prevAnnualGross > 0 ? Math.round((prevAnnualGross / 12) * (1 + growthFactor)) : null;
-    if (prev > 0) return Math.round(prev * (1 + growthFactor));
-    return straightLine;
+    if (!effectivePriorMonthly) return null;
+    const prev = effectivePriorMonthly[i];
+    const straightLine = effectivePriorAnnual > 0 ? Math.round((effectivePriorAnnual / 12) * (1 + growthFactor)) : null;
+    return prev > 0 ? Math.round(prev * (1 + growthFactor)) : straightLine;
   });
 
-  const hasTarget = manualTarget != null || prevHasData;
-  // When a manual target is set, annualForecast IS that target (avoid rounding drift from monthly sum)
+  const hasTarget = manualTarget != null || effectiveMonthsWithData > 0;
   const annualForecast = hasTarget
     ? (manualTarget ?? monthlyForecasts.reduce<number>((s, v) => s + (v ?? 0), 0))
     : null;
@@ -408,9 +429,9 @@ export default function Dashboard() {
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">{MONTHS_LONG[currentMonthIdx]} — Monthly Target</p>
                 <button
-                  onClick={() => { setTargetInput(String(manualTarget ?? Math.round(annualForecast))); setEditingTarget(true); }}
+                  onClick={openSeasonalityEditor}
                   className="text-slate-300 hover:text-slate-500 transition-colors"
-                  title="Edit annual target"
+                  title={`Edit ${year - 1} monthly actuals for seasonal distribution`}
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
@@ -427,9 +448,58 @@ export default function Dashboard() {
               </div>
               <p className="text-xs text-slate-400 mt-1.5">
                 {(((statement?.months[currentMonthIdx].grossRevenue ?? 0) / monthlyForecasts[currentMonthIdx]!) * 100).toFixed(0)}% of monthly target
+                {useSeasonality && <span className="ml-1 text-emerald-600">· seasonal</span>}
+                {!useSeasonality && <span className="ml-1">· flat (
+                  <button onClick={openSeasonalityEditor} className="underline hover:text-slate-600">add {year - 1} data</button>
+                  )</span>}
               </p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* 2025 monthly actuals editor */}
+      {editingSeasonality && !selMonth && (
+        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm mb-6">
+          <div className="flex items-center justify-between mb-1">
+            <p className="font-semibold text-slate-800">{year - 1} Monthly Revenue</p>
+            <button onClick={() => setEditingSeasonality(false)} className="text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="text-xs text-slate-400 mb-4">
+            Enter your actual {year - 1} gross revenue per month. Monthly targets will be distributed proportionally.
+          </p>
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+            {MONTHS_LONG.map((month, i) => (
+              <div key={i}>
+                <label className="text-xs text-slate-500 block mb-1">{month}</label>
+                <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
+                  <span className="text-xs text-slate-400 px-2">$</span>
+                  <input
+                    type="number"
+                    value={seasonalityInputs[i]}
+                    onChange={e => {
+                      const next = [...seasonalityInputs];
+                      next[i] = e.target.value;
+                      setSeasonalityInputs(next);
+                    }}
+                    className="flex-1 text-sm py-1.5 pr-2 outline-none min-w-0"
+                    placeholder="0"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-3">
+            <button onClick={saveSeasonality} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700">
+              Save {year - 1} Actuals
+            </button>
+            <button onClick={() => setEditingSeasonality(false)} className="text-slate-500 text-sm hover:text-slate-700">Cancel</button>
+            <span className="text-xs text-slate-400 ml-auto">
+              Total: {fmt(seasonalityInputs.reduce((s, v) => s + (parseFloat(v) || 0), 0))}
+            </span>
+          </div>
         </div>
       )}
 

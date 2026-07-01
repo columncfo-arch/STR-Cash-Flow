@@ -95,6 +95,7 @@ export interface ForecastOverride {
   piti?: number;
   isManualYear?: boolean;
   expenseDetail?: Record<string, number>; // category key → amount (platformFees, cleaning, electric…)
+  monthlyRevenue?: number[]; // 12 monthly gross revenue figures (Jan–Dec) for seasonality distribution
 }
 
 export interface Settings {
