@@ -112,6 +112,8 @@ export interface Settings {
   benchmarkCleaningFee?: number;  // sub-market cleaning fee per stay
   guestCleaningFeePerBooking?: number; // cleaning fee charged to guests (not an expense)
   yourAdr?: number;              // user-overridden ADR for optimization display
+  targetOccupancyPct?: number;   // dashboard occupancy goal (%)
+  targetAdr?: number;            // dashboard ADR goal ($)
   sensitivityAdr?: number;       // sensitivity model assumption overrides
   sensitivityAvgStay?: number;
   sensitivityCleaningFee?: number;

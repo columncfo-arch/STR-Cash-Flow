@@ -177,6 +177,10 @@ export default function Dashboard() {
   const [targetInput, setTargetInput] = useState('');
   const [editingSeasonality, setEditingSeasonality] = useState(false);
   const [seasonalityInputs, setSeasonalityInputs] = useState<string[]>(Array(12).fill(''));
+  const [editingOccTarget, setEditingOccTarget] = useState(false);
+  const [occTargetInput, setOccTargetInput] = useState('');
+  const [editingAdrTarget, setEditingAdrTarget] = useState(false);
+  const [adrTargetInput, setAdrTargetInput] = useState('');
   const now = new Date();
   const year = now.getFullYear();
   const currentMonthIdx = now.getMonth();
@@ -269,6 +273,26 @@ export default function Dashboard() {
     await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
     setSettings(updated);
     setEditingSeasonality(false);
+  }
+
+  async function saveOccTarget() {
+    if (!settings) return;
+    const val = parseFloat(occTargetInput);
+    if (isNaN(val)) return;
+    const updated = { ...settings, targetOccupancyPct: val };
+    await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+    setSettings(updated);
+    setEditingOccTarget(false);
+  }
+
+  async function saveAdrTarget() {
+    if (!settings) return;
+    const val = parseFloat(adrTargetInput);
+    if (isNaN(val)) return;
+    const updated = { ...settings, targetAdr: val };
+    await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+    setSettings(updated);
+    setEditingAdrTarget(false);
   }
 
   function openSeasonalityEditor() {
@@ -428,22 +452,101 @@ export default function Dashboard() {
           )}
 
           {/* Avg Occupancy */}
-          {hasData && (
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">Avg Occupancy</p>
-              <p className="text-2xl font-bold text-slate-900">{ytdOccupancy.toFixed(1)}%</p>
-              <p className="text-xs text-slate-400 mt-3">Year to date</p>
-            </div>
-          )}
+          {hasData && (() => {
+            const targetOcc = settings?.targetOccupancyPct ?? null;
+            const occVariance = targetOcc != null ? ytdOccupancy - targetOcc : null;
+            return (
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Avg Occupancy</p>
+                  {editingOccTarget ? (
+                    <button onClick={() => setEditingOccTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
+                  ) : (
+                    <button onClick={() => { setOccTargetInput(String(targetOcc ?? '')); setEditingOccTarget(true); }} className="text-slate-300 hover:text-slate-500" title="Set occupancy target"><Pencil className="w-3.5 h-3.5" /></button>
+                  )}
+                </div>
+                {editingOccTarget ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-500">Occupancy target (%)</p>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number" value={occTargetInput} onChange={e => setOccTargetInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && saveOccTarget()}
+                        className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="75" autoFocus
+                      />
+                      <span className="text-sm text-slate-400">%</span>
+                      <button onClick={saveOccTarget} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-emerald-700">Save</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold text-slate-900">{ytdOccupancy.toFixed(1)}%</p>
+                    {targetOcc != null ? (
+                      <div className="mt-2 flex items-center justify-between">
+                        <p className="text-xs text-slate-400">Target {targetOcc}%</p>
+                        {occVariance != null && (
+                          <span className={`text-xs font-semibold ${occVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                            {occVariance >= 0 ? '▲' : '▼'} {Math.abs(occVariance).toFixed(1)}pts
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 mt-3">Year to date</p>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })()}
 
           {/* ADR */}
-          {hasData && (
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">Avg Daily Rate</p>
-              <p className="text-2xl font-bold text-emerald-700">{ytdAdr != null ? fmt(ytdAdr) : '—'}</p>
-              <p className="text-xs text-slate-400 mt-3">Per night YTD</p>
-            </div>
-          )}
+          {hasData && (() => {
+            const targetAdrVal = settings?.targetAdr ?? null;
+            const adrVariance = targetAdrVal != null && ytdAdr != null ? ytdAdr - targetAdrVal : null;
+            const adrVariancePct = adrVariance != null && targetAdrVal ? (adrVariance / targetAdrVal) * 100 : null;
+            return (
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Avg Daily Rate</p>
+                  {editingAdrTarget ? (
+                    <button onClick={() => setEditingAdrTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
+                  ) : (
+                    <button onClick={() => { setAdrTargetInput(String(targetAdrVal ?? '')); setEditingAdrTarget(true); }} className="text-slate-300 hover:text-slate-500" title="Set ADR target"><Pencil className="w-3.5 h-3.5" /></button>
+                  )}
+                </div>
+                {editingAdrTarget ? (
+                  <div className="space-y-2">
+                    <p className="text-xs text-slate-500">ADR target ($)</p>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm text-slate-400">$</span>
+                      <input
+                        type="number" value={adrTargetInput} onChange={e => setAdrTargetInput(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && saveAdrTarget()}
+                        className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="225" autoFocus
+                      />
+                      <button onClick={saveAdrTarget} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-emerald-700">Save</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <p className="text-2xl font-bold text-emerald-700">{ytdAdr != null ? fmt(ytdAdr) : '—'}</p>
+                    {targetAdrVal != null ? (
+                      <div className="mt-2 flex items-center justify-between">
+                        <p className="text-xs text-slate-400">Target {fmt(targetAdrVal)}</p>
+                        {adrVariance != null && (
+                          <span className={`text-xs font-semibold ${adrVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                            {adrVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(adrVariance))}{adrVariancePct != null ? ` (${Math.abs(adrVariancePct).toFixed(1)}%)` : ''}
+                          </span>
+                        )}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-400 mt-3">Per night YTD</p>
+                    )}
+                  </>
+                )}
+              </div>
+            );
+          })()}
         </div>
       )}
 
