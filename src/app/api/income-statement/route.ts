@@ -108,11 +108,7 @@ function buildMonthly(
     byPlatform[b.platform].bookings += 1;
   }
 
-  // Only charge PITI for months that have fully elapsed; current and future months
-  // show actual revenue/expenses without PITI so YTD doesn't crater on the 1st.
-  const now = new Date();
-  const monthElapsed = year < now.getFullYear() || month < now.getMonth() + 1;
-  const pnl = buildPnL(monthBookings, monthExpenses, monthElapsed ? monthlyPITI : 0, 1);
+  const pnl = buildPnL(monthBookings, monthExpenses, monthlyPITI, 1);
 
   return {
     year,
@@ -158,9 +154,7 @@ export async function GET(req: Request) {
     }
 
     const now = new Date();
-    // For the current year: count only completed months (getMonth() is 0-indexed, so June 30 = 5 = 6 complete months).
-    // This prevents PITI from jumping on the 1st of the month before any revenue arrives.
-    const pitiMonths = year < now.getFullYear() ? 12 : Math.min(now.getMonth(), 12);
+    const pitiMonths = year < now.getFullYear() ? 12 : Math.min(now.getMonth() + 1, 12);
     const annualPnL = buildPnL(yearBookings, yearExpenses, settings.monthlyPITI, pitiMonths);
 
     const statement: AnnualStatement = {
