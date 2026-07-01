@@ -119,6 +119,7 @@ export interface Settings {
   sensitivityTarget2?: number;
   sensitivityTarget3?: number;
   totalCapitalDeployed?: number;
+  renovationCosts?: number;
   mortgageRate?: number;          // current interest rate %
   propertyValue?: number;         // estimated current value
   loanBalance?: number;           // current outstanding balance

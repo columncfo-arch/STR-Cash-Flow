@@ -657,6 +657,81 @@ export default function ForecastPage() {
         </div>
       )}
 
+      {/* ── Total Return Summary ── */}
+      {hasEquityData && settings?.totalCapitalDeployed && (() => {
+        const deployed = settings.totalCapitalDeployed!;
+        const reno = settings.renovationCosts ?? 0;
+        const downPayment = deployed - reno;
+        const equityNow = currentEquity;
+        const equityGainNow = equityNow - deployed;
+        const totalReturnNow = equityGainNow + cashToDate;
+        const returnPctNow = (totalReturnNow / deployed) * 100;
+
+        const totalProjectedCash = cashToDate + projectedCash;
+        const equityGainEnd = finalEquity - deployed;
+        const totalReturnEnd = equityGainEnd + totalProjectedCash;
+        const returnPctEnd = (totalReturnEnd / deployed) * 100;
+
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
+            <h2 className="font-semibold text-slate-800 mb-0.5">Total Return on Investment</h2>
+            <p className="text-xs text-slate-400 mb-5">Equity position + cumulative cash flow measured against all capital deployed</p>
+
+            {/* Capital stack */}
+            <div className="grid grid-cols-3 gap-4 mb-5 pb-5 border-b border-slate-100">
+              <div>
+                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Total Capital Deployed</p>
+                <p className="text-2xl font-bold text-slate-900">{fmt(deployed)}</p>
+                {reno > 0 && (
+                  <div className="mt-2 space-y-0.5">
+                    <p className="text-[11px] text-slate-400">↳ Down payment: {fmt(downPayment)}</p>
+                    <p className="text-[11px] text-slate-400">↳ Renovation + startup: {fmt(reno)}</p>
+                  </div>
+                )}
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Current Equity</p>
+                <p className="text-2xl font-bold text-slate-900">{fmt(equityNow)}</p>
+                <p className="text-[11px] text-slate-400 mt-2">{fmt(propertyValue)} value − {fmt(loanBalance)} loan</p>
+              </div>
+              <div>
+                <p className="text-xs text-slate-500 uppercase tracking-wide mb-1">Cash Flow to Date</p>
+                <p className={`text-2xl font-bold ${cashToDate >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{fmt(cashToDate)}</p>
+                <p className="text-[11px] text-slate-400 mt-2">{actualRows.length} year{actualRows.length !== 1 ? 's' : ''} of actuals</p>
+              </div>
+            </div>
+
+            {/* Return comparison: today vs end of forecast */}
+            <div className="grid grid-cols-2 gap-6">
+              <div className="bg-slate-50 rounded-lg p-4">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Today</p>
+                <p className={`text-3xl font-bold mb-1 ${totalReturnNow >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                  {totalReturnNow >= 0 ? '+' : ''}{fmt(totalReturnNow)}
+                </p>
+                <p className={`text-sm font-semibold mb-3 ${returnPctNow >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {returnPctNow >= 0 ? '+' : ''}{returnPctNow.toFixed(1)}% on capital
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Equity {equityGainNow >= 0 ? 'gain' : 'shortfall'} {fmt(Math.abs(equityGainNow))} {equityGainNow >= 0 ? '+' : '−'} {fmt(Math.abs(cashToDate))} cash flow
+                </p>
+              </div>
+              <div className="bg-violet-50 rounded-lg p-4">
+                <p className="text-xs font-semibold text-violet-500 uppercase tracking-wide mb-3">End of Forecast</p>
+                <p className={`text-3xl font-bold mb-1 ${totalReturnEnd >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                  {totalReturnEnd >= 0 ? '+' : ''}{fmt(totalReturnEnd)}
+                </p>
+                <p className={`text-sm font-semibold mb-3 ${returnPctEnd >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                  {returnPctEnd >= 0 ? '+' : ''}{returnPctEnd.toFixed(1)}% on capital
+                </p>
+                <p className="text-[11px] text-slate-400">
+                  Equity {equityGainEnd >= 0 ? 'gain' : 'shortfall'} {fmt(Math.abs(equityGainEnd))} {equityGainEnd >= 0 ? '+' : '−'} {fmt(Math.abs(totalProjectedCash))} cash flow
+                </p>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Year-by-Year Table ── */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
