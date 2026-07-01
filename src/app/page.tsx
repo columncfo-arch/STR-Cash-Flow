@@ -227,7 +227,6 @@ export default function Dashboard() {
 
   // Selected month data
   const selMonth: MonthlyStatement | null = (selectedMonth !== null && statement) ? statement.months[selectedMonth] : null;
-  const selAdr = selMonth && selMonth.totalNights > 0 ? selMonth.grossRevenue / selMonth.totalNights : null;
   const selAvgStay = selMonth && selMonth.bookings.filter(b => b.income > 0).length > 0 ? selMonth.totalNights / selMonth.bookings.filter(b => b.income > 0).length : null;
 
   const growthPct = settings?.forecastGrowthByYear?.[String(year)] ?? settings?.forecastGrowthPct ?? 0;
@@ -321,12 +320,6 @@ export default function Dashboard() {
     if (idx != null) setSelectedMonth(prev => prev === idx ? null : idx);
   }
 
-  // KPI values — switch between YTD and selected month
-  const kpiGross = selMonth ? selMonth.grossRevenue : ytdGross;
-  const kpiNetIncome = selMonth ? selMonth.netIncome : ytdNetIncome;
-  const kpiOccupancy = selMonth ? selMonth.occupancyRate : ytdOccupancy;
-  const kpiAdr = selMonth ? selAdr : ytdAdr;
-  const kpiSuffix = selMonth ? '' : ' YTD';
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -335,19 +328,11 @@ export default function Dashboard() {
         <p className="text-slate-500 text-sm mt-1">{year} overview</p>
       </div>
 
-      {/* KPI cards — 4 consequential metrics */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard label={`Gross Revenue${kpiSuffix}`} value={fmt(kpiGross)} color="text-emerald-700" />
-        <StatCard label={`Net Income${kpiSuffix}`} value={fmt(kpiNetIncome)} color={kpiNetIncome >= 0 ? 'text-emerald-700' : 'text-red-600'} />
-        <StatCard label="Avg Occupancy" value={`${kpiOccupancy.toFixed(1)}%`} sub={kpiSuffix.trim() || 'this month'} />
-        <StatCard label="ADR" value={kpiAdr != null ? fmt(kpiAdr) : '—'} sub={`per night${kpiSuffix}`} color="text-emerald-700" />
-      </div>
-
-      {/* Pacing — the primary "am I on track?" answer */}
-      {hasTarget && annualForecast != null && !selMonth && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          {/* This Year */}
-          <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+      {/* Pacing + operational KPIs */}
+      {!selMonth && (hasTarget || hasData) && (
+        <div className={`grid gap-4 mb-6 ${hasTarget && annualForecast != null ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2'}`}>
+          {/* This Year + This Month — only when target is configured */}
+          {hasTarget && annualForecast != null && <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">This Year — On Track?</p>
               {!editingTarget ? (
@@ -399,10 +384,10 @@ export default function Dashboard() {
                 <p className="text-xs text-slate-400 mt-3">Full-year target {fmt(annualForecast)}</p>
               </>
             )}
-          </div>
+          </div>}
 
           {/* This Month */}
-          {monthlyForecasts[currentMonthIdx] != null && (
+          {hasTarget && annualForecast != null && monthlyForecasts[currentMonthIdx] != null && (
             <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">{MONTHS_LONG[currentMonthIdx]} — Monthly Target</p>
@@ -431,6 +416,24 @@ export default function Dashboard() {
                   <button onClick={openSeasonalityEditor} className="underline hover:text-slate-600">add {year - 1} data</button>
                   )</span>}
               </p>
+            </div>
+          )}
+
+          {/* Avg Occupancy */}
+          {hasData && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">Avg Occupancy</p>
+              <p className="text-2xl font-bold text-slate-900">{ytdOccupancy.toFixed(1)}%</p>
+              <p className="text-xs text-slate-400 mt-3">Year to date</p>
+            </div>
+          )}
+
+          {/* ADR */}
+          {hasData && (
+            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">Avg Daily Rate</p>
+              <p className="text-2xl font-bold text-emerald-700">{ytdAdr != null ? fmt(ytdAdr) : '—'}</p>
+              <p className="text-xs text-slate-400 mt-3">Per night YTD</p>
             </div>
           )}
         </div>
