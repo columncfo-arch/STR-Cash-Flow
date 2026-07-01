@@ -54,6 +54,26 @@ function SectionHeader({ title }: { title: string }) {
   );
 }
 
+function CollapsibleSection({ title, children }: { title: string; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="mb-2">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="flex items-center gap-3 w-full py-3 group"
+      >
+        <div className="h-px flex-1 bg-slate-200 group-hover:bg-slate-300 transition-colors" />
+        <span className="flex items-center gap-1.5 text-xs font-bold text-slate-400 uppercase tracking-widest whitespace-nowrap group-hover:text-slate-600 transition-colors">
+          {title}
+          {open ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        </span>
+        <div className="h-px flex-1 bg-slate-200 group-hover:bg-slate-300 transition-colors" />
+      </button>
+      {open && <div className="mt-2 mb-6">{children}</div>}
+    </div>
+  );
+}
+
 function InlineInput({ label, value, onChange, onBlur, placeholder, unit, note, min, max, step }: {
   label: string; value: string; onChange: (v: string) => void;
   onBlur?: () => void;
@@ -392,507 +412,6 @@ export default function OptimizationPage() {
 
       {hasData && (
         <>
-          {/* ══════════════════════════════════════════════════ */}
-          {/* RANKED ACTION PLAN                                 */}
-          {/* ══════════════════════════════════════════════════ */}
-          {opportunities.length > 0 ? (
-            <div className="bg-slate-900 rounded-xl p-6 mb-8">
-              <div className="flex items-start justify-between mb-5">
-                <div>
-                  <h2 className="text-base font-bold text-white">Ranked Action Plan</h2>
-                  <p className="text-xs text-slate-400 mt-0.5">Dollar-ranked opportunities identified from your {year} data</p>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs text-slate-400 mb-0.5">Total Opportunity</p>
-                  <p className="text-2xl font-bold text-emerald-400">{fmt(totalOpportunity)}</p>
-                  <p className="text-xs text-slate-500">per year</p>
-                </div>
-              </div>
-              <div className="space-y-3">
-                {opportunities.map((opp, i) => {
-                  const barWidth = totalOpportunity > 0 ? (opp.amount / totalOpportunity) * 100 : 0;
-                  const colors = {
-                    emerald: { bar: 'bg-emerald-500', badge: 'bg-emerald-900 text-emerald-300', amount: 'text-emerald-400' },
-                    amber:   { bar: 'bg-amber-400',   badge: 'bg-amber-900 text-amber-300',     amount: 'text-amber-400'   },
-                    blue:    { bar: 'bg-blue-500',    badge: 'bg-blue-900 text-blue-300',       amount: 'text-blue-400'    },
-                  }[opp.variant];
-                  return (
-                    <div key={i} className="bg-slate-800 rounded-lg p-4">
-                      <div className="flex items-start justify-between mb-2">
-                        <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wide ${colors.badge}`}>
-                            #{i + 1}
-                          </span>
-                          <span className="text-sm font-semibold text-white">{opp.label}</span>
-                        </div>
-                        <span className={`text-base font-bold ${colors.amount}`}>+{fmt(opp.amount)}/yr</span>
-                      </div>
-                      <p className="text-xs text-slate-400 mb-2 leading-relaxed">{opp.action}</p>
-                      <div className="h-1.5 bg-slate-700 rounded-full overflow-hidden">
-                        <div className={`h-full rounded-full ${colors.bar}`} style={{ width: `${barWidth}%` }} />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div className="bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 mb-8 flex items-center gap-3">
-              <DollarSign className="w-5 h-5 text-slate-400 flex-shrink-0" />
-              <p className="text-sm text-slate-600">
-                No benchmark gaps detected. Set sub-market benchmarks in the sections below to unlock opportunity analysis.
-              </p>
-            </div>
-          )}
-
-          {/* ══════════════════════════════════════════════════ */}
-          {/* REVENUE OPTIMIZATION                               */}
-          {/* ══════════════════════════════════════════════════ */}
-          <SectionHeader title="Revenue Optimization" />
-
-          {/* ADR benchmark config */}
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-8">
-            <div className="grid grid-cols-3 gap-4 mb-5">
-              <div className="bg-slate-50 rounded-lg p-4 text-center">
-                <p className="text-xs text-slate-400 mb-1">Your Avg ADR</p>
-                <div className="flex items-baseline justify-center gap-0.5 mb-0.5">
-                  <span className="text-lg font-bold text-slate-500">$</span>
-                  <input
-                    type="number" value={draftYourAdr}
-                    onChange={e => setDraftYourAdr(e.target.value)}
-                    placeholder={overallAvgAdr > 0 ? String(Math.round(overallAvgAdr)) : '—'}
-                    min="0"
-                    className="w-24 text-2xl font-bold text-slate-900 bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                </div>
-                <p className="text-[10px] text-slate-400">{draftYourAdr ? 'adjusted · ' : 'from actuals · '}per night</p>
-              </div>
-              <div className={`rounded-lg p-4 text-center ${benchmarkAdr > 0 ? (adrGap! >= 0 ? 'bg-emerald-50' : 'bg-amber-50') : 'bg-slate-50'}`}>
-                <p className="text-xs text-slate-400 mb-1">Sub-Market Benchmark</p>
-                <p className={`text-2xl font-bold ${benchmarkAdr > 0 ? 'text-slate-900' : 'text-slate-300'}`}>
-                  {benchmarkAdr > 0 ? fmt(benchmarkAdr) : 'Not set'}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-1">per night</p>
-              </div>
-              <div className={`rounded-lg p-4 text-center ${adrGap == null ? 'bg-slate-50' : adrGap >= 0 ? 'bg-emerald-50' : 'bg-amber-50'}`}>
-                <p className="text-xs text-slate-400 mb-1">Gap</p>
-                <p className={`text-2xl font-bold ${adrGap == null ? 'text-slate-300' : adrGap >= 0 ? 'text-emerald-700' : 'text-amber-600'}`}>
-                  {adrGap == null ? '—' : `${adrGap >= 0 ? '+' : ''}${fmt(adrGap)}`}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-1">vs benchmark</p>
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
-              <InlineInput
-                label="Sub-Market ADR ($/night)"
-                value={draftAdr} onChange={setDraftAdr}
-                placeholder="e.g. 175" unit="$"
-                note="From AirDNA, PriceLabs, or local market data"
-              />
-              <div className="flex items-end">
-                <button
-                  onClick={() => saveSection('adr', { benchmarkAdr: parseFloat(draftAdr) || undefined })}
-                  className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700"
-                >
-                  {savedSection === 'adr' ? <><Check className="w-4 h-4" /> Saved</> : 'Save'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* Platform Mix Optimization */}
-          {platformData.length > 1 && (
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-8">
-              <h3 className="text-sm font-semibold text-slate-700 mb-1">Platform Mix Optimization</h3>
-              <p className="text-xs text-slate-400 mb-4">
-                Compare ADR and revenue share across platforms — large gaps signal an under-priced or underlisted channel.
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-slate-200">
-                      <th className="text-left text-xs font-semibold text-slate-500 pb-2 pr-4">Platform</th>
-                      <th className="text-right text-xs font-semibold text-slate-500 pb-2 px-4">Revenue</th>
-                      <th className="text-right text-xs font-semibold text-slate-500 pb-2 px-4">Share</th>
-                      <th className="text-right text-xs font-semibold text-slate-500 pb-2 px-4">ADR</th>
-                      <th className="text-right text-xs font-semibold text-slate-500 pb-2 px-4">vs Best</th>
-                      <th className="text-left text-xs font-semibold text-slate-500 pb-2 pl-4">Signal</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {platformData.map((p, i) => {
-                      const gap = p.adr - topAdr;
-                      const gapPct = topAdr > 0 ? (gap / topAdr) * 100 : 0;
-                      const isBest = p.adr === topAdr && topAdr > 0;
-                      const isUnderpriced = gapPct < -15;
-                      const isLowVolume = p.share < 10 && platformData.length > 1;
-                      return (
-                        <tr key={i} className="border-b border-slate-100 last:border-0">
-                          <td className="py-3 pr-4 font-medium text-slate-700">{p.platform}</td>
-                          <td className="py-3 px-4 text-right text-slate-600">{fmt(p.income)}</td>
-                          <td className="py-3 px-4 text-right text-slate-600">{pct(p.share)}</td>
-                          <td className="py-3 px-4 text-right font-semibold text-slate-800">{fmt(p.adr)}/nt</td>
-                          <td className={`py-3 px-4 text-right font-medium ${isBest ? 'text-emerald-600' : gap < 0 ? 'text-amber-600' : 'text-slate-500'}`}>
-                            {isBest ? '★ Best' : `${gap >= 0 ? '+' : ''}${fmt(gap)}`}
-                          </td>
-                          <td className="py-3 pl-4 text-xs">
-                            {isBest ? (
-                              <span className="text-emerald-600">Top performer</span>
-                            ) : isUnderpriced && isLowVolume ? (
-                              <span className="text-amber-600">Low ADR + low volume — raise pricing or improve listing</span>
-                            ) : isUnderpriced ? (
-                              <span className="text-amber-600">ADR {pct(Math.abs(gapPct))} below best — consider raising price</span>
-                            ) : isLowVolume ? (
-                              <span className="text-blue-600">Low volume — consider expanding availability</span>
-                            ) : (
-                              <span className="text-slate-400">—</span>
-                            )}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-              {topPlatform && platformData.filter(p => p.adr < topAdr * 0.85).length > 0 && (
-                <p className="text-xs text-slate-500 mt-3 pt-3 border-t border-slate-100">
-                  <span className="font-medium">{topPlatform.platform}</span> leads at {fmt(topAdr)}/night.
-                  {platformData.filter(p => p.adr < topAdr * 0.85 && p.adr > 0).map(p =>
-                    ` ${p.platform} (${fmt(p.adr)}/nt) is ${pct(((topAdr - p.adr) / topAdr) * 100)} below — test higher rates there.`
-                  ).join('')}
-                </p>
-              )}
-            </div>
-          )}
-
-          {/* ══════════════════════════════════════════════════ */}
-          {/* OCCUPANCY OPTIMIZATION                             */}
-          {/* ══════════════════════════════════════════════════ */}
-          <SectionHeader title="Occupancy Optimization" />
-
-          <div className="grid grid-cols-3 gap-4 mb-4">
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 text-center">
-              <p className="text-xs text-slate-400 mb-1">YTD Occupancy</p>
-              <p className="text-2xl font-bold text-slate-900">
-                {totalNights > 0 ? pct(ytdOccPct) : '—'}
-              </p>
-              <p className="text-[10px] text-slate-400 mt-1">{totalNights} nights / {ytdDays} days elapsed</p>
-            </div>
-            <div className={`rounded-xl border shadow-sm p-4 text-center ${nightsAtRisk > 180 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
-              <p className="text-xs text-slate-400 mb-1">Nights at Risk</p>
-              <p className={`text-2xl font-bold ${nightsAtRisk > 180 ? 'text-amber-700' : 'text-slate-900'}`}>
-                {nightsAtRisk}
-              </p>
-              <p className="text-[10px] text-slate-400 mt-1">calendar days left in {year}</p>
-            </div>
-            <div className={`rounded-xl border shadow-sm p-4 text-center ${flaggedMonths.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
-              <p className="text-xs text-slate-400 mb-1">Price-Suppressed Months</p>
-              <p className={`text-2xl font-bold ${flaggedMonths.length > 0 ? 'text-amber-700' : 'text-emerald-700'}`}>
-                {flaggedMonths.length}
-              </p>
-              <p className="text-[10px] text-slate-400 mt-1">
-                {flaggedMonths.length > 0 ? flaggedMonths.map(d => d.name).join(', ') : 'none detected'}
-              </p>
-            </div>
-          </div>
-
-          {occupancyChartData.length > 0 && (
-            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-8">
-              <h3 className="text-sm font-semibold text-slate-700 mb-1">Monthly Occupancy Rate</h3>
-              <p className="text-xs text-slate-400 mb-4">
-                Amber bars have above-average ADR but below-average occupancy — a signal that pricing may be suppressing bookings.
-              </p>
-              <ResponsiveContainer width="100%" height={220}>
-                <BarChart data={occupancyChartData} barSize={22}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
-                  <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-                  <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `${v}%`} domain={[0, 100]} />
-                  <Tooltip
-                    formatter={(v: unknown) => [`${Number(v).toFixed(1)}%`, 'Occupancy']}
-                    labelFormatter={label => {
-                      const d = occupancyChartData.find(x => x.name === label);
-                      return d ? `${label} · ${d.nights} nights · ADR ${d.monthAdr > 0 ? fmt(d.monthAdr) : '—'}` : label;
-                    }}
-                  />
-                  {ytdOccPct > 0 && (
-                    <ReferenceLine y={ytdOccPct} stroke="#94a3b8" strokeDasharray="4 4"
-                      label={{ value: `YTD avg ${ytdOccPct.toFixed(0)}%`, position: 'insideTopRight', fontSize: 10, fill: '#94a3b8' }} />
-                  )}
-                  <Bar dataKey="occupancy" name="Occupancy" radius={[4, 4, 0, 0]}>
-                    {occupancyChartData.map((d, i) => (
-                      <Cell key={i} fill={d.flag ? '#f59e0b' : d.nights === 0 ? '#e2e8f0' : '#10b981'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-              {flaggedMonths.length > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mt-4 flex items-start gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
-                  <p className="text-xs text-amber-800">
-                    <span className="font-semibold">{flaggedMonths.map(d => d.name).join(', ')}</span>
-                    {flaggedMonths.length === 1 ? ' has' : ' have'} above-average ADR but below-average occupancy —
-                    consider testing lower rates to capture more bookings in {flaggedMonths.length === 1 ? 'that month' : 'those months'}.
-                  </p>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ══════════════════════════════════════════════════ */}
-          {/* EXPENSE OPTIMIZATION                               */}
-          {/* ══════════════════════════════════════════════════ */}
-          <SectionHeader title="Expense Optimization" />
-
-          {/* Cleaning fee — single merged card */}
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-6">
-            <div className="flex items-start justify-between mb-4">
-              <div>
-                <h3 className="text-sm font-semibold text-slate-700">Cleaning Fee Analysis</h3>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  {totalBookings} stays · {fmt(cleaningFeePerStay)}/stay charged · {fmt(cleaningCostPerStay)}/stay cost
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-xs text-slate-400 mb-0.5">Annual Net</p>
-                <p className={`text-xl font-bold ${cleaningNetAnnual >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
-                  {cleaningNetAnnual >= 0 ? `+${fmt(cleaningNetAnnual)}` : `(${fmt(Math.abs(cleaningNetAnnual))})`}
-                </p>
-              </div>
-            </div>
-            <div className="grid grid-cols-3 gap-3 mb-4">
-              <div className="bg-slate-50 rounded-lg p-3 text-center">
-                <p className="text-[10px] text-slate-400 mb-1">Fee Collected</p>
-                <div className="flex items-baseline justify-center gap-0.5 mb-0.5">
-                  <span className="text-sm font-bold text-emerald-600">$</span>
-                  <input
-                    type="number" value={draftFeePerStay}
-                    onChange={e => setDraftFeePerStay(e.target.value)}
-                    onBlur={saveCleaningFee}
-                    placeholder="0" min="0"
-                    className="w-14 text-base font-bold text-emerald-700 bg-transparent border-b border-emerald-300 focus:border-emerald-500 outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-                </div>
-                <p className="text-[10px] text-slate-400">per stay</p>
-              </div>
-              <div className="bg-slate-50 rounded-lg p-3 text-center">
-                <p className="text-[10px] text-slate-400 mb-1">Cost Paid</p>
-                <p className="text-base font-bold text-red-500">({fmt(cleaningCostPerStay)})</p>
-                <p className="text-[10px] text-slate-400">per stay</p>
-              </div>
-              <div className={`rounded-lg p-3 text-center ${cleaningNetPerStay >= 0 ? 'bg-emerald-50' : 'bg-amber-50'}`}>
-                <p className="text-[10px] text-slate-400 mb-1">Net per Stay</p>
-                <p className={`text-base font-bold ${cleaningNetPerStay >= 0 ? 'text-emerald-700' : 'text-amber-600'}`}>
-                  {cleaningNetPerStay >= 0 ? fmt(cleaningNetPerStay) : `(${fmt(Math.abs(cleaningNetPerStay))})`}
-                </p>
-                <p className="text-[10px] text-slate-400">{cleaningNetPerStay >= 0 ? 'profit center' : 'subsidized'}</p>
-              </div>
-            </div>
-            {cleaningNetPerStay < 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-lg px-4 py-3 mb-4 flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-amber-800">
-                  You are absorbing {fmt(Math.abs(cleaningNetPerStay))}/stay in cleaning costs.
-                  Raising your fee to <strong>{fmt(cleaningCostPerStay + 25)}</strong> would cover costs and produce a margin.
-                </p>
-              </div>
-            )}
-            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
-              <InlineInput
-                label="Sub-market cleaning fee/stay ($)"
-                value={draftCleaningFee} onChange={setDraftCleaningFee}
-                placeholder="e.g. 150" unit="$"
-                note="Average cleaning fee in your sub-market"
-              />
-              <div className="flex flex-col justify-end">
-                {benchmarkCleaningFee > 0 && (
-                  <p className="text-xs text-slate-500 mb-2">
-                    You charge {fmt(cleaningFeePerStay)} vs {fmt(benchmarkCleaningFee)} market.{' '}
-                    <span className={cleaningFeePerStay >= benchmarkCleaningFee ? 'text-emerald-600 font-medium' : 'text-amber-600 font-medium'}>
-                      {cleaningFeePerStay >= benchmarkCleaningFee ? 'At or above market.' : `${fmt(benchmarkCleaningFee - cleaningFeePerStay)}/stay below.`}
-                    </span>
-                  </p>
-                )}
-                <button
-                  onClick={saveCleaningFee}
-                  className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 w-fit"
-                >
-                  {savedSection === 'cleaning' ? <><Check className="w-4 h-4" /> Saved</> : 'Save'}
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* PITI */}
-          <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-10">
-            <h3 className="text-sm font-semibold text-slate-700 mb-4">PITI Analysis</h3>
-            <div className="grid grid-cols-3 gap-4 mb-4">
-              <div className="bg-slate-50 rounded-lg p-4 text-center">
-                <p className="text-xs text-slate-400 mb-1">Monthly PITI</p>
-                <p className="text-2xl font-bold text-slate-900">{fmt(settings?.monthlyPITI ?? 0)}</p>
-                <p className="text-[10px] text-slate-400 mt-1">from settings</p>
-              </div>
-              <div className="bg-slate-50 rounded-lg p-4 text-center">
-                <p className="text-xs text-slate-400 mb-1">Annual PITI</p>
-                <p className="text-2xl font-bold text-slate-900">{fmt(annualPITI)}</p>
-                <p className="text-[10px] text-slate-400 mt-1">total fixed cost</p>
-              </div>
-              <div className={`rounded-lg p-4 text-center ${
-                pitiCoverage < 0 ? 'bg-red-50 border border-red-200'
-                : pitiCoverage < (settings?.monthlyPITI ?? 0) * 2 ? 'bg-amber-50 border border-amber-200'
-                : 'bg-emerald-50 border border-emerald-200'
-              }`}>
-                <p className="text-xs text-slate-400 mb-1">YTD Revenue vs PITI</p>
-                <p className={`text-2xl font-bold ${pitiCoverage < 0 ? 'text-red-700' : pitiCoverage < (settings?.monthlyPITI ?? 0) * 2 ? 'text-amber-700' : 'text-emerald-700'}`}>
-                  {grossRevenue > 0
-                    ? (pitiCoverage >= 0 ? `+${fmt(pitiCoverage)}` : `(${fmt(Math.abs(pitiCoverage))})`)
-                    : '—'}
-                </p>
-                <p className="text-[10px] text-slate-400 mt-1">
-                  {pitiCoverage >= 0 ? 'surplus after ' : 'shortfall vs '}{ytdMonths}mo PITI
-                </p>
-              </div>
-            </div>
-
-            {/* Loan & Property Details — always visible */}
-            <div className="border-t border-slate-100 mt-4 pt-4">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Loan & Property Details</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
-                <InlineInput
-                  label="Market Value ($)" value={draftValue} onChange={setDraftValue}
-                  onBlur={savePiti} placeholder="e.g. 500000" unit="$"
-                />
-                <InlineInput
-                  label="Remaining Principal ($)" value={draftBalance} onChange={setDraftBalance}
-                  onBlur={savePiti} placeholder="e.g. 380000" unit="$"
-                />
-                <InlineInput
-                  label="APR (%)" value={draftRate} onChange={setDraftRate}
-                  onBlur={savePiti} placeholder="e.g. 7.25" unit="%" min="0" max="30" step="0.125"
-                />
-                <div>
-                  <label className="text-xs text-slate-500 font-medium block mb-1">Loan Structure</label>
-                  <select
-                    value={draftLoanStructure}
-                    onChange={e => {
-                      const s = e.target.value as LoanStructure;
-                      setDraftLoanStructure(s);
-                      saveSection('piti', {
-                        mortgageRate: parseFloat(draftRate) || undefined,
-                        propertyValue: parseFloat(draftValue) || undefined,
-                        loanBalance: parseFloat(draftBalance) || undefined,
-                        loanTermYears: parseInt(draftLoanTerm) || undefined,
-                        loanStructure: s,
-                      });
-                    }}
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
-                  >
-                    <option value="fixed">Fixed Rate</option>
-                    <option value="arm">Adjustable (ARM)</option>
-                    <option value="interest_only">Interest-Only</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="text-xs text-slate-500 font-medium block mb-1">Loan Term (years)</label>
-                  <input
-                    type="number" value={draftLoanTerm}
-                    onChange={e => setDraftLoanTerm(e.target.value)}
-                    onBlur={savePiti}
-                    placeholder="e.g. 30" min="5" max="40" step="1"
-                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
-                  />
-                </div>
-              </div>
-              <div className="flex items-center gap-4">
-                <button
-                  onClick={() => saveSection('piti', {
-                    mortgageRate: parseFloat(draftRate) || undefined,
-                    propertyValue: parseFloat(draftValue) || undefined,
-                    loanBalance: parseFloat(draftBalance) || undefined,
-                    loanTermYears: parseInt(draftLoanTerm) || undefined,
-                    loanStructure: draftLoanStructure,
-                  })}
-                  className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700"
-                >
-                  {savedSection === 'piti' ? <><Check className="w-4 h-4" /> Saved</> : 'Save'}
-                </button>
-                {ltv != null && (
-                  <span className="text-xs text-slate-500">
-                    LTV: <span className={`font-semibold ${ltv > 80 ? 'text-amber-600' : 'text-emerald-600'}`}>{pct(ltv)}</span>
-                  </span>
-                )}
-                {draftLoanStructure === 'interest_only' && (
-                  <span className="text-xs text-amber-600 font-medium">
-                    Interest-only: no principal paydown — equity grows from appreciation only
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Refinance & PMI Analysis */}
-            <button
-              className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-700 mt-4"
-              onClick={() => setPitiOpen(v => !v)}
-            >
-              {pitiOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              {pitiOpen ? 'Hide' : 'Show'} refinance + PMI analysis
-            </button>
-
-            {pitiOpen && (
-              <div className="border-t border-slate-100 mt-3 pt-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div className="bg-slate-50 rounded-xl p-4">
-                    <p className="text-xs font-semibold text-slate-600 mb-2">Rate Reduction</p>
-                    {mortgageRate > 0 && loanBalance > 0 ? (
-                      <>
-                        <p className="text-xs text-slate-500 mb-3">Current APR: <span className="font-semibold">{mortgageRate}%</span></p>
-                        <div className="space-y-2">
-                          <div className="flex justify-between text-xs">
-                            <span className="text-slate-500">−0.5% reduction</span>
-                            <span className="font-semibold text-emerald-700">+{fmt(refiSavings05!)}/mo</span>
-                          </div>
-                          <div className="flex justify-between text-xs">
-                            <span className="text-slate-500">−1.0% reduction</span>
-                            <span className="font-semibold text-emerald-700">+{fmt(refiSavings10!)}/mo</span>
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <p className="text-xs text-slate-400">Enter APR and principal above.</p>
-                    )}
-                  </div>
-                  <div className={`rounded-xl p-4 ${hasPMI ? 'bg-amber-50 border border-amber-200' : 'bg-slate-50'}`}>
-                    <p className="text-xs font-semibold text-slate-600 mb-2">PMI Removal</p>
-                    {ltv != null ? (
-                      hasPMI ? (
-                        <>
-                          <p className="text-xs text-amber-700 mb-1">LTV {pct(ltv)} — above 80%</p>
-                          <p className="text-sm font-bold text-amber-700">~{fmt(estimatedPMI)}/yr</p>
-                          <p className="text-[10px] text-slate-500 mt-1">Request removal when LTV hits 80%.</p>
-                        </>
-                      ) : (
-                        <p className="text-xs text-emerald-700">LTV {pct(ltv)} — below 80%, PMI likely n/a.</p>
-                      )
-                    ) : (
-                      <p className="text-xs text-slate-400">Enter market value and principal.</p>
-                    )}
-                  </div>
-                  <div className="bg-slate-50 rounded-xl p-4">
-                    <p className="text-xs font-semibold text-slate-600 mb-2">Insurance Review</p>
-                    <ul className="text-[11px] text-slate-500 space-y-1">
-                      <li>• Shop 3 STR-specific carriers annually</li>
-                      <li>• Bundle with auto/umbrella for discounts</li>
-                      <li>• Check AirCover overlap to avoid double coverage</li>
-                      <li>• Verify liability limits ≥ $1M</li>
-                    </ul>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* ══════════════════════════════════════════════════ */}
-          {/* PROFITABILITY SENSITIVITY TABLE                    */}
-          {/* ══════════════════════════════════════════════════ */}
           <SectionHeader title="Profitability Sensitivity" />
 
           <p className="text-xs text-slate-400 mb-5">
@@ -1099,6 +618,308 @@ export default function OptimizationPage() {
               Enter an ADR above to generate the sensitivity table.
             </div>
           )}
+
+          {/* ── Action Plan ──────────────────────────────────────────────────────── */}
+          <CollapsibleSection title="Action Plan">
+            {opportunities.length > 0 ? (
+              <div className="bg-slate-900 rounded-xl p-6">
+                <div className="flex items-center justify-between mb-5">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide">Ranked Opportunities</p>
+                  <span className="text-sm font-bold text-emerald-400">{fmt(totalOpportunity)}/yr potential</span>
+                </div>
+                <div className="space-y-4">
+                  {opportunities.map((op, i) => {
+                    const colors = {
+                      emerald: 'border-emerald-500 bg-emerald-950',
+                      amber: 'border-amber-500 bg-amber-950',
+                      blue: 'border-blue-500 bg-blue-950',
+                    };
+                    const textColors = {
+                      emerald: 'text-emerald-400',
+                      amber: 'text-amber-400',
+                      blue: 'text-blue-400',
+                    };
+                    return (
+                      <div key={i} className={`border-l-2 pl-4 py-2 rounded-r-lg ${colors[op.variant]}`}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className={`text-xs font-bold uppercase tracking-wide ${textColors[op.variant]}`}>
+                            #{i + 1} {op.label}
+                          </span>
+                          <span className={`text-sm font-bold ${textColors[op.variant]}`}>{fmt(op.amount)}/yr</span>
+                        </div>
+                        <p className="text-xs text-slate-400">{op.action}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ) : (
+              <div className="bg-slate-50 border border-slate-200 rounded-xl px-5 py-4 flex items-center gap-3">
+                <DollarSign className="w-5 h-5 text-slate-400 flex-shrink-0" />
+                <p className="text-sm text-slate-600">No benchmark gaps detected. Set sub-market benchmarks in the sections below to unlock opportunity analysis.</p>
+              </div>
+            )}
+          </CollapsibleSection>
+
+          {/* ── Revenue Optimization ─────────────────────────────────────────────── */}
+          <CollapsibleSection title="Revenue Optimization">
+            {/* ADR benchmark card */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-4">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-4">ADR Benchmarks</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <InlineInput
+                  label="Sub-Market Benchmark ADR"
+                  value={draftAdr}
+                  onChange={setDraftAdr}
+                  onBlur={() => saveSection('adr', { benchmarkAdr: parseFloat(draftAdr) || undefined })}
+                  unit="$" placeholder="e.g. 280"
+                  note="Your target vs. comparable listings"
+                />
+                <InlineInput
+                  label="Your ADR Override"
+                  value={draftYourAdr}
+                  onChange={setDraftYourAdr}
+                  unit="$" placeholder={overallAvgAdr > 0 ? String(Math.round(overallAvgAdr)) : 'calculated'}
+                  note={`Calculated from data: ${fmt2(overallAvgAdr)}/night`}
+                />
+                <div className="flex flex-col justify-center">
+                  <p className="text-xs text-slate-500 mb-1">Gap to Benchmark</p>
+                  <p className={`text-lg font-bold ${adrGap == null ? 'text-slate-400' : adrGap >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {adrGap == null ? '—' : `${adrGap >= 0 ? '+' : ''}${fmt2(adrGap)}`}
+                  </p>
+                  <p className="text-[10px] text-slate-400">per night</p>
+                </div>
+                <div className="flex flex-col justify-center">
+                  <p className="text-xs text-slate-500 mb-1">Annual Revenue Impact</p>
+                  <p className={`text-lg font-bold ${adrOpportunity == null ? 'text-slate-400' : adrOpportunity > 0 ? 'text-red-500' : 'text-emerald-600'}`}>
+                    {adrOpportunity == null ? '—' : adrOpportunity > 0 ? `(${fmt(adrOpportunity)})` : `+${fmt(Math.abs(adrGap! * totalNights))}`}
+                  </p>
+                  <p className="text-[10px] text-slate-400">across {totalNights} nights</p>
+                </div>
+              </div>
+              {savedSection === 'adr' && (
+                <p className="text-xs text-emerald-600 mt-3 flex items-center gap-1"><Check className="w-3 h-3" /> Saved</p>
+              )}
+            </div>
+
+            {/* Platform mix table */}
+            {platformData.length > 0 && (
+              <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
+                <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between">
+                  <p className="text-xs font-semibold text-slate-700">Platform Mix</p>
+                  {topPlatform && <p className="text-xs text-slate-400">Best ADR: <span className="font-semibold text-slate-700">{topPlatform.platform}</span> @ {fmt2(topAdr)}/night</p>}
+                </div>
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 font-semibold">
+                      <th className="px-5 py-2.5 text-left">Platform</th>
+                      <th className="px-5 py-2.5 text-right">Bookings</th>
+                      <th className="px-5 py-2.5 text-right">Nights</th>
+                      <th className="px-5 py-2.5 text-right">Revenue</th>
+                      <th className="px-5 py-2.5 text-right">ADR</th>
+                      <th className="px-5 py-2.5 text-right">Rev Share</th>
+                      <th className="px-5 py-2.5 text-right">vs Best ADR</th>
+                      <th className="px-5 py-2.5 text-left pl-4">Recommendation</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {platformData.map((p, i) => {
+                      const gap = topAdr > 0 ? p.adr - topAdr : 0;
+                      const isTop = p.adr === topAdr;
+                      return (
+                        <tr key={i} className="border-b border-slate-100 hover:bg-slate-50">
+                          <td className="px-5 py-3 font-medium text-slate-800">{p.platform}</td>
+                          <td className="px-5 py-3 text-right text-slate-600">{p.bookings}</td>
+                          <td className="px-5 py-3 text-right text-slate-600">{p.nights}</td>
+                          <td className="px-5 py-3 text-right text-slate-700 font-medium">{fmt(p.income)}</td>
+                          <td className="px-5 py-3 text-right font-semibold text-slate-800">{fmt2(p.adr)}</td>
+                          <td className="px-5 py-3 text-right text-slate-600">{p.share.toFixed(1)}%</td>
+                          <td className={`px-5 py-3 text-right font-medium ${isTop ? 'text-emerald-600' : gap < -20 ? 'text-red-500' : 'text-amber-600'}`}>
+                            {isTop ? '— best —' : `${fmt2(gap)}`}
+                          </td>
+                          <td className="px-5 py-3 pl-4 text-xs text-slate-500">
+                            {isTop ? 'Keep growing this channel' : gap < -20 ? 'Consider raising rates or reducing allocation' : 'Competitive — monitor trends'}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CollapsibleSection>
+
+          {/* ── Occupancy Optimization ───────────────────────────────────────────── */}
+          <CollapsibleSection title="Occupancy Optimization">
+            {/* KPI row */}
+            <div className="grid grid-cols-3 gap-4 mb-4">
+              <div className="bg-white border border-slate-200 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-slate-900">{ytdOccPct.toFixed(1)}%</p>
+                <p className="text-xs text-slate-500 mt-1">YTD Occupancy</p>
+                <p className="text-[10px] text-slate-400 mt-1">{totalNights} nights / {ytdDays} days elapsed</p>
+              </div>
+              <div className="bg-white border border-slate-200 rounded-xl p-4 text-center">
+                <p className="text-2xl font-bold text-slate-900">{totalNights}</p>
+                <p className="text-xs text-slate-500 mt-1">Nights Booked YTD</p>
+                <p className="text-[10px] text-slate-400 mt-1">across {ytdMonths} months</p>
+              </div>
+              <div className={`border rounded-xl p-4 text-center ${nightsAtRisk > 60 ? 'bg-red-50 border-red-200' : nightsAtRisk > 0 ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
+                <p className={`text-2xl font-bold ${nightsAtRisk > 60 ? 'text-red-600' : nightsAtRisk > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{nightsAtRisk}</p>
+                <p className="text-xs text-slate-500 mt-1">Nights at Risk</p>
+                <p className="text-[10px] text-slate-400 mt-1">calendar days left in {year}</p>
+              </div>
+            </div>
+
+            {/* Price suppression flags */}
+            {flaggedMonths.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 flex items-start gap-3">
+                <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-xs font-semibold text-amber-700 mb-1">Price-Suppression Flags</p>
+                  <p className="text-xs text-amber-600">
+                    {flaggedMonths.map(m => m.name).join(', ')} — high ADR + low occupancy. Consider lowering nightly rate to fill gaps.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Occupancy bar chart */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-4">Monthly Occupancy Rate</p>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={occupancyChartData} margin={{ top: 8, right: 8, bottom: 0, left: -10 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="name" tick={{ fontSize: 11, fill: '#94a3b8' }} />
+                  <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} tickFormatter={v => `${v}%`} domain={[0, 100]} />
+                  <Tooltip formatter={(v: unknown) => [`${Number(v).toFixed(1)}%`, 'Occupancy']} />
+                  {ytdOccPct > 0 && (
+                    <ReferenceLine y={ytdOccPct} stroke="#6366f1" strokeDasharray="4 2"
+                      label={{ value: `YTD avg ${ytdOccPct.toFixed(0)}%`, position: 'insideTopRight', fontSize: 10, fill: '#6366f1' }} />
+                  )}
+                  <Bar dataKey="occupancy" radius={[3, 3, 0, 0]}>
+                    {occupancyChartData.map((entry, i) => (
+                      <Cell key={i} fill={entry.flag ? '#f59e0b' : entry.occupancy >= 70 ? '#10b981' : entry.occupancy >= 40 ? '#6366f1' : '#cbd5e1'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+              <div className="flex items-center gap-4 mt-3 text-[10px] text-slate-400">
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" /> ≥70% occ</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-indigo-500 inline-block" /> 40–69%</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-slate-300 inline-block" /> &lt;40%</span>
+                <span className="flex items-center gap-1"><span className="w-2.5 h-2.5 rounded-sm bg-amber-400 inline-block" /> price-suppressed</span>
+              </div>
+            </div>
+          </CollapsibleSection>
+
+          {/* ── Expense Optimization ─────────────────────────────────────────────── */}
+          <CollapsibleSection title="Expense Optimization">
+            {/* Cleaning fee card */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5 mb-4">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-4">Cleaning Fee Analysis</p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                <InlineInput
+                  label="Your Fee / Stay"
+                  value={draftFeePerStay}
+                  onChange={setDraftFeePerStay}
+                  onBlur={saveCleaningFee}
+                  unit="$" placeholder="e.g. 150"
+                  note="Charged to guest each booking"
+                />
+                <InlineInput
+                  label="Sub-Market Benchmark"
+                  value={draftCleaningFee}
+                  onChange={setDraftCleaningFee}
+                  onBlur={saveCleaningFee}
+                  unit="$" placeholder="e.g. 175"
+                  note="Comparable listings in your market"
+                />
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">Net / Stay</p>
+                  <p className={`text-lg font-bold ${cleaningNetPerStay < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{fmt2(cleaningNetPerStay)}</p>
+                  <p className="text-[10px] text-slate-400 mt-1">fee minus cleaner cost</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">Annual Cleaning Net</p>
+                  <p className={`text-lg font-bold ${cleaningNetAnnual < 0 ? 'text-red-600' : 'text-emerald-600'}`}>{fmt(cleaningNetAnnual)}</p>
+                  <p className="text-[10px] text-slate-400 mt-1">across {totalBookings} stays</p>
+                </div>
+              </div>
+              {savedSection === 'cleaning' && (
+                <p className="text-xs text-emerald-600 flex items-center gap-1"><Check className="w-3 h-3" /> Saved</p>
+              )}
+            </div>
+
+            {/* PITI card */}
+            <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-5">
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide">PITI &amp; Mortgage</p>
+                <button onClick={() => setPitiOpen(o => !o)} className="text-xs text-indigo-600 hover:underline flex items-center gap-1">
+                  {pitiOpen ? 'Hide' : 'Edit loan details'}
+                  {pitiOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                </button>
+              </div>
+
+              {/* PITI KPI row */}
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">Annual PITI</p>
+                  <p className="text-xl font-bold text-slate-900">{fmt(annualPITI)}</p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{fmt(settings?.monthlyPITI ?? 0)}/month</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">YTD Revenue vs PITI</p>
+                  <p className={`text-xl font-bold ${pitiCoverage >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                    {pitiCoverage >= 0 ? `+${fmt(pitiCoverage)}` : `(${fmt(Math.abs(pitiCoverage))})`}
+                  </p>
+                  <p className="text-[10px] text-slate-400 mt-0.5">{ytdMonths}mo revenue vs {ytdMonths}mo PITI</p>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 mb-1">LTV</p>
+                  <p className={`text-xl font-bold ${ltv == null ? 'text-slate-400' : ltv > 80 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {ltv == null ? '—' : pct(ltv)}
+                  </p>
+                  {hasPMI && <p className="text-[10px] text-amber-500 mt-0.5">PMI applies (~{fmt(estimatedPMI)}/yr)</p>}
+                </div>
+              </div>
+
+              {pitiOpen && (
+                <div className="pt-4 border-t border-slate-100">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                    <InlineInput label="Mortgage Rate" value={draftRate} onChange={setDraftRate} onBlur={savePiti}
+                      unit="%" placeholder="e.g. 6.75" step="0.01" note="Current interest rate" />
+                    <InlineInput label="Property Value" value={draftValue} onChange={setDraftValue} onBlur={savePiti}
+                      unit="$" placeholder="e.g. 450000" note="Current market estimate" />
+                    <InlineInput label="Remaining Balance" value={draftBalance} onChange={setDraftBalance} onBlur={savePiti}
+                      unit="$" placeholder="e.g. 320000" note="Current loan balance" />
+                    <InlineInput label="Remaining Term" value={draftLoanTerm} onChange={setDraftLoanTerm} onBlur={savePiti}
+                      placeholder="e.g. 27" note="Years remaining on loan" />
+                  </div>
+                  <div className="mt-4">
+                    <p className="text-xs text-slate-500 mb-2">Loan Structure</p>
+                    <div className="flex gap-2">
+                      {(['fixed', 'arm'] as LoanStructure[]).map(s => (
+                        <button key={s} onClick={() => { setDraftLoanStructure(s); savePiti(); }}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${draftLoanStructure === s ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300'}`}>
+                          {s === 'fixed' ? 'Fixed Rate' : 'ARM'}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  {refiSavings05 != null && (
+                    <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                      <p className="text-xs font-semibold text-blue-700 mb-1">Refinance Scenarios</p>
+                      <p className="text-xs text-blue-600">−0.5% rate → save {fmt(refiSavings05)}/month ({fmt(refiSavings05 * 12)}/yr)</p>
+                      {refiSavings10 && <p className="text-xs text-blue-600">−1.0% rate → save {fmt(refiSavings10)}/month ({fmt(refiSavings10 * 12)}/yr)</p>}
+                    </div>
+                  )}
+                  {savedSection === 'piti' && (
+                    <p className="text-xs text-emerald-600 mt-3 flex items-center gap-1"><Check className="w-3 h-3" /> Saved</p>
+                  )}
+                </div>
+              )}
+            </div>
+          </CollapsibleSection>
         </>
       )}
     </div>
