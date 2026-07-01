@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, Upload, TrendingUp, Target } from 'lucide-react';
+import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, Upload, TrendingUp, Target, Users } from 'lucide-react';
 
 type SubLink = { href: string; label: string; icon: React.ComponentType<{ className?: string }> };
 type NavLink = { href: string; label: string; icon: React.ComponentType<{ className?: string }>; children?: SubLink[] };
@@ -15,6 +15,7 @@ const links: NavLink[] = [
     children: [
       { href: '/bookings', label: 'Bookings', icon: CalendarDays },
       { href: '/expenses', label: 'Expenses', icon: Receipt },
+      { href: '/guests', label: 'Guests', icon: Users },
     ],
   },
   { href: '/forecast', label: 'Long Term Forecast', icon: TrendingUp },
