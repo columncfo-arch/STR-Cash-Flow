@@ -25,24 +25,25 @@ function mean(arr: number[]) { return arr.length ? arr.reduce((s, v) => s + v, 0
 interface ScenarioResult {
   target: number; stays: number; nights: number; occupancy: number;
   grossRevenue: number; cleaningCollected: number; cleaningPaidOut: number;
-  annualPITI: number; trueBankPayout: number;
+  annualPITI: number; annualOpEx: number; netCashFlow: number;
 }
 
 function computeScenario(
   target: number, adr: number, avgStay: number,
-  cleaningFee: number, cleaningCost: number, annualPITI: number,
+  cleaningFee: number, cleaningCost: number, annualPITI: number, annualOpEx: number,
 ): ScenarioResult | null {
   const netCleaningPerStay = cleaningFee - cleaningCost;
   const totalPerStay = adr * avgStay + netCleaningPerStay;
   if (totalPerStay <= 0) return null;
-  const stays = (target + annualPITI) / totalPerStay;
+  // Solve: target = grossRevenue + cleaningNet - annualOpEx - annualPITI
+  const stays = (target + annualPITI + annualOpEx) / totalPerStay;
   const nights = stays * avgStay;
   return {
     target, stays, nights, occupancy: (nights / 365) * 100,
     grossRevenue: adr * nights,
     cleaningCollected: cleaningFee * stays,
     cleaningPaidOut: cleaningCost * stays,
-    annualPITI, trueBankPayout: annualPITI + target,
+    annualPITI, annualOpEx, netCashFlow: target,
   };
 }
 
@@ -105,6 +106,7 @@ export default function OptimizationPage() {
   const [modelAvgStay, setModelAvgStay] = useState('');
   const [modelCleaningFee, setModelCleaningFee] = useState('');
   const [modelCleaningCost, setModelCleaningCost] = useState('');
+  const [modelOpEx, setModelOpEx] = useState('');
   const [scenarioTargets, setScenarioTargets] = useState<[string, string, string]>(['0', '5000', '10000']);
   const [modelInitialized, setModelInitialized] = useState(false);
 
@@ -146,10 +148,12 @@ export default function OptimizationPage() {
     const cleaningCostPaid = statement.expensesByCategory.cleaning ?? 0;
     const cleaningCostPerStay = stays > 0 ? cleaningCostPaid / stays : 0;
 
+    const otherOpEx = (statement.totalOperatingExpenses ?? 0) - (statement.expensesByCategory.cleaning ?? 0);
     if (avgAdr > 0) setModelAdr(String(Math.round(avgAdr)));
     setModelAvgStay(String(parseFloat(avgStay.toFixed(1))));
     setModelCleaningFee(String(Math.round(settings.cleaningFeePerBooking ?? 0)));
     setModelCleaningCost(String(Math.round(cleaningCostPerStay)));
+    if (otherOpEx > 0) setModelOpEx(String(Math.round(otherOpEx)));
     setModelInitialized(true);
   }, [settings, statement, modelInitialized]);
 
@@ -311,8 +315,9 @@ export default function OptimizationPage() {
   const mAvgStay = parseFloat(modelAvgStay) || 1;
   const mCleaningFee = parseFloat(modelCleaningFee) || 0;
   const mCleaningCost = parseFloat(modelCleaningCost) || 0;
+  const mOpEx = parseFloat(modelOpEx) || 0;
   const scenarios: ScenarioResult[] = scenarioTargets
-    .map(t => computeScenario(parseFloat(t) || 0, mAdr, mAvgStay, mCleaningFee, mCleaningCost, annualPITI))
+    .map(t => computeScenario(parseFloat(t) || 0, mAdr, mAvgStay, mCleaningFee, mCleaningCost, annualPITI, mOpEx))
     .filter((s): s is ScenarioResult => s !== null);
 
   const hasData = activeMonths.length > 0;
@@ -735,15 +740,11 @@ export default function OptimizationPage() {
                 <p className="text-xs text-slate-400 mt-0.5">From Settings</p>
               </div>
               <div>
-                <label className="text-xs text-slate-500 block mb-1">Net Cleaning / Stay</label>
-                <div className={`text-sm border rounded-lg px-3 py-2 font-medium ${
-                  mCleaningFee - mCleaningCost >= 0
-                    ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
-                    : 'border-red-200 bg-red-50 text-red-600'
-                }`}>
-                  {fmt(mCleaningFee - mCleaningCost)}
-                </div>
-                <p className="text-xs text-slate-400 mt-0.5">Fee minus cost</p>
+                <label className="text-xs text-slate-500 block mb-1">Other Annual Op Ex</label>
+                <input type="number" value={modelOpEx} onChange={e => setModelOpEx(e.target.value)}
+                  placeholder="e.g. 9000" min="0"
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
+                <p className="text-xs text-slate-400 mt-0.5">Utilities, maintenance, etc. (excl. cleaning)</p>
               </div>
             </div>
 
@@ -837,16 +838,26 @@ export default function OptimizationPage() {
                       ))}
                     </tr>
                   )}
+                  {mOpEx > 0 && (
+                    <tr className="border-b border-slate-100">
+                      <td className="px-5 py-3 text-slate-600">Other Operating Expenses</td>
+                      {scenarios.map((s, i) => (
+                        <td key={i} className="px-5 py-3 text-right text-red-500">({fmt2(s.annualOpEx)})</td>
+                      ))}
+                    </tr>
+                  )}
                   <tr className="border-b border-slate-100">
-                    <td className="px-5 py-3 text-slate-600">Total Hard Fixed Costs (PITI)</td>
+                    <td className="px-5 py-3 text-slate-600">Annual PITI</td>
                     {scenarios.map((s, i) => (
                       <td key={i} className="px-5 py-3 text-right text-red-500">({fmt2(s.annualPITI)})</td>
                     ))}
                   </tr>
                   <tr className="bg-slate-800">
-                    <td className="px-5 py-4 font-bold text-white">True Bank Payout Position</td>
+                    <td className="px-5 py-4 font-bold text-white">Net Cash Flow</td>
                     {scenarios.map((s, i) => (
-                      <td key={i} className="px-5 py-4 text-right font-bold text-emerald-400 text-base">{fmt2(s.trueBankPayout)}</td>
+                      <td key={i} className="px-5 py-4 text-right font-bold text-emerald-400 text-base">
+                        {s.netCashFlow === 0 ? '$0.00' : `+${fmt2(s.netCashFlow)}`}
+                      </td>
                     ))}
                   </tr>
                 </tbody>
@@ -858,7 +869,11 @@ export default function OptimizationPage() {
                 <span>·</span>
                 <span>Net Cleaning: {fmt(mCleaningFee - mCleaningCost)}/stay</span>
                 <span>·</span>
+                <span>Other OpEx: {fmt(mOpEx)}/yr</span>
+                <span>·</span>
                 <span>Annual PITI: {fmt(annualPITI)}</span>
+                <span>·</span>
+                <span className="font-medium text-slate-500">Total fixed costs: {fmt(mOpEx + annualPITI)}/yr</span>
               </div>
             </div>
           ) : (
