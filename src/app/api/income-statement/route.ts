@@ -157,7 +157,9 @@ export async function GET(req: Request) {
     }
 
     const now = new Date();
-    const pitiMonths = year < now.getFullYear() ? 12 : Math.min(now.getMonth() + 1, 12);
+    // For the current year: count only completed months (getMonth() is 0-indexed, so June 30 = 5 = 6 complete months).
+    // This prevents PITI from jumping on the 1st of the month before any revenue arrives.
+    const pitiMonths = year < now.getFullYear() ? 12 : Math.min(now.getMonth(), 12);
     const annualPnL = buildPnL(yearBookings, yearExpenses, settings.monthlyPITI, pitiMonths, settings.cleaningFeePerBooking ?? 0);
 
     const statement: AnnualStatement = {
