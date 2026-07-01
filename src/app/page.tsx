@@ -30,16 +30,19 @@ function ChartTooltip({
 }) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
-  const gross = d._gross;
-  const expenses = d._expenses;
-  const netIncome = d['Net Income'];
-  const forecast = d['Revenue Forecast'];
-  const hasActual = gross != null && gross > 0;
-  const hasForecast = forecast != null;
-  if (!hasActual && !hasForecast) return null;
+  const gross = d._gross as number | null;
+  const expenses = d._expenses as number | null;
+  const netIncome = d['Net Income'] as number | null;
+  const target = d['Monthly Target'] as number | null;
+  const bookedRevenue = ((d.Airbnb ?? 0) as number) + ((d['Booking.com'] ?? 0) as number) + ((d.VRBO ?? 0) as number);
+  const hasActual = gross != null;
+  const hasPreBooked = !hasActual && bookedRevenue > 0;
+  if (!hasActual && !hasPreBooked && target == null) return null;
+
+  const variance = hasActual && target ? gross! - target : null;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm min-w-[175px]">
+    <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm min-w-[190px]">
       <p className="font-semibold text-slate-800 mb-2">{label}</p>
       {hasActual && (
         <>
@@ -59,10 +62,24 @@ function ChartTooltip({
           </div>
         </>
       )}
-      {hasForecast && (
-        <div className={`flex justify-between gap-6 ${hasActual ? 'border-t border-slate-100 mt-2 pt-2' : ''}`}>
-          <span className="text-slate-500">Rev. Forecast</span>
-          <span className="font-medium text-slate-600">{fmt(forecast!)}</span>
+      {hasPreBooked && (
+        <div className="flex justify-between gap-6">
+          <span className="text-slate-500">On books</span>
+          <span className="font-medium text-slate-600">{fmt(bookedRevenue)}</span>
+        </div>
+      )}
+      {target != null && (
+        <div className={`flex justify-between gap-6 ${hasActual || hasPreBooked ? 'border-t border-slate-100 mt-2 pt-2' : ''}`}>
+          <span className="text-slate-500">Monthly Target</span>
+          <span className="font-medium text-slate-600">{fmt(target)}</span>
+        </div>
+      )}
+      {variance != null && (
+        <div className="flex justify-between gap-6">
+          <span className="text-slate-500">vs. Target</span>
+          <span className={`font-semibold ${variance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+            {variance >= 0 ? '+' : ''}{fmt(variance)}
+          </span>
         </div>
       )}
     </div>
@@ -235,28 +252,40 @@ export default function Dashboard() {
 
   const growthPct = settings?.forecastGrowthByYear?.[String(year)] ?? settings?.forecastGrowthPct ?? 0;
   const growthFactor = growthPct / 100;
+  const prevHasData = prevStatement?.months.some(m => m.grossRevenue > 0) ?? false;
+
+  // Monthly targets via prior-year seasonality × growth factor; fallback to flat line per month
+  const prevAnnualGross = prevStatement?.months.reduce((s, m) => s + m.grossRevenue, 0) ?? 0;
+  const straightLine = prevAnnualGross > 0 ? Math.round((prevAnnualGross / 12) * (1 + growthFactor)) : null;
+  const monthlyForecasts: (number | null)[] = Array.from({ length: 12 }, (_, i) => {
+    if (!prevStatement) return null;
+    const prev = prevStatement.months[i].grossRevenue;
+    if (prev > 0) return Math.round(prev * (1 + growthFactor));
+    return straightLine;
+  });
+
+  const annualForecast = prevHasData ? monthlyForecasts.reduce<number>((s, v) => s + (v ?? 0), 0) : null;
+  const ytdForecast = prevHasData
+    ? monthlyForecasts.slice(0, currentMonthIdx + 1).reduce<number>((s, v) => s + (v ?? 0), 0)
+    : null;
+  const pacingVariance = ytdForecast != null ? ytdGross - ytdForecast : null;
+  const pacingVariancePct = ytdForecast && ytdForecast > 0 ? (pacingVariance! / ytdForecast) * 100 : null;
 
   const chartData = statement?.months.map((m, i) => {
     const isActual = i <= currentMonthIdx;
-    let forecastRevenue: number | null = null;
-    if (i > currentMonthIdx && prevStatement) {
-      const prev = prevStatement.months[i];
-      forecastRevenue = prev.grossRevenue > 0 ? Math.round(prev.grossRevenue * (1 + growthFactor)) : null;
-    }
     return {
       name: MONTHS[i],
       Airbnb: m.byPlatform.airbnb.income,
       'Booking.com': m.byPlatform.booking.income,
       VRBO: m.byPlatform.vrbo.income,
       'Net Income': isActual ? m.netIncome : null,
-      'Revenue Forecast': forecastRevenue,
+      'Monthly Target': monthlyForecasts[i],
       _gross: isActual ? m.grossRevenue : null,
       _expenses: isActual ? m.grossRevenue - m.netIncome : null,
     };
   }) ?? [];
 
   const hasData = ytdGross > 0;
-  const prevHasData = prevStatement?.months.some(m => m.grossRevenue > 0) ?? false;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function handleChartClick(data: any) {
@@ -297,6 +326,30 @@ export default function Dashboard() {
           Monthly Revenue by Platform &amp; Net Income
         </h2>
         <p className="text-xs text-slate-400 mb-4">Click a month to drill into its P&amp;L</p>
+        {prevHasData && annualForecast != null && (
+          <div className="flex flex-wrap gap-3 mb-4">
+            <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+              <span className="text-slate-500">Annual Target</span>
+              <span className="font-semibold text-slate-800 ml-2">{fmt(annualForecast)}</span>
+            </div>
+            <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+              <span className="text-slate-500">YTD Target</span>
+              <span className="font-semibold text-slate-800 ml-2">{fmt(ytdForecast!)}</span>
+            </div>
+            <div className="text-xs bg-slate-50 border border-slate-200 rounded-lg px-3 py-2">
+              <span className="text-slate-500">YTD Actual</span>
+              <span className="font-semibold text-slate-800 ml-2">{fmt(ytdGross)}</span>
+            </div>
+            {pacingVariance != null && (
+              <div className={`text-xs rounded-lg px-3 py-2 border ${pacingVariance >= 0 ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'}`}>
+                <span className={pacingVariance >= 0 ? 'text-emerald-700' : 'text-red-600'}>
+                  {pacingVariance >= 0 ? '▲ Ahead ' : '▼ Behind '}{fmt(Math.abs(pacingVariance))}
+                  {pacingVariancePct != null ? ` (${Math.abs(pacingVariancePct).toFixed(1)}%)` : ''}
+                </span>
+              </div>
+            )}
+          </div>
+        )}
         {hasData ? (
           <>
             <ResponsiveContainer width="100%" height={300}>
@@ -351,7 +404,7 @@ export default function Dashboard() {
                   strokeWidth={3} dot={{ r: 4, fill: '#f97316', strokeWidth: 0 }} connectNulls
                 />
                 <Line
-                  yAxisId="left" type="monotone" dataKey="Revenue Forecast" stroke="#475569"
+                  yAxisId="left" type="monotone" dataKey="Monthly Target" stroke="#475569"
                   strokeWidth={2} strokeDasharray="6 3" dot={{ r: 4, fill: '#475569', strokeWidth: 0 }}
                 />
               </ComposedChart>
