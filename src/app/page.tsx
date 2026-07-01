@@ -174,7 +174,7 @@ export default function Dashboard() {
   const ytdGross = ytdMonths.reduce((s, m) => s + m.grossRevenue, 0);
   const ytdNetIncome = ytdMonths.reduce((s, m) => s + m.netIncome, 0);
   const ytdNights = ytdMonths.reduce((s, m) => s + m.totalNights, 0);
-  const ytdBookingCount = ytdMonths.reduce((s, m) => s + m.bookings.length, 0);
+  const ytdBookingCount = ytdMonths.reduce((s, m) => s + m.bookings.filter(b => b.income > 0).length, 0);
   const ytdOccupancy = ytdMonths.length > 0 ? ytdMonths.reduce((s, m) => s + m.occupancyRate, 0) / ytdMonths.length : 0;
   const ytdAdr = ytdNights > 0 ? ytdGross / ytdNights : null;
   const ytdAvgStay = ytdBookingCount > 0 ? ytdNights / ytdBookingCount : null;
@@ -206,7 +206,7 @@ export default function Dashboard() {
   // Selected month data
   const selMonth: MonthlyStatement | null = (selectedMonth !== null && statement) ? statement.months[selectedMonth] : null;
   const selAdr = selMonth && selMonth.totalNights > 0 ? selMonth.grossRevenue / selMonth.totalNights : null;
-  const selAvgStay = selMonth && selMonth.bookings.length > 0 ? selMonth.totalNights / selMonth.bookings.length : null;
+  const selAvgStay = selMonth && selMonth.bookings.filter(b => b.income > 0).length > 0 ? selMonth.totalNights / selMonth.bookings.filter(b => b.income > 0).length : null;
 
   const growthPct = settings?.forecastGrowthByYear?.[String(year)] ?? settings?.forecastGrowthPct ?? 0;
   const growthFactor = growthPct / 100;
@@ -377,7 +377,7 @@ export default function Dashboard() {
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
               <div className="px-6 py-4 border-b border-slate-100">
                 <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold">
-                  Bookings — {selMonth.bookings.length} booking{selMonth.bookings.length !== 1 ? 's' : ''} · {selMonth.totalNights} nights · avg {selAvgStay?.toFixed(1)} nights/stay
+                  Bookings — {selMonth.bookings.filter(b => b.income > 0).length} booking{selMonth.bookings.filter(b => b.income > 0).length !== 1 ? 's' : ''} · {selMonth.totalNights} nights · avg {selAvgStay?.toFixed(1)} nights/stay
                 </h3>
               </div>
               <table className="w-full text-sm">

@@ -108,10 +108,14 @@ function buildMonthly(
   let totalNights = 0;
 
   for (const b of monthBookings) {
-    totalNights += b.nights;
+    // Skip $0-income bookings (cancellations) from nights/booking stats so they
+    // don't drag down ADR, occupancy, and avg-stay calculations.
+    if (b.income > 0) {
+      totalNights += b.nights;
+      byPlatform[b.platform].nights += b.nights;
+      byPlatform[b.platform].bookings += 1;
+    }
     byPlatform[b.platform].income += b.income;
-    byPlatform[b.platform].nights += b.nights;
-    byPlatform[b.platform].bookings += 1;
   }
 
   const pnl = buildPnL(monthBookings, monthExpenses, monthlyPITI, 1, cleaningCostPerBooking);
