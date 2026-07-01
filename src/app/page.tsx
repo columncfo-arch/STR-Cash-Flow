@@ -242,7 +242,10 @@ export default function Dashboard() {
   const effectivePriorAnnual = effectivePriorMonthly?.reduce((s, v) => s + v, 0) ?? 0;
   const effectiveMonthsWithData = effectivePriorMonthly?.filter(v => v > 0).length ?? 0;
   const prevHasData = effectiveMonthsWithData > 0;
-  const useSeasonality = effectivePriorAnnual > 0 && effectiveMonthsWithData >= 6;
+  // User-entered data is trusted unconditionally; database fallback requires ≥6 months to avoid sparse-data skew
+  const useSeasonality = storedPriorMonthly != null
+    ? effectivePriorAnnual > 0
+    : effectivePriorAnnual > 0 && effectiveMonthsWithData >= 6;
 
   async function saveTarget() {
     if (!settings) return;
@@ -381,7 +384,12 @@ export default function Dashboard() {
                     {pacingVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(pacingVariancePct).toFixed(1)}%) {pacingVariance >= 0 ? 'ahead' : 'behind'}</span>}
                   </span>
                 )}
-                <p className="text-xs text-slate-400 mt-3">Full-year target {fmt(annualForecast)}</p>
+                <div className="flex items-center justify-between mt-3">
+                  <p className="text-xs text-slate-400">Full-year target {fmt(annualForecast)}</p>
+                  <p className={`text-xs font-medium ${ytdNetIncome >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                    Net {fmt(ytdNetIncome)} YTD
+                  </p>
+                </div>
               </>
             )}
           </div>}
