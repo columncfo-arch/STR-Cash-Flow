@@ -59,8 +59,9 @@ function SectionHeader({ title }: { title: string }) {
   );
 }
 
-function InlineInput({ label, value, onChange, placeholder, unit, note, min, max, step }: {
+function InlineInput({ label, value, onChange, onBlur, placeholder, unit, note, min, max, step }: {
   label: string; value: string; onChange: (v: string) => void;
+  onBlur?: () => void;
   placeholder?: string; unit?: string; note?: string;
   min?: string; max?: string; step?: string;
 }) {
@@ -72,6 +73,7 @@ function InlineInput({ label, value, onChange, placeholder, unit, note, min, max
         <input
           type="number" value={value}
           onChange={e => onChange(e.target.value)}
+          onBlur={onBlur}
           placeholder={placeholder ?? '—'}
           min={min} max={max} step={step}
           className={`w-full text-sm border border-slate-200 rounded-lg py-2 ${unit ? 'pl-7 pr-3' : 'px-3'}`}
@@ -160,6 +162,23 @@ export default function OptimizationPage() {
     if (otherOpEx > 0) setModelOpEx(String(Math.round(otherOpEx)));
     setModelInitialized(true);
   }, [settings, statement, modelInitialized]);
+
+  function savePiti() {
+    saveSection('piti', {
+      mortgageRate: parseFloat(draftRate) || undefined,
+      propertyValue: parseFloat(draftValue) || undefined,
+      loanBalance: parseFloat(draftBalance) || undefined,
+      loanTermYears: parseInt(draftLoanTerm) || undefined,
+      loanStructure: draftLoanStructure,
+    });
+  }
+
+  function saveCleaningFee() {
+    saveSection('cleaning', {
+      benchmarkCleaningFee: parseFloat(draftCleaningFee) || undefined,
+      cleaningFeePerBooking: parseFloat(draftFeePerStay) || 0,
+    });
+  }
 
   async function saveSection(section: string, patch: Partial<Settings>) {
     if (!settings) return;
@@ -521,6 +540,7 @@ export default function OptimizationPage() {
                   <input
                     type="number" value={draftFeePerStay}
                     onChange={e => setDraftFeePerStay(e.target.value)}
+                    onBlur={saveCleaningFee}
                     placeholder="0" min="0"
                     className="w-14 text-base font-bold text-emerald-700 bg-transparent border-b border-emerald-300 focus:border-emerald-500 outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
                   />
@@ -566,7 +586,7 @@ export default function OptimizationPage() {
                   </p>
                 )}
                 <button
-                  onClick={() => saveSection('cleaning', { benchmarkCleaningFee: parseFloat(draftCleaningFee) || undefined })}
+                  onClick={saveCleaningFee}
                   className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 w-fit"
                 >
                   {savedSection === 'cleaning' ? <><Check className="w-4 h-4" /> Saved</> : 'Save'}
@@ -610,21 +630,31 @@ export default function OptimizationPage() {
               <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
                 <InlineInput
                   label="Market Value ($)" value={draftValue} onChange={setDraftValue}
-                  placeholder="e.g. 500000" unit="$"
+                  onBlur={savePiti} placeholder="e.g. 500000" unit="$"
                 />
                 <InlineInput
                   label="Remaining Principal ($)" value={draftBalance} onChange={setDraftBalance}
-                  placeholder="e.g. 380000" unit="$"
+                  onBlur={savePiti} placeholder="e.g. 380000" unit="$"
                 />
                 <InlineInput
                   label="APR (%)" value={draftRate} onChange={setDraftRate}
-                  placeholder="e.g. 7.25" unit="%" min="0" max="30" step="0.125"
+                  onBlur={savePiti} placeholder="e.g. 7.25" unit="%" min="0" max="30" step="0.125"
                 />
                 <div>
                   <label className="text-xs text-slate-500 font-medium block mb-1">Loan Structure</label>
                   <select
                     value={draftLoanStructure}
-                    onChange={e => setDraftLoanStructure(e.target.value as LoanStructure)}
+                    onChange={e => {
+                      const s = e.target.value as LoanStructure;
+                      setDraftLoanStructure(s);
+                      saveSection('piti', {
+                        mortgageRate: parseFloat(draftRate) || undefined,
+                        propertyValue: parseFloat(draftValue) || undefined,
+                        loanBalance: parseFloat(draftBalance) || undefined,
+                        loanTermYears: parseInt(draftLoanTerm) || undefined,
+                        loanStructure: s,
+                      });
+                    }}
                     className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
                   >
                     <option value="fixed">Fixed Rate</option>
@@ -637,6 +667,7 @@ export default function OptimizationPage() {
                   <input
                     type="number" value={draftLoanTerm}
                     onChange={e => setDraftLoanTerm(e.target.value)}
+                    onBlur={savePiti}
                     placeholder="e.g. 30" min="5" max="40" step="1"
                     className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
                   />
