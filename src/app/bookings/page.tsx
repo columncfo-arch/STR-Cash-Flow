@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { Booking, Platform, Settings } from '@/types';
 import PlatformBadge from '@/components/PlatformBadge';
 import { format } from 'date-fns';
-import { Pencil, Trash2, Plus, X, Check, AlertTriangle } from 'lucide-react';
+import { Pencil, Trash2, Plus, X, Check, AlertTriangle, Download } from 'lucide-react';
 
 const PLATFORM_OPTIONS: { value: Platform; label: string }[] = [
   { value: 'airbnb', label: 'Airbnb' },
@@ -17,6 +17,9 @@ interface EditState {
   id: string;
   checkIn: string;
   income: string;
+  guestName: string;
+  email: string;
+  phone: string;
   notes: string;
 }
 
@@ -25,6 +28,8 @@ interface NewBooking {
   checkIn: string;
   checkOut: string;
   guestName: string;
+  email: string;
+  phone: string;
   income: string;
   notes: string;
 }
@@ -34,6 +39,8 @@ const emptyNew = (): NewBooking => ({
   checkIn: '',
   checkOut: '',
   guestName: '',
+  email: '',
+  phone: '',
   income: '',
   notes: '',
 });
@@ -69,7 +76,14 @@ export default function BookingsPage() {
     await fetch(`/api/bookings/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ checkIn: editState.checkIn, income: parseFloat(editState.income) || 0, notes: editState.notes }),
+      body: JSON.stringify({
+        checkIn: editState.checkIn,
+        income: parseFloat(editState.income) || 0,
+        guestName: editState.guestName || undefined,
+        email: editState.email || undefined,
+        phone: editState.phone || undefined,
+        notes: editState.notes || undefined,
+      }),
     });
     setEditState(null);
     load();
@@ -105,6 +119,8 @@ export default function BookingsPage() {
       checkOut,
       nights,
       guestName: newBooking.guestName || undefined,
+      email: newBooking.email || undefined,
+      phone: newBooking.phone || undefined,
       income: parseFloat(newBooking.income) || 0,
       notes: newBooking.notes || undefined,
       isManual: true,
@@ -119,14 +135,45 @@ export default function BookingsPage() {
     load();
   }
 
+  function exportContacts() {
+    const rows = bookings
+      .filter(b => b.email || b.phone)
+      .map(b => {
+        const name = b.guestName ?? b.bookerName ?? '';
+        const checkIn = format(new Date(b.checkIn + 'T12:00:00'), 'yyyy-MM-dd');
+        const platform = b.platform;
+        return [name, b.email ?? '', b.phone ?? '', checkIn, platform]
+          .map(v => `"${String(v).replace(/"/g, '""')}"`)
+          .join(',');
+      });
+    if (rows.length === 0) {
+      alert('No guests with email or phone on record yet.');
+      return;
+    }
+    const csv = ['Name,Email,Phone,Check-in,Platform', ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `guest-contacts-${filterYear}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
   const years = ['all', ...Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i))];
+  const contactCount = bookings.filter(b => b.email || b.phone).length;
 
   return (
     <div className="max-w-5xl mx-auto">
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Bookings</h1>
-          <p className="text-slate-500 text-sm mt-1">{bookings.length} bookings {filterYear === 'all' ? 'across all years' : `in ${filterYear}`}</p>
+          <p className="text-slate-500 text-sm mt-1">
+            {bookings.length} bookings {filterYear === 'all' ? 'across all years' : `in ${filterYear}`}
+            {contactCount > 0 && (
+              <span className="ml-2 text-slate-400">· {contactCount} with contact info</span>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <select
@@ -136,6 +183,15 @@ export default function BookingsPage() {
           >
             {years.map(y => <option key={y} value={y}>{y === 'all' ? 'All Years' : y}</option>)}
           </select>
+          {contactCount > 0 && (
+            <button
+              onClick={exportContacts}
+              className="flex items-center gap-2 border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm hover:bg-slate-50 transition-colors"
+              title={`Export ${contactCount} guest contact${contactCount !== 1 ? 's' : ''} as CSV`}
+            >
+              <Download className="w-4 h-4" /> Export Contacts
+            </button>
+          )}
           {bookings.length > 0 && (
             <button
               onClick={clearAll}
@@ -189,13 +245,33 @@ export default function BookingsPage() {
               />
             </div>
             <div>
-              <label className="text-xs text-slate-500 block mb-1">Guest Name (optional)</label>
+              <label className="text-xs text-slate-500 block mb-1">Guest Name</label>
               <input
                 type="text"
                 value={newBooking.guestName}
                 onChange={e => setNewBooking(p => ({ ...p, guestName: e.target.value }))}
                 className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
                 placeholder="Guest name"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Email</label>
+              <input
+                type="email"
+                value={newBooking.email}
+                onChange={e => setNewBooking(p => ({ ...p, email: e.target.value }))}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
+                placeholder="guest@example.com"
+              />
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Phone</label>
+              <input
+                type="tel"
+                value={newBooking.phone}
+                onChange={e => setNewBooking(p => ({ ...p, phone: e.target.value }))}
+                className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
+                placeholder="+1 555 000 0000"
               />
             </div>
             <div>
@@ -259,88 +335,159 @@ export default function BookingsPage() {
                 </td>
               </tr>
             ) : (
-              bookings.map(b => (
-                <tr key={b.id} className="border-b border-slate-50 hover:bg-slate-50">
-                  <td className="px-4 py-3">
-                    <PlatformBadge platform={b.platform} />
-                  </td>
-                  <td className="px-4 py-3 text-slate-700 max-w-[150px] truncate">
-                    {b.guestName ?? b.confirmationCode ?? '—'}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {editState?.id === b.id ? (
-                      <input
-                        type="date"
-                        value={editState.checkIn}
-                        onChange={e => setEditState(s => s ? { ...s, checkIn: e.target.value } : s)}
-                        className="border border-emerald-300 rounded px-2 py-1 text-sm"
-                      />
-                    ) : (
-                      format(new Date(b.checkIn + 'T12:00:00'), 'MMM d, yyyy')
+              bookings.map(b => {
+                const isEditing = editState?.id === b.id;
+                const displayName = b.guestName ?? b.bookerName ?? b.confirmationCode ?? '—';
+                const hasContact = !!(b.email || b.phone);
+                return (
+                  <>
+                    <tr key={b.id} className={`border-b ${isEditing ? 'border-slate-200 bg-slate-50' : 'border-slate-50 hover:bg-slate-50'}`}>
+                      <td className="px-4 py-3">
+                        <PlatformBadge platform={b.platform} />
+                      </td>
+                      <td className="px-4 py-3 text-slate-700 max-w-[160px]">
+                        {isEditing ? (
+                          <input
+                            type="text"
+                            value={editState.guestName}
+                            onChange={e => setEditState(s => s ? { ...s, guestName: e.target.value } : s)}
+                            className="w-full border border-emerald-300 rounded px-2 py-1 text-sm"
+                            placeholder="Guest name"
+                          />
+                        ) : (
+                          <div className="truncate">
+                            <span className="block truncate">{displayName}</span>
+                            {hasContact && (
+                              <span className="block text-xs text-slate-400 truncate">
+                                {b.email ?? b.phone}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {isEditing ? (
+                          <input
+                            type="date"
+                            value={editState.checkIn}
+                            onChange={e => setEditState(s => s ? { ...s, checkIn: e.target.value } : s)}
+                            className="border border-emerald-300 rounded px-2 py-1 text-sm"
+                          />
+                        ) : (
+                          format(new Date(b.checkIn + 'T12:00:00'), 'MMM d, yyyy')
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-slate-600">
+                        {format(new Date(b.checkOut + 'T12:00:00'), 'MMM d, yyyy')}
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-600">{b.nights}</td>
+                      <td className="px-4 py-3 text-right">
+                        {isEditing ? (
+                          <input
+                            type="number"
+                            value={editState.income}
+                            onChange={e => setEditState(s => s ? { ...s, income: e.target.value } : s)}
+                            className="w-24 text-right border border-emerald-300 rounded px-2 py-1 text-sm"
+                            min="0"
+                          />
+                        ) : (
+                          <span className={`font-semibold ${b.income > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
+                            {fmt(b.income)}
+                            {b.isManual && <span className="ml-1 text-xs text-slate-400">(manual)</span>}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-right text-slate-500 text-xs">
+                        {b.nights > 0 && b.income > 0 ? fmt(b.income / b.nights) : '—'}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          {isEditing ? (
+                            <>
+                              <button
+                                onClick={() => saveEdit(b.id)}
+                                className="p-1.5 rounded hover:bg-emerald-50 text-emerald-600"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setEditState(null)}
+                                className="p-1.5 rounded hover:bg-slate-100 text-slate-400"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={() => setEditState({
+                                  id: b.id,
+                                  checkIn: b.checkIn,
+                                  income: String(b.income),
+                                  guestName: b.guestName ?? b.bookerName ?? '',
+                                  email: b.email ?? '',
+                                  phone: b.phone ?? '',
+                                  notes: b.notes ?? '',
+                                })}
+                                className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                                title="Edit booking"
+                              >
+                                <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => deleteBooking(b.id)}
+                                className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                    {/* Contact edit row — visible only when editing */}
+                    {isEditing && (
+                      <tr key={`${b.id}-contact`} className="border-b border-slate-200 bg-slate-50">
+                        <td colSpan={8} className="px-4 pb-3">
+                          <div className="grid grid-cols-3 gap-3">
+                            <div>
+                              <label className="text-xs text-slate-500 block mb-1">Email</label>
+                              <input
+                                type="email"
+                                value={editState.email}
+                                onChange={e => setEditState(s => s ? { ...s, email: e.target.value } : s)}
+                                className="w-full text-sm border border-emerald-300 rounded px-2 py-1"
+                                placeholder="guest@example.com"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-500 block mb-1">Phone</label>
+                              <input
+                                type="tel"
+                                value={editState.phone}
+                                onChange={e => setEditState(s => s ? { ...s, phone: e.target.value } : s)}
+                                className="w-full text-sm border border-emerald-300 rounded px-2 py-1"
+                                placeholder="+1 555 000 0000"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-xs text-slate-500 block mb-1">Notes</label>
+                              <input
+                                type="text"
+                                value={editState.notes}
+                                onChange={e => setEditState(s => s ? { ...s, notes: e.target.value } : s)}
+                                className="w-full text-sm border border-emerald-300 rounded px-2 py-1"
+                                placeholder="Optional notes"
+                              />
+                            </div>
+                          </div>
+                        </td>
+                      </tr>
                     )}
-                  </td>
-                  <td className="px-4 py-3 text-slate-600">
-                    {format(new Date(b.checkOut + 'T12:00:00'), 'MMM d, yyyy')}
-                  </td>
-                  <td className="px-4 py-3 text-right text-slate-600">{b.nights}</td>
-                  <td className="px-4 py-3 text-right">
-                    {editState?.id === b.id ? (
-                      <input
-                        type="number"
-                        value={editState.income}
-                        onChange={e => setEditState(s => s ? { ...s, income: e.target.value } : s)}
-                        className="w-24 text-right border border-emerald-300 rounded px-2 py-1 text-sm"
-                        min="0"
-                      />
-                    ) : (
-                      <span className={`font-semibold ${b.income > 0 ? 'text-emerald-700' : 'text-slate-400'}`}>
-                        {fmt(b.income)}
-                        {b.isManual && <span className="ml-1 text-xs text-slate-400">(manual)</span>}
-                      </span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-right text-slate-500 text-xs">
-                    {b.nights > 0 && b.income > 0 ? fmt(b.income / b.nights) : '—'}
-                  </td>
-                  <td className="px-4 py-3 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {editState?.id === b.id ? (
-                        <>
-                          <button
-                            onClick={() => saveEdit(b.id)}
-                            className="p-1.5 rounded hover:bg-emerald-50 text-emerald-600"
-                          >
-                            <Check className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => setEditState(null)}
-                            className="p-1.5 rounded hover:bg-slate-100 text-slate-400"
-                          >
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={() => setEditState({ id: b.id, checkIn: b.checkIn, income: String(b.income), notes: b.notes ?? '' })}
-                            className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"
-                            title="Edit income"
-                          >
-                            <Pencil className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            onClick={() => deleteBooking(b.id)}
-                            className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
-                            title="Delete"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </td>
-                </tr>
-              ))
+                  </>
+                );
+              })
             )}
           </tbody>
           {bookings.length > 0 && (

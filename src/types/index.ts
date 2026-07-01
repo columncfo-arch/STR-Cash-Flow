@@ -26,6 +26,7 @@ export interface Booking {
   checkOut: string;  // YYYY-MM-DD
   nights: number;
   guestName?: string;
+  email?: string;
   confirmationCode?: string;
   income: number;         // gross earnings
   platformFee?: number;   // service fee / host fee
