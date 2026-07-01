@@ -150,7 +150,7 @@ export default function OptimizationPage() {
       setDraftBalance(s.loanBalance ? String(s.loanBalance) : '');
       setDraftLoanTerm(s.loanTermYears ? String(s.loanTermYears) : '');
       setDraftLoanStructure(s.loanStructure ?? 'fixed');
-      setDraftFeePerStay(s.cleaningFeePerBooking ? String(s.cleaningFeePerBooking) : '');
+      setDraftFeePerStay(s.guestCleaningFeePerBooking ? String(s.guestCleaningFeePerBooking) : '');
     });
   }, []);
 
@@ -172,7 +172,7 @@ export default function OptimizationPage() {
     const otherOpEx = (statement.totalOperatingExpenses ?? 0) - (statement.expensesByCategory.cleaning ?? 0);
     if (avgAdr > 0) setModelAdr(String(Math.round(avgAdr)));
     setModelAvgStay(String(parseFloat(avgStay.toFixed(1))));
-    setModelCleaningFee(String(Math.round(settings.cleaningFeePerBooking ?? 0)));
+    setModelCleaningFee(String(Math.round(settings.guestCleaningFeePerBooking ?? 0)));
     setModelCleaningCost(String(Math.round(cleaningCostPerStay)));
     if (otherOpEx > 0) setModelOpEx(String(Math.round(otherOpEx)));
     setModelInitialized(true);
@@ -191,7 +191,8 @@ export default function OptimizationPage() {
   function saveCleaningFee() {
     saveSection('cleaning', {
       benchmarkCleaningFee: parseFloat(draftCleaningFee) || undefined,
-      cleaningFeePerBooking: parseFloat(draftFeePerStay) || 0,
+      guestCleaningFeePerBooking: parseFloat(draftFeePerStay) || 0,
+      cleaningFeePerBooking: 0,  // clear any value mis-saved here previously
     });
   }
 

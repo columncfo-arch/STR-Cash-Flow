@@ -108,6 +108,7 @@ export interface Settings {
   benchmarkAdr?: number;
   benchmarkExpenseRatio?: number;
   benchmarkCleaningFee?: number;  // sub-market cleaning fee per stay
+  guestCleaningFeePerBooking?: number; // cleaning fee charged to guests (not an expense)
   mortgageRate?: number;          // current interest rate %
   propertyValue?: number;         // estimated current value
   loanBalance?: number;           // current outstanding balance

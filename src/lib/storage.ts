@@ -19,6 +19,7 @@ const DEFAULT_SETTINGS: Settings = {
   benchmarkAdr: undefined,
   benchmarkExpenseRatio: undefined,
   benchmarkCleaningFee: undefined,
+  guestCleaningFeePerBooking: 0,
   mortgageRate: undefined,
   propertyValue: undefined,
   loanBalance: undefined,
