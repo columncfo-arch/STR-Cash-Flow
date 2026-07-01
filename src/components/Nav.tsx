@@ -24,7 +24,7 @@ const links: NavLink[] = [
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
-const PUBLIC_PATHS = ['/welcome'];
+const PUBLIC_PATHS = ['/welcome', '/book-direct'];
 
 export default function Nav() {
   const pathname = usePathname();

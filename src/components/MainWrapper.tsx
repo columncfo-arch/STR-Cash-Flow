@@ -1,7 +1,7 @@
 'use client';
 import { usePathname } from 'next/navigation';
 
-const PUBLIC_PATHS = ['/welcome'];
+const PUBLIC_PATHS = ['/welcome', '/book-direct'];
 
 export default function MainWrapper({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

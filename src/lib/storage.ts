@@ -1,4 +1,4 @@
-import { Booking, Expense, Settings } from '@/types';
+import { Booking, DirectLead, Expense, Settings } from '@/types';
 import path from 'path';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -6,6 +6,7 @@ import { existsSync } from 'fs';
 const REDIS_SETTINGS_KEY = 'str:settings';
 const REDIS_BOOKINGS_KEY = 'str:bookings';
 const REDIS_EXPENSES_KEY = 'str:expenses';
+const REDIS_LEADS_KEY = 'str:leads';
 
 const DEFAULT_SETTINGS: Settings = {
   currency: 'USD',
@@ -112,6 +113,7 @@ const DATA_DIR = IS_VERCEL ? '/tmp/str-data' : path.join(process.cwd(), 'data');
 const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
 const BOOKINGS_FILE = path.join(DATA_DIR, 'bookings.json');
 const EXPENSES_FILE = path.join(DATA_DIR, 'expenses.json');
+const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
 
 async function ensureDir() {
   if (!existsSync(DATA_DIR)) await mkdir(DATA_DIR, { recursive: true });
@@ -304,6 +306,36 @@ export async function updateExpense(id: string, patch: Partial<Expense>): Promis
     return updated;
   }));
   return updated;
+}
+
+export async function loadLeads(): Promise<DirectLead[]> {
+  return useRedis
+    ? redisHashAll<DirectLead>(REDIS_LEADS_KEY)
+    : fileLoad<DirectLead[]>(LEADS_FILE, []);
+}
+
+export async function addLead(lead: DirectLead): Promise<void> {
+  if (useRedis) {
+    await redisHashSet(REDIS_LEADS_KEY, lead.id, lead);
+  } else {
+    await fileMutate<DirectLead>(LEADS_FILE, items => [...items, lead]);
+  }
+}
+
+export async function deleteLead(id: string): Promise<boolean> {
+  if (useRedis) {
+    const leads = await redisHashAll<DirectLead>(REDIS_LEADS_KEY);
+    if (!leads.some(l => l.id === id)) return false;
+    await redisHashDel(REDIS_LEADS_KEY, id);
+    return true;
+  }
+  let found = false;
+  await fileMutate<DirectLead>(LEADS_FILE, items => {
+    const next = items.filter(l => l.id !== id);
+    found = next.length !== items.length;
+    return next;
+  });
+  return found;
 }
 
 export async function deleteExpense(id: string): Promise<boolean> {

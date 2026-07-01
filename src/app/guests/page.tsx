@@ -1,9 +1,9 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { Booking, Platform, Settings } from '@/types';
+import { Booking, DirectLead, Platform, Settings } from '@/types';
 import PlatformBadge from '@/components/PlatformBadge';
 import { format } from 'date-fns';
-import { Users, ChevronDown, ChevronRight, Pencil, Check, X, Search, Download } from 'lucide-react';
+import { Users, ChevronDown, ChevronRight, Pencil, Check, X, Search, Download, Mail, Phone } from 'lucide-react';
 
 // ── Guest aggregation ─────────────────────────────────────────────────────────
 
@@ -71,12 +71,17 @@ interface ContactEditState {
   notes: string;
 }
 
+type Tab = 'guests' | 'leads';
+
 export default function GuestsPage() {
+  const [tab, setTab] = useState<Tab>('guests');
   const [allBookings, setAllBookings] = useState<Booking[]>([]);
+  const [leads, setLeads] = useState<DirectLead[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editContact, setEditContact] = useState<ContactEditState | null>(null);
   const [search, setSearch] = useState('');
+  const [leadSearch, setLeadSearch] = useState('');
   const [saving, setSaving] = useState(false);
 
   const fmt = (n: number) =>
@@ -87,14 +92,17 @@ export default function GuestsPage() {
     }).format(n);
 
   async function load() {
-    const [bookingsRes, settingsRes] = await Promise.all([
+    const [bookingsRes, settingsRes, leadsRes] = await Promise.all([
       fetch('/api/bookings?year=all'),
       fetch('/api/settings'),
+      fetch('/api/direct-booking'),
     ]);
     const bookings = await bookingsRes.json();
     const s = await settingsRes.json();
+    const l = await leadsRes.json();
     setAllBookings(Array.isArray(bookings) ? bookings : []);
     setSettings(s);
+    setLeads(Array.isArray(l) ? l : []);
   }
 
   useEffect(() => { load(); }, []);
@@ -160,6 +168,36 @@ export default function GuestsPage() {
     URL.revokeObjectURL(url);
   }
 
+  function exportLeads() {
+    if (leads.length === 0) { alert('No leads yet.'); return; }
+    const rows = leads.map(l => [
+      `${l.firstName} ${l.lastName}`.trim(),
+      l.email,
+      l.phone ?? '',
+      l.preferredDates ?? '',
+      l.tcpaConsent ? 'Yes' : 'No',
+      format(new Date(l.createdAt), 'yyyy-MM-dd'),
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+    const csv = ['Name,Email,Phone,Preferred Dates,TCPA Consent,Submitted', ...rows].join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'direct-booking-leads.csv';
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  const filteredLeads = useMemo(() => {
+    const q = leadSearch.trim().toLowerCase();
+    if (!q) return leads;
+    return leads.filter(l =>
+      `${l.firstName} ${l.lastName}`.toLowerCase().includes(q) ||
+      l.email.toLowerCase().includes(q) ||
+      (l.phone ?? '').includes(q)
+    );
+  }, [leads, leadSearch]);
+
   const withContact = roster.filter(g => g.email || g.phone).length;
   const repeatGuests = roster.filter(g => g.bookings.length > 1).length;
 
@@ -173,11 +211,11 @@ export default function GuestsPage() {
             Guests
           </h1>
           <p className="text-slate-500 text-sm mt-1">
-            {roster.length} unique guests · {repeatGuests} repeat · {withContact} with contact info
+            {roster.length} unique guests · {repeatGuests} repeat · {leads.length} direct booking {leads.length === 1 ? 'lead' : 'leads'}
           </p>
         </div>
         <div className="flex items-center gap-3">
-          {withContact > 0 && (
+          {tab === 'guests' && withContact > 0 && (
             <button
               onClick={exportContacts}
               className="flex items-center gap-2 border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm hover:bg-slate-50 transition-colors"
@@ -185,8 +223,158 @@ export default function GuestsPage() {
               <Download className="w-4 h-4" /> Export Contacts
             </button>
           )}
+          {tab === 'leads' && leads.length > 0 && (
+            <button
+              onClick={exportLeads}
+              className="flex items-center gap-2 border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm hover:bg-slate-50 transition-colors"
+            >
+              <Download className="w-4 h-4" /> Export Leads
+            </button>
+          )}
         </div>
       </div>
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 bg-slate-100 rounded-xl p-1 w-fit">
+        <button
+          onClick={() => setTab('guests')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            tab === 'guests' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Guest Roster
+        </button>
+        <button
+          onClick={() => setTab('leads')}
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-2 ${
+            tab === 'leads' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'
+          }`}
+        >
+          Direct Booking Leads
+          {leads.length > 0 && (
+            <span className="bg-emerald-100 text-emerald-700 text-xs rounded-full px-2 py-0.5 font-semibold">
+              {leads.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* ── Direct Booking Leads tab ─────────────────────────────────────── */}
+      {tab === 'leads' && (
+        <div>
+          {leads.length === 0 ? (
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-12 text-center">
+              <Mail className="w-8 h-8 text-slate-300 mx-auto mb-3" />
+              <p className="text-slate-500 text-sm font-medium">No direct booking leads yet</p>
+              <p className="text-slate-400 text-xs mt-1">
+                Share your{' '}
+                <a href="/book-direct" target="_blank" className="text-emerald-600 underline">/book-direct</a>
+                {' '}page with past guests to start collecting leads.
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Lead KPIs */}
+              <div className="grid grid-cols-3 gap-4 mb-5">
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                  <p className="text-xs text-slate-500">Total Leads</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-1">{leads.length}</p>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                  <p className="text-xs text-slate-500">TCPA Consent</p>
+                  <p className="text-2xl font-bold text-emerald-700 mt-1">
+                    {leads.filter(l => l.tcpaConsent).length}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">opted in for SMS</p>
+                </div>
+                <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
+                  <p className="text-xs text-slate-500">With Dates</p>
+                  <p className="text-2xl font-bold text-slate-900 mt-1">
+                    {leads.filter(l => l.preferredDates).length}
+                  </p>
+                  <p className="text-xs text-slate-400 mt-0.5">specified trip dates</p>
+                </div>
+              </div>
+
+              {/* Lead search */}
+              <div className="relative mb-4">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <input
+                  type="text"
+                  value={leadSearch}
+                  onChange={e => setLeadSearch(e.target.value)}
+                  placeholder="Search leads by name, email, or phone…"
+                  className="w-full pl-9 pr-4 py-2.5 text-sm border border-slate-200 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              {/* Leads table */}
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-left">
+                      <th className="px-4 py-3 font-medium">Name</th>
+                      <th className="px-4 py-3 font-medium">Contact</th>
+                      <th className="px-4 py-3 font-medium">Preferred Dates</th>
+                      <th className="px-4 py-3 font-medium text-center">SMS Opt-in</th>
+                      <th className="px-4 py-3 font-medium text-right">Submitted</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredLeads.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="text-center py-10 text-slate-400">
+                          No leads match your search.
+                        </td>
+                      </tr>
+                    ) : filteredLeads.map(lead => (
+                      <tr key={lead.id} className="border-b border-slate-50 hover:bg-slate-50">
+                        <td className="px-4 py-3 font-medium text-slate-800">
+                          {[lead.firstName, lead.lastName].filter(Boolean).join(' ')}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="space-y-0.5">
+                            <div className="flex items-center gap-1.5 text-xs text-slate-600">
+                              <Mail className="w-3 h-3 text-slate-400" />
+                              <a href={`mailto:${lead.email}`} className="hover:text-emerald-600 hover:underline">
+                                {lead.email}
+                              </a>
+                            </div>
+                            {lead.phone && (
+                              <div className="flex items-center gap-1.5 text-xs text-slate-500">
+                                <Phone className="w-3 h-3 text-slate-400" />
+                                {lead.phone}
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-xs text-slate-500">
+                          {lead.preferredDates ?? <span className="text-slate-300 italic">Not specified</span>}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          {lead.tcpaConsent ? (
+                            <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 text-xs rounded-full px-2 py-0.5 font-medium">
+                              <Check className="w-3 h-3" /> Yes
+                            </span>
+                          ) : (
+                            <span className="text-xs text-slate-300">—</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-right text-xs text-slate-400">
+                          {format(new Date(lead.createdAt), 'MMM d, yyyy')}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* ── Guest Roster tab ──────────────────────────────────────────────── */}
+      {tab === 'guests' && <>
 
       {/* KPI chips */}
       <div className="grid grid-cols-3 gap-4 mb-6">
@@ -439,6 +627,8 @@ export default function GuestsPage() {
           </tbody>
         </table>
       </div>
+
+      </>}
     </div>
   );
 }

@@ -2,40 +2,39 @@ import { NextResponse } from 'next/server';
 import { loadBookings, loadSettings, updateBooking } from '@/lib/storage';
 
 // Public endpoint — no auth. Guests call this from the /welcome page.
-// Matches their check-in date to a booking, saves contact info, returns wifi details.
+// Matches their visit to a booking that is currently active (today is within check-in..check-out).
 
 export async function POST(req: Request) {
   try {
-    const { name, email, phone, checkIn } = await req.json() as {
-      name?: string; email?: string; phone?: string; checkIn?: string;
+    const { firstName, lastName, email, phone, tcpaConsent } = await req.json() as {
+      firstName?: string; lastName?: string; email?: string; phone?: string; tcpaConsent?: boolean;
     };
 
     if (!email) return NextResponse.json({ error: 'Email is required' }, { status: 400 });
 
     const [settings, bookings] = await Promise.all([loadSettings(), loadBookings()]);
 
-    // Try to match by check-in date (exact or ±1 day) so slight timezone shifts don't block
-    let matched = false;
-    if (checkIn) {
-      const targetMs = new Date(checkIn + 'T12:00:00').getTime();
-      const candidate = bookings.find(b => {
-        const diff = Math.abs(new Date(b.checkIn + 'T12:00:00').getTime() - targetMs);
-        return diff <= 86400000; // within 24 hours
+    const guestName = [firstName, lastName].filter(Boolean).join(' ') || undefined;
+    const today = new Date().toISOString().slice(0, 10);
+
+    // Find a booking where today falls within the stay window
+    const activeSell = bookings.find(b => b.checkIn <= today && b.checkOut > today);
+
+    if (activeSell) {
+      const notes = tcpaConsent
+        ? (activeSell.notes ? activeSell.notes + ' | TCPA consent: yes' : 'TCPA consent: yes')
+        : activeSell.notes;
+      await updateBooking(activeSell.id, {
+        email: email || undefined,
+        phone: phone || activeSell.phone || undefined,
+        guestName: guestName || activeSell.guestName || undefined,
+        notes,
+        updatedAt: new Date().toISOString(),
       });
-      if (candidate) {
-        await updateBooking(candidate.id, {
-          email: email || undefined,
-          phone: phone || candidate.phone || undefined,
-          guestName: name || candidate.guestName || undefined,
-          updatedAt: new Date().toISOString(),
-        });
-        matched = true;
-      }
     }
 
-    // Even if no booking match, return wifi info — guest is physically there
     return NextResponse.json({
-      matched,
+      matched: !!activeSell,
       propertyName: settings.propertyName,
       wifiNetwork: settings.wifiNetwork ?? null,
       wifiPassword: settings.wifiPassword ?? null,

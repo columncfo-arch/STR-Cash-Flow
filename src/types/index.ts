@@ -178,6 +178,18 @@ export interface MonthlyStatement extends PnLSummary {
   byPlatform: Record<Platform, { income: number; nights: number; bookings: number }>;
 }
 
+export interface DirectLead {
+  id: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone?: string;
+  preferredDates?: string;
+  tcpaConsent: boolean;
+  source: 'direct_booking' | 'welcome';
+  createdAt: string;
+}
+
 export interface AnnualStatement extends PnLSummary {
   year: number;
   months: MonthlyStatement[];

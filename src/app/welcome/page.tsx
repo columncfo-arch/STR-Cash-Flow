@@ -10,35 +10,28 @@ interface WelcomeInfo {
   wifiPassword: string | null;
   welcomeMessage: string | null;
   localGuideUrl: string | null;
-  matched: boolean;
 }
 
 export default function WelcomePage() {
   const [step, setStep] = useState<Step>('loading');
   const [propertyName, setPropertyName] = useState('');
   const [hasWifi, setHasWifi] = useState(false);
-  const [hasLocalGuide, setHasLocalGuide] = useState(false);
 
-  const [name, setName] = useState('');
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
-  const [checkIn, setCheckIn] = useState('');
+  const [tcpaConsent, setTcpaConsent] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [info, setInfo] = useState<WelcomeInfo | null>(null);
   const [copied, setCopied] = useState<'network' | 'password' | null>(null);
 
   useEffect(() => {
-    // Pre-fill check-in from URL param if host sends a personalised QR (?checkin=2026-07-12)
-    const params = new URLSearchParams(window.location.search);
-    const ci = params.get('checkin');
-    if (ci) setCheckIn(ci);
-
     fetch('/api/welcome')
       .then(r => r.json())
       .then(d => {
         setPropertyName(d.propertyName ?? 'Your Stay');
         setHasWifi(d.hasWifi ?? false);
-        setHasLocalGuide(d.hasLocalGuide ?? false);
         setStep('form');
       })
       .catch(() => setStep('error'));
@@ -52,7 +45,7 @@ export default function WelcomePage() {
       const res = await fetch('/api/welcome', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, phone, checkIn }),
+        body: JSON.stringify({ firstName, lastName, email, phone, tcpaConsent }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
@@ -107,10 +100,33 @@ export default function WelcomePage() {
           <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
             <p className="text-slate-600 text-sm mb-5 text-center">
               {hasWifi
-                ? 'Register your stay to get the wifi password and local guide.'
-                : 'Register your stay and we\'ll be in touch with local recommendations.'}
+                ? 'Register your stay to instantly receive the wifi password and local guide.'
+                : 'Register your stay and we\'ll share local tips and future availability.'}
             </p>
             <form onSubmit={handleSubmit} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-medium text-slate-500 block mb-1">First name <span className="text-red-400">*</span></label>
+                  <input
+                    type="text"
+                    required
+                    value={firstName}
+                    onChange={e => setFirstName(e.target.value)}
+                    placeholder="Jane"
+                    className="w-full text-sm border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="text-xs font-medium text-slate-500 block mb-1">Last name</label>
+                  <input
+                    type="text"
+                    value={lastName}
+                    onChange={e => setLastName(e.target.value)}
+                    placeholder="Smith"
+                    className="w-full text-sm border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+              </div>
               <div>
                 <label className="text-xs font-medium text-slate-500 block mb-1">Email address <span className="text-red-400">*</span></label>
                 <input
@@ -119,16 +135,6 @@ export default function WelcomePage() {
                   value={email}
                   onChange={e => setEmail(e.target.value)}
                   placeholder="you@example.com"
-                  className="w-full text-sm border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 block mb-1">Your name</label>
-                <input
-                  type="text"
-                  value={name}
-                  onChange={e => setName(e.target.value)}
-                  placeholder="First name"
                   className="w-full text-sm border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
@@ -142,26 +148,31 @@ export default function WelcomePage() {
                   className="w-full text-sm border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
                 />
               </div>
-              <div>
-                <label className="text-xs font-medium text-slate-500 block mb-1">Check-in date</label>
+
+              {/* TCPA consent */}
+              <label className="flex items-start gap-3 cursor-pointer">
                 <input
-                  type="date"
-                  value={checkIn}
-                  onChange={e => setCheckIn(e.target.value)}
-                  className="w-full text-sm border border-slate-200 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  type="checkbox"
+                  checked={tcpaConsent}
+                  onChange={e => setTcpaConsent(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 flex-shrink-0"
                 />
-              </div>
+                <span className="text-xs text-slate-400 leading-relaxed">
+                  I agree to receive marketing text messages (e.g. availability alerts and offers) from{' '}
+                  <span className="font-medium text-slate-600">{propertyName}</span> at the number provided.
+                  Message &amp; data rates may apply. Reply <strong>STOP</strong> to opt out at any time.
+                  Consent is not required to receive the wifi password.
+                </span>
+              </label>
+
               <button
                 type="submit"
-                disabled={submitting || !email}
+                disabled={submitting || !email || !firstName}
                 className="w-full bg-emerald-600 text-white py-3 rounded-xl text-sm font-semibold hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors mt-2"
               >
                 {submitting ? 'Just a moment…' : hasWifi ? 'Get Wifi Password →' : 'Register My Stay →'}
               </button>
             </form>
-            <p className="text-xs text-slate-400 text-center mt-4">
-              We only use your contact info to send you future availability and local tips. No spam.
-            </p>
           </div>
         )}
 
@@ -224,7 +235,7 @@ export default function WelcomePage() {
                 <MapPin className="w-5 h-5 text-emerald-600 flex-shrink-0" />
                 <div>
                   <p className="font-semibold text-slate-800 text-sm">Local Guide</p>
-                  <p className="text-xs text-slate-400">Restaurants, activities, and tips from your host</p>
+                  <p className="text-xs text-slate-400">Restaurants, activities &amp; tips from your host</p>
                 </div>
                 <span className="ml-auto text-slate-300">→</span>
               </a>
