@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { AnnualStatement, MonthlyStatement, Settings, Platform } from '@/types';
 import StatCard from '@/components/StatCard';
-import { TrendingUp, X } from 'lucide-react';
+import { TrendingUp, X, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
@@ -175,6 +175,8 @@ export default function Dashboard() {
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null); // 0-indexed
   const [allYears, setAllYears] = useState<number[]>([]);
   const [allTimeNetIncome, setAllTimeNetIncome] = useState<number | null>(null);
+  const [editingTarget, setEditingTarget] = useState(false);
+  const [targetInput, setTargetInput] = useState('');
   const now = new Date();
   const year = now.getFullYear();
   const currentMonthIdx = now.getMonth();
@@ -252,18 +254,42 @@ export default function Dashboard() {
   const growthFactor = growthPct / 100;
   const prevHasData = prevStatement?.months.some(m => m.grossRevenue > 0) ?? false;
 
-  // Monthly targets via prior-year seasonality × growth factor; fallback to flat line per month
+  // Manual annual target from forecast overrides (same field the LT Forecast page uses)
+  const manualTarget = settings?.forecastOverrides?.[String(year)]?.revenue ?? null;
+
+  async function saveTarget() {
+    if (!settings) return;
+    const val = parseFloat(targetInput);
+    if (isNaN(val) || val <= 0) return;
+    const overrides = { ...(settings.forecastOverrides ?? {}) };
+    overrides[String(year)] = { ...(overrides[String(year)] ?? {}), revenue: val };
+    const updated = { ...settings, forecastOverrides: overrides };
+    await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
+    setSettings(updated);
+    setEditingTarget(false);
+  }
+
+  // Monthly targets: if manual annual target set, distribute via prior-year seasonality ratios;
+  // otherwise use prior-year actuals × growth factor. Flat line fallback when no monthly data.
   const prevAnnualGross = prevStatement?.months.reduce((s, m) => s + m.grossRevenue, 0) ?? 0;
-  const straightLine = prevAnnualGross > 0 ? Math.round((prevAnnualGross / 12) * (1 + growthFactor)) : null;
   const monthlyForecasts: (number | null)[] = Array.from({ length: 12 }, (_, i) => {
+    if (manualTarget) {
+      if (prevAnnualGross > 0) {
+        const ratio = prevStatement!.months[i].grossRevenue / prevAnnualGross;
+        return ratio > 0 ? Math.round(manualTarget * ratio) : Math.round(manualTarget / 12);
+      }
+      return Math.round(manualTarget / 12);
+    }
     if (!prevStatement) return null;
     const prev = prevStatement.months[i].grossRevenue;
+    const straightLine = prevAnnualGross > 0 ? Math.round((prevAnnualGross / 12) * (1 + growthFactor)) : null;
     if (prev > 0) return Math.round(prev * (1 + growthFactor));
     return straightLine;
   });
 
-  const annualForecast = prevHasData ? monthlyForecasts.reduce<number>((s, v) => s + (v ?? 0), 0) : null;
-  const ytdForecast = prevHasData
+  const hasTarget = manualTarget != null || prevHasData;
+  const annualForecast = hasTarget ? monthlyForecasts.reduce<number>((s, v) => s + (v ?? 0), 0) : null;
+  const ytdForecast = hasTarget
     ? monthlyForecasts.slice(0, currentMonthIdx + 1).reduce<number>((s, v) => s + (v ?? 0), 0)
     : null;
   const pacingVariance = ytdForecast != null ? ytdGross - ytdForecast : null;
@@ -314,26 +340,76 @@ export default function Dashboard() {
       </div>
 
       {/* Pacing — the primary "am I on track?" answer */}
-      {prevHasData && annualForecast != null && !selMonth && (
+      {hasTarget && annualForecast != null && !selMonth && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+          {/* This Year */}
           <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-            <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">This Year — On Track?</p>
-            <div className="flex items-baseline gap-2 mb-2">
-              <span className="text-2xl font-bold text-slate-900">{fmt(ytdGross)}</span>
-              <span className="text-sm text-slate-400">of {fmt(ytdForecast!)} target</span>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">This Year — On Track?</p>
+              {!editingTarget ? (
+                <button
+                  onClick={() => { setTargetInput(String(manualTarget ?? Math.round(annualForecast))); setEditingTarget(true); }}
+                  className="text-slate-300 hover:text-slate-500 transition-colors"
+                  title="Set annual revenue target"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              ) : (
+                <button onClick={() => setEditingTarget(false)} className="text-slate-300 hover:text-slate-500">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
             </div>
-            {pacingVariance != null && (
-              <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2.5 py-1 rounded-lg ${pacingVariance >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
-                {pacingVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(pacingVariance))}
-                {pacingVariancePct != null && <span className="font-normal text-xs">({Math.abs(pacingVariancePct).toFixed(1)}%) {pacingVariance >= 0 ? 'ahead' : 'behind'}</span>}
-              </span>
+            {editingTarget ? (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500">Set your {year} annual revenue target</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-slate-400">$</span>
+                  <input
+                    type="number"
+                    value={targetInput}
+                    onChange={e => setTargetInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && saveTarget()}
+                    className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5"
+                    placeholder="68500"
+                    autoFocus
+                  />
+                  <button onClick={saveTarget} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-emerald-700">
+                    Save
+                  </button>
+                </div>
+                <p className="text-xs text-slate-400">Monthly targets will follow prior-year seasonal pattern.</p>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-2 mb-2">
+                  <span className="text-2xl font-bold text-slate-900">{fmt(ytdGross)}</span>
+                  <span className="text-sm text-slate-400">of {ytdForecast != null ? fmt(ytdForecast) : '—'} YTD target</span>
+                </div>
+                {pacingVariance != null && (
+                  <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2.5 py-1 rounded-lg ${pacingVariance >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                    {pacingVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(pacingVariance))}
+                    {pacingVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(pacingVariancePct).toFixed(1)}%) {pacingVariance >= 0 ? 'ahead' : 'behind'}</span>}
+                  </span>
+                )}
+                <p className="text-xs text-slate-400 mt-3">Full-year target {fmt(annualForecast)}</p>
+              </>
             )}
-            <p className="text-xs text-slate-400 mt-3">Full-year target {fmt(annualForecast)}</p>
           </div>
 
+          {/* This Month */}
           {monthlyForecasts[currentMonthIdx] != null && (
             <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">{MONTHS_LONG[currentMonthIdx]} — Monthly Target</p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">{MONTHS_LONG[currentMonthIdx]} — Monthly Target</p>
+                <button
+                  onClick={() => { setTargetInput(String(manualTarget ?? Math.round(annualForecast))); setEditingTarget(true); }}
+                  className="text-slate-300 hover:text-slate-500 transition-colors"
+                  title="Edit annual target"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              </div>
               <div className="flex items-baseline gap-2 mb-3">
                 <span className="text-2xl font-bold text-slate-900">{fmt(statement?.months[currentMonthIdx].grossRevenue ?? 0)}</span>
                 <span className="text-sm text-slate-400">of {fmt(monthlyForecasts[currentMonthIdx]!)} target</span>
@@ -418,11 +494,10 @@ export default function Dashboard() {
                 />
               </ComposedChart>
             </ResponsiveContainer>
-            {!prevHasData && (
+            {!prevHasData && manualTarget == null && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
-                No prior-year data found — forecast line is hidden. Go to{' '}
-                <a href="/settings" className="underline font-medium">Settings</a>
-                {' '}→ Import 2025 Baseline Data to enable the forecast.
+                No prior-year data — set an annual target on the pacing card above to enable the forecast line, or{' '}
+                <a href="/settings" className="underline font-medium">import 2025 baseline data</a>.
               </p>
             )}
           </>
