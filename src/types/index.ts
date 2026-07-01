@@ -1,5 +1,7 @@
 export type Platform = 'airbnb' | 'booking' | 'vrbo' | 'direct' | 'other';
 
+export type LoanStructure = 'fixed' | 'arm' | 'interest_only';
+
 export type ExpenseCategory = 'cleaning' | 'electric' | 'water' | 'internet' | 'yard_care' | 'supplies' | 'refund' | 'maintenance' | 'other';
 
 export const EXPENSE_CATEGORIES: { value: ExpenseCategory; label: string }[] = [
@@ -112,6 +114,7 @@ export interface Settings {
   propertyAppreciationPct?: number; // annual property value appreciation %
   loanOriginalBalance?: number;   // original loan amount (for amortization)
   loanTermYears?: number;         // loan term in years (for amortization)
+  loanStructure?: LoanStructure;  // fixed / ARM / interest-only
 }
 
 export interface ForecastYear {

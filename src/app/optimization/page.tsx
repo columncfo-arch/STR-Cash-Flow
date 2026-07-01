@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { AnnualStatement, Settings } from '@/types';
+import { AnnualStatement, Settings, LoanStructure } from '@/types';
 import {
   Target, Check, DollarSign, ChevronDown, ChevronUp, AlertTriangle,
 } from 'lucide-react';
@@ -96,6 +96,8 @@ export default function OptimizationPage() {
   const [draftRate, setDraftRate] = useState('');
   const [draftValue, setDraftValue] = useState('');
   const [draftBalance, setDraftBalance] = useState('');
+  const [draftLoanTerm, setDraftLoanTerm] = useState('');
+  const [draftLoanStructure, setDraftLoanStructure] = useState<LoanStructure>('fixed');
   const [savedSection, setSavedSection] = useState<string | null>(null);
   const [pitiOpen, setPitiOpen] = useState(false);
   const [draftYourAdr, setDraftYourAdr] = useState('');
@@ -129,6 +131,8 @@ export default function OptimizationPage() {
       setDraftRate(s.mortgageRate ? String(s.mortgageRate) : '');
       setDraftValue(s.propertyValue ? String(s.propertyValue) : '');
       setDraftBalance(s.loanBalance ? String(s.loanBalance) : '');
+      setDraftLoanTerm(s.loanTermYears ? String(s.loanTermYears) : '');
+      setDraftLoanStructure(s.loanStructure ?? 'fixed');
       setDraftFeePerStay(s.cleaningFeePerBooking ? String(s.cleaningFeePerBooking) : '');
     });
   }, []);
@@ -600,53 +604,87 @@ export default function OptimizationPage() {
               </div>
             </div>
 
+            {/* Loan & Property Details — always visible */}
+            <div className="border-t border-slate-100 mt-4 pt-4">
+              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-3">Loan & Property Details</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4 mb-4">
+                <InlineInput
+                  label="Market Value ($)" value={draftValue} onChange={setDraftValue}
+                  placeholder="e.g. 500000" unit="$"
+                />
+                <InlineInput
+                  label="Remaining Principal ($)" value={draftBalance} onChange={setDraftBalance}
+                  placeholder="e.g. 380000" unit="$"
+                />
+                <InlineInput
+                  label="APR (%)" value={draftRate} onChange={setDraftRate}
+                  placeholder="e.g. 7.25" unit="%" min="0" max="30" step="0.125"
+                />
+                <div>
+                  <label className="text-xs text-slate-500 font-medium block mb-1">Loan Structure</label>
+                  <select
+                    value={draftLoanStructure}
+                    onChange={e => setDraftLoanStructure(e.target.value as LoanStructure)}
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+                  >
+                    <option value="fixed">Fixed Rate</option>
+                    <option value="arm">Adjustable (ARM)</option>
+                    <option value="interest_only">Interest-Only</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-500 font-medium block mb-1">Loan Term (years)</label>
+                  <input
+                    type="number" value={draftLoanTerm}
+                    onChange={e => setDraftLoanTerm(e.target.value)}
+                    placeholder="e.g. 30" min="5" max="40" step="1"
+                    className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
+                  />
+                </div>
+              </div>
+              <div className="flex items-center gap-4">
+                <button
+                  onClick={() => saveSection('piti', {
+                    mortgageRate: parseFloat(draftRate) || undefined,
+                    propertyValue: parseFloat(draftValue) || undefined,
+                    loanBalance: parseFloat(draftBalance) || undefined,
+                    loanTermYears: parseInt(draftLoanTerm) || undefined,
+                    loanStructure: draftLoanStructure,
+                  })}
+                  className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700"
+                >
+                  {savedSection === 'piti' ? <><Check className="w-4 h-4" /> Saved</> : 'Save'}
+                </button>
+                {ltv != null && (
+                  <span className="text-xs text-slate-500">
+                    LTV: <span className={`font-semibold ${ltv > 80 ? 'text-amber-600' : 'text-emerald-600'}`}>{pct(ltv)}</span>
+                  </span>
+                )}
+                {draftLoanStructure === 'interest_only' && (
+                  <span className="text-xs text-amber-600 font-medium">
+                    Interest-only: no principal paydown — equity grows from appreciation only
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Refinance & PMI Analysis */}
             <button
-              className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-700 mb-0"
+              className="flex items-center gap-2 text-xs text-slate-500 hover:text-slate-700 mt-4"
               onClick={() => setPitiOpen(v => !v)}
             >
               {pitiOpen ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              {pitiOpen ? 'Hide' : 'Show'} mortgage details — unlocks refinance + PMI analysis
+              {pitiOpen ? 'Hide' : 'Show'} refinance + PMI analysis
             </button>
 
             {pitiOpen && (
-              <div className="border-t border-slate-100 mt-4 pt-4">
-                <div className="grid grid-cols-3 gap-4 mb-4">
-                  <InlineInput
-                    label="Current Rate (%)" value={draftRate} onChange={setDraftRate}
-                    placeholder="e.g. 7.25" unit="%" min="0" max="30" step="0.125"
-                  />
-                  <InlineInput
-                    label="Property Value ($)" value={draftValue} onChange={setDraftValue}
-                    placeholder="e.g. 500000" unit="$"
-                  />
-                  <InlineInput
-                    label="Loan Balance ($)" value={draftBalance} onChange={setDraftBalance}
-                    placeholder="e.g. 380000" unit="$"
-                  />
-                </div>
-                <div className="flex items-center gap-3 mb-4">
-                  <button
-                    onClick={() => saveSection('piti', {
-                      mortgageRate: parseFloat(draftRate) || undefined,
-                      propertyValue: parseFloat(draftValue) || undefined,
-                      loanBalance: parseFloat(draftBalance) || undefined,
-                    })}
-                    className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700"
-                  >
-                    {savedSection === 'piti' ? <><Check className="w-4 h-4" /> Saved</> : 'Save'}
-                  </button>
-                  {ltv != null && (
-                    <span className="text-xs text-slate-500">
-                      LTV: <span className={`font-semibold ${ltv > 80 ? 'text-amber-600' : 'text-emerald-600'}`}>{pct(ltv)}</span>
-                    </span>
-                  )}
-                </div>
+              <div className="border-t border-slate-100 mt-3 pt-4">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
                   <div className="bg-slate-50 rounded-xl p-4">
                     <p className="text-xs font-semibold text-slate-600 mb-2">Rate Reduction</p>
                     {mortgageRate > 0 && loanBalance > 0 ? (
                       <>
-                        <p className="text-xs text-slate-500 mb-3">Current: <span className="font-semibold">{mortgageRate}%</span></p>
+                        <p className="text-xs text-slate-500 mb-3">Current APR: <span className="font-semibold">{mortgageRate}%</span></p>
                         <div className="space-y-2">
                           <div className="flex justify-between text-xs">
                             <span className="text-slate-500">−0.5% reduction</span>
@@ -659,7 +697,7 @@ export default function OptimizationPage() {
                         </div>
                       </>
                     ) : (
-                      <p className="text-xs text-slate-400">Enter rate and balance above.</p>
+                      <p className="text-xs text-slate-400">Enter APR and principal above.</p>
                     )}
                   </div>
                   <div className={`rounded-xl p-4 ${hasPMI ? 'bg-amber-50 border border-amber-200' : 'bg-slate-50'}`}>
@@ -675,7 +713,7 @@ export default function OptimizationPage() {
                         <p className="text-xs text-emerald-700">LTV {pct(ltv)} — below 80%, PMI likely n/a.</p>
                       )
                     ) : (
-                      <p className="text-xs text-slate-400">Enter property value and balance.</p>
+                      <p className="text-xs text-slate-400">Enter market value and principal.</p>
                     )}
                   </div>
                   <div className="bg-slate-50 rounded-xl p-4">

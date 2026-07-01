@@ -221,14 +221,15 @@ export default function ForecastPage() {
   const propertyValue = settings?.propertyValue ?? 0;
   const loanBalance = settings?.loanBalance ?? 0;
   const mortgageRate = settings?.mortgageRate ?? 0;
-  const loanTermYears = configDraft.loanTermYears ?? settings?.loanTermYears ?? 30;
+  const loanTermYears = settings?.loanTermYears ?? 30;
+  const loanStructure = settings?.loanStructure ?? 'fixed';
   const appreciationPct = configDraft.propertyAppreciationPct ?? settings?.propertyAppreciationPct ?? 0;
   const hasEquityData = propertyValue > 0 && loanBalance > 0;
 
   const monthlyRate = mortgageRate / 100 / 12;
   const totalPayments = loanTermYears * 12;
   let monthlyPayment = 0;
-  if (hasEquityData && totalPayments > 0) {
+  if (hasEquityData && loanStructure !== 'interest_only' && totalPayments > 0) {
     if (monthlyRate > 0) {
       const factor = Math.pow(1 + monthlyRate, totalPayments);
       monthlyPayment = loanBalance * monthlyRate * factor / (factor - 1);
@@ -239,6 +240,8 @@ export default function ForecastPage() {
 
   function projectedBalance(yearsFromNow: number): number {
     if (!hasEquityData) return 0;
+    // Interest-only: no principal reduction — balance stays flat
+    if (loanStructure === 'interest_only') return loanBalance;
     const months = yearsFromNow * 12;
     let bal: number;
     if (monthlyRate > 0 && monthlyPayment > 0) {
@@ -393,18 +396,19 @@ export default function ForecastPage() {
                 </div>
                 <p className="text-xs text-slate-400 mt-1">Annual property value growth used in equity projection.</p>
               </div>
-              <div>
-                <label className="text-xs text-slate-500 block mb-1">Remaining Loan Term (years)</label>
-                <div className="flex items-center gap-3">
-                  <input type="range" min="5" max="30" step="1"
-                    value={configDraft.loanTermYears ?? 30}
-                    onChange={e => setConfigDraft(d => ({ ...d, loanTermYears: parseInt(e.target.value) }))}
-                    className="flex-1" />
-                  <span className="text-sm font-semibold w-14 text-right text-slate-600">
-                    {configDraft.loanTermYears ?? 30} yr
-                  </span>
+              <div className="flex items-start gap-2 pt-4">
+                <div className="text-xs text-slate-400 leading-relaxed">
+                  Loan term, APR, loan structure, and remaining principal are configured in{' '}
+                  <a href="/optimization" className="text-emerald-600 hover:underline">Optimization → PITI Analysis</a>.
+                  {settings?.loanTermYears && (
+                    <span className="block mt-1 text-slate-500">
+                      Current: {settings.loanTermYears} yr · {settings.mortgageRate ?? 0}% APR
+                      {settings.loanStructure && settings.loanStructure !== 'fixed' && (
+                        <span> · {settings.loanStructure === 'arm' ? 'ARM' : 'Interest-Only'}</span>
+                      )}
+                    </span>
+                  )}
                 </div>
-                <p className="text-xs text-slate-400 mt-1">Remaining term used to estimate monthly payment and principal paydown.</p>
               </div>
             </div>
           </div>
@@ -637,6 +641,8 @@ export default function ForecastPage() {
             </ResponsiveContainer>
             <p className="text-xs text-slate-400 mt-2">
               Purple area = equity · Green dashed = property value · Red dashed = loan balance
+              {loanStructure === 'interest_only' && ' · Interest-only: balance held flat, equity builds from appreciation only'}
+              {loanStructure === 'arm' && ' · ARM: projections use current APR as a fixed-rate approximation'}
             </p>
           </div>
         </>
