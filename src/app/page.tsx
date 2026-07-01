@@ -269,14 +269,16 @@ export default function Dashboard() {
     setEditingTarget(false);
   }
 
-  // Monthly targets: if manual annual target set, distribute via prior-year seasonality ratios;
-  // otherwise use prior-year actuals × growth factor. Flat line fallback when no monthly data.
+  // Only use prior-year seasonality when we have data for most months; sparse data skews badly
   const prevAnnualGross = prevStatement?.months.reduce((s, m) => s + m.grossRevenue, 0) ?? 0;
+  const monthsWithPriorRevenue = prevStatement?.months.filter(m => m.grossRevenue > 0).length ?? 0;
+  const useSeasonality = prevAnnualGross > 0 && monthsWithPriorRevenue >= 6;
+
   const monthlyForecasts: (number | null)[] = Array.from({ length: 12 }, (_, i) => {
     if (manualTarget) {
-      if (prevAnnualGross > 0) {
+      if (useSeasonality) {
         const ratio = prevStatement!.months[i].grossRevenue / prevAnnualGross;
-        return ratio > 0 ? Math.round(manualTarget * ratio) : Math.round(manualTarget / 12);
+        return Math.round(manualTarget * ratio);
       }
       return Math.round(manualTarget / 12);
     }
@@ -288,7 +290,10 @@ export default function Dashboard() {
   });
 
   const hasTarget = manualTarget != null || prevHasData;
-  const annualForecast = hasTarget ? monthlyForecasts.reduce<number>((s, v) => s + (v ?? 0), 0) : null;
+  // When a manual target is set, annualForecast IS that target (avoid rounding drift from monthly sum)
+  const annualForecast = hasTarget
+    ? (manualTarget ?? monthlyForecasts.reduce<number>((s, v) => s + (v ?? 0), 0))
+    : null;
   const ytdForecast = hasTarget
     ? monthlyForecasts.slice(0, currentMonthIdx + 1).reduce<number>((s, v) => s + (v ?? 0), 0)
     : null;
