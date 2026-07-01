@@ -322,8 +322,10 @@ export default function Dashboard() {
                     </g>
                   );
                 }} />
-                <YAxis yAxisId="left" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                <YAxis yAxisId="left" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}
+                  label={{ value: 'Gross Revenue', angle: -90, position: 'insideLeft', dx: -5, style: { textAnchor: 'middle', fontSize: 11, fill: '#94a3b8' } }} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}
+                  label={{ value: 'Net Income', angle: 90, position: 'insideRight', dx: 10, style: { textAnchor: 'middle', fontSize: 11, fill: '#94a3b8' } }} />
                 <Tooltip content={(props) => (
                   <ChartTooltip
                     active={props.active}
