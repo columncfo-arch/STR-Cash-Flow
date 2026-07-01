@@ -3,7 +3,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { ForecastYear, Settings, ForecastOverride } from '@/types';
 import { Pencil, Check, X, Plus, Trash2, TrendingUp } from 'lucide-react';
 import {
-  ComposedChart, Bar, Area, XAxis, YAxis, CartesianGrid, Tooltip,
+  ComposedChart, Bar, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell, ReferenceLine,
 } from 'recharts';
 
@@ -217,6 +217,58 @@ export default function ForecastPage() {
 
   const hasData = enriched.length > 0;
 
+  // ── Equity / Amortization ─────────────────────────────────────────────────
+  const propertyValue = settings?.propertyValue ?? 0;
+  const loanBalance = settings?.loanBalance ?? 0;
+  const mortgageRate = settings?.mortgageRate ?? 0;
+  const loanTermYears = configDraft.loanTermYears ?? settings?.loanTermYears ?? 30;
+  const appreciationPct = configDraft.propertyAppreciationPct ?? settings?.propertyAppreciationPct ?? 0;
+  const hasEquityData = propertyValue > 0 && loanBalance > 0;
+
+  const monthlyRate = mortgageRate / 100 / 12;
+  const totalPayments = loanTermYears * 12;
+  let monthlyPayment = 0;
+  if (hasEquityData && totalPayments > 0) {
+    if (monthlyRate > 0) {
+      const factor = Math.pow(1 + monthlyRate, totalPayments);
+      monthlyPayment = loanBalance * monthlyRate * factor / (factor - 1);
+    } else {
+      monthlyPayment = loanBalance / totalPayments;
+    }
+  }
+
+  function projectedBalance(yearsFromNow: number): number {
+    if (!hasEquityData) return 0;
+    const months = yearsFromNow * 12;
+    let bal: number;
+    if (monthlyRate > 0 && monthlyPayment > 0) {
+      const factor = Math.pow(1 + monthlyRate, months);
+      bal = loanBalance * factor - monthlyPayment * (factor - 1) / monthlyRate;
+    } else if (monthlyPayment > 0) {
+      bal = loanBalance - monthlyPayment * months;
+    } else {
+      bal = loanBalance;
+    }
+    return Math.max(0, bal);
+  }
+
+  const equityData = hasEquityData ? enriched.map(row => {
+    const yearsFromNow = row.year - currentYear;
+    const loanBal = projectedBalance(yearsFromNow);
+    const propValue = propertyValue * Math.pow(1 + appreciationPct / 100, yearsFromNow);
+    return {
+      year: String(row.year),
+      propValue: Math.round(propValue),
+      loanBal: Math.round(loanBal),
+      equity: Math.round(propValue - loanBal),
+      isForecast: row.type === 'forecast',
+    };
+  }) : [];
+
+  const currentEquity = hasEquityData ? propertyValue - loanBalance : 0;
+  const finalEquity = equityData.length > 0 ? equityData[equityData.length - 1].equity : 0;
+  const totalWealth = finalEquity + (finalRow?.cumulative ?? 0);
+
   return (
     <div className="max-w-5xl mx-auto">
 
@@ -320,6 +372,40 @@ export default function ForecastPage() {
                   </button>
                 </div>
               ))}
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-5 mb-5">
+            <h3 className="text-xs font-medium text-slate-600 mb-3">Equity Projection Settings</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Property Appreciation Rate (%/yr)</label>
+                <div className="flex items-center gap-3">
+                  <input type="range" min="0" max="15" step="0.5"
+                    value={configDraft.propertyAppreciationPct ?? 0}
+                    onChange={e => setConfigDraft(d => ({ ...d, propertyAppreciationPct: parseFloat(e.target.value) }))}
+                    className="flex-1" />
+                  <span className={`text-sm font-semibold w-14 text-right ${
+                    (configDraft.propertyAppreciationPct ?? 0) > 0 ? 'text-emerald-600' : 'text-slate-600'
+                  }`}>
+                    {configDraft.propertyAppreciationPct ?? 0}%
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">Annual property value growth used in equity projection.</p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Remaining Loan Term (years)</label>
+                <div className="flex items-center gap-3">
+                  <input type="range" min="5" max="30" step="1"
+                    value={configDraft.loanTermYears ?? 30}
+                    onChange={e => setConfigDraft(d => ({ ...d, loanTermYears: parseInt(e.target.value) }))}
+                    className="flex-1" />
+                  <span className="text-sm font-semibold w-14 text-right text-slate-600">
+                    {configDraft.loanTermYears ?? 30} yr
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">Remaining term used to estimate monthly payment and principal paydown.</p>
+              </div>
             </div>
           </div>
 
@@ -457,6 +543,111 @@ export default function ForecastPage() {
             </ComposedChart>
           </ResponsiveContainer>
           <p className="text-xs text-slate-400 mt-2">Green = positive · Red = negative · Lighter = forecasted</p>
+        </div>
+      )}
+
+      {/* ── Equity Accumulation ── */}
+      {hasEquityData ? (
+        <>
+          <div className="grid grid-cols-3 gap-4 mb-6">
+            <KpiCard
+              label="Current Equity"
+              value={fmt(currentEquity)}
+              sub={`${fmt(propertyValue)} value − ${fmt(loanBalance)} loan`}
+              positive={currentEquity >= 0}
+            />
+            <KpiCard
+              label="End-of-Forecast Equity"
+              value={equityData.length > 0 ? fmt(finalEquity) : '—'}
+              sub="Principal paydown + appreciation"
+              positive={finalEquity >= 0}
+            />
+            <KpiCard
+              label="Total Projected Wealth"
+              value={fmt(totalWealth)}
+              sub="Equity + cumulative cash flow"
+              positive={totalWealth >= 0}
+              large
+            />
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
+            <div className="flex items-start justify-between mb-1">
+              <div>
+                <h2 className="font-semibold text-slate-800">Property Equity Projection</h2>
+                <p className="text-xs text-slate-400 mt-0.5">Equity grows as your property appreciates and your loan balance declines</p>
+              </div>
+              {equityData.length > 0 && (
+                <div className="text-right">
+                  <p className="text-xs text-slate-400">End of projection</p>
+                  <p className="text-lg font-bold text-violet-700">{fmt(finalEquity)}</p>
+                </div>
+              )}
+            </div>
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart data={equityData} margin={{ top: 16, right: 8, left: 0, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="fillEquity" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.25} />
+                    <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0.03} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="year" tick={{ fontSize: 12 }} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                <Tooltip
+                  formatter={(value: unknown, name: unknown) => {
+                    const labels: Record<string, string> = {
+                      equity: 'Equity',
+                      propValue: 'Property Value',
+                      loanBal: 'Loan Balance',
+                    };
+                    return [fmt(Number(value)), labels[String(name)] ?? String(name)];
+                  }}
+                  labelFormatter={(label: unknown) => `Year ${label}`}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="equity"
+                  stroke="#8b5cf6"
+                  strokeWidth={2.5}
+                  fill="url(#fillEquity)"
+                  name="equity"
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="propValue"
+                  stroke="#10b981"
+                  strokeWidth={1.5}
+                  strokeDasharray="6 3"
+                  name="propValue"
+                  dot={false}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="loanBal"
+                  stroke="#f87171"
+                  strokeWidth={1.5}
+                  strokeDasharray="4 3"
+                  name="loanBal"
+                  dot={false}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+            <p className="text-xs text-slate-400 mt-2">
+              Purple area = equity · Green dashed = property value · Red dashed = loan balance
+            </p>
+          </div>
+        </>
+      ) : (
+        <div className="bg-slate-50 border border-dashed border-slate-300 rounded-xl p-8 text-center mb-6">
+          <p className="text-slate-600 text-sm font-medium mb-1">Equity Tracking Not Configured</p>
+          <p className="text-slate-400 text-xs">
+            Enter your property value and current loan balance in{' '}
+            <a href="/optimization" className="text-emerald-600 hover:underline">Optimization → PITI Analysis</a>
+            {' '}to unlock the equity projection chart.
+          </p>
         </div>
       )}
 

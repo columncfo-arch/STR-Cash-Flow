@@ -22,6 +22,9 @@ const DEFAULT_SETTINGS: Settings = {
   mortgageRate: undefined,
   propertyValue: undefined,
   loanBalance: undefined,
+  propertyAppreciationPct: undefined,
+  loanOriginalBalance: undefined,
+  loanTermYears: undefined,
 };
 
 // ─── In-process write lock (serializes read-modify-write on the file backend) ──

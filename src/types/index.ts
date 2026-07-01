@@ -109,6 +109,9 @@ export interface Settings {
   mortgageRate?: number;          // current interest rate %
   propertyValue?: number;         // estimated current value
   loanBalance?: number;           // current outstanding balance
+  propertyAppreciationPct?: number; // annual property value appreciation %
+  loanOriginalBalance?: number;   // original loan amount (for amortization)
+  loanTermYears?: number;         // loan term in years (for amortization)
 }
 
 export interface ForecastYear {

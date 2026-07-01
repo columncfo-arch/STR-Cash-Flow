@@ -97,6 +97,8 @@ export default function OptimizationPage() {
   const [draftBalance, setDraftBalance] = useState('');
   const [savedSection, setSavedSection] = useState<string | null>(null);
   const [pitiOpen, setPitiOpen] = useState(false);
+  const [draftYourAdr, setDraftYourAdr] = useState('');
+  const [draftFeePerStay, setDraftFeePerStay] = useState('');
 
   // Sensitivity model state
   const [modelAdr, setModelAdr] = useState('');
@@ -125,6 +127,7 @@ export default function OptimizationPage() {
       setDraftRate(s.mortgageRate ? String(s.mortgageRate) : '');
       setDraftValue(s.propertyValue ? String(s.propertyValue) : '');
       setDraftBalance(s.loanBalance ? String(s.loanBalance) : '');
+      setDraftFeePerStay(s.cleaningFeePerBooking ? String(s.cleaningFeePerBooking) : '');
     });
   }, []);
 
@@ -212,19 +215,20 @@ export default function OptimizationPage() {
     .map(m => m.totalNights > 0 ? m.grossRevenue / m.totalNights : 0)
     .filter(v => v > 0);
   const overallAvgAdr = overallAdrs.length ? mean(overallAdrs) : 0;
-  const adrGap = benchmarkAdr > 0 ? overallAvgAdr - benchmarkAdr : null;
+  // Allow user to override the calculated ADR for scenario modeling
+  const effectiveAdr = parseFloat(draftYourAdr) || overallAvgAdr;
+  const adrGap = benchmarkAdr > 0 ? effectiveAdr - benchmarkAdr : null;
   const adrOpportunity = adrGap != null && adrGap < 0 && totalNights > 0
     ? Math.abs(adrGap) * totalNights : null;
 
   // ── Cleaning fee ──────────────────────────────────────────────────────────────
+  // Use user-editable fee per stay (initialized from Settings); booking-record cleaningFee
+  // fields are unreliable (Airbnb CSV stores a platform-computed value, not the guest-facing fee).
 
-  const cleaningFeeFromBookings = allBookings.reduce((s, b) => s + (b.cleaningFee ?? 0), 0);
-  const cleaningFeeIncome = cleaningFeeFromBookings > 0
-    ? cleaningFeeFromBookings
-    : totalBookings * (settings?.cleaningFeePerBooking ?? 0);
+  const cleaningFeePerStay = parseFloat(draftFeePerStay) || 0;
+  const cleaningFeeIncome = cleaningFeePerStay * totalBookings;
   const cleaningCostPaid = statement?.expensesByCategory.cleaning ?? 0;
   const cleaningNetAnnual = cleaningFeeIncome - cleaningCostPaid;
-  const cleaningFeePerStay = totalBookings > 0 ? cleaningFeeIncome / totalBookings : (settings?.cleaningFeePerBooking ?? 0);
   const cleaningCostPerStay = totalBookings > 0 ? cleaningCostPaid / totalBookings : 0;
   const cleaningNetPerStay = cleaningFeePerStay - cleaningCostPerStay;
 
@@ -237,7 +241,10 @@ export default function OptimizationPage() {
   // ── PITI ──────────────────────────────────────────────────────────────────────
 
   const annualPITI = (settings?.monthlyPITI ?? 0) * 12;
-  const pitiPctRevenue = grossRevenue > 0 ? (annualPITI / grossRevenue) * 100 : 0;
+  // YTD PITI = months with actual data × monthly PITI; compare against YTD gross revenue
+  const ytdMonths = activeMonths.length;
+  const ytdPITI = (settings?.monthlyPITI ?? 0) * ytdMonths;
+  const pitiPctRevenue = grossRevenue > 0 ? (ytdPITI / grossRevenue) * 100 : 0;
 
   const mortgageRate = parseFloat(draftRate) || 0;
   const propertyValue = parseFloat(draftValue) || 0;
@@ -431,8 +438,17 @@ export default function OptimizationPage() {
             <div className="grid grid-cols-3 gap-4 mb-5">
               <div className="bg-slate-50 rounded-lg p-4 text-center">
                 <p className="text-xs text-slate-400 mb-1">Your Avg ADR</p>
-                <p className="text-2xl font-bold text-slate-900">{overallAvgAdr > 0 ? fmt(overallAvgAdr) : '—'}</p>
-                <p className="text-[10px] text-slate-400 mt-1">per night</p>
+                <div className="flex items-baseline justify-center gap-0.5 mb-0.5">
+                  <span className="text-lg font-bold text-slate-500">$</span>
+                  <input
+                    type="number" value={draftYourAdr}
+                    onChange={e => setDraftYourAdr(e.target.value)}
+                    placeholder={overallAvgAdr > 0 ? String(Math.round(overallAvgAdr)) : '—'}
+                    min="0"
+                    className="w-24 text-2xl font-bold text-slate-900 bg-transparent border-b border-slate-300 focus:border-emerald-500 outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
+                <p className="text-[10px] text-slate-400">{draftYourAdr ? 'adjusted · ' : 'from actuals · '}per night</p>
               </div>
               <div className={`rounded-lg p-4 text-center ${benchmarkAdr > 0 ? (adrGap! >= 0 ? 'bg-emerald-50' : 'bg-amber-50') : 'bg-slate-50'}`}>
                 <p className="text-xs text-slate-400 mb-1">Sub-Market Benchmark</p>
@@ -491,7 +507,15 @@ export default function OptimizationPage() {
             <div className="grid grid-cols-3 gap-3 mb-4">
               <div className="bg-slate-50 rounded-lg p-3 text-center">
                 <p className="text-[10px] text-slate-400 mb-1">Fee Collected</p>
-                <p className="text-base font-bold text-emerald-700">{fmt(cleaningFeePerStay)}</p>
+                <div className="flex items-baseline justify-center gap-0.5 mb-0.5">
+                  <span className="text-sm font-bold text-emerald-600">$</span>
+                  <input
+                    type="number" value={draftFeePerStay}
+                    onChange={e => setDraftFeePerStay(e.target.value)}
+                    placeholder="0" min="0"
+                    className="w-14 text-base font-bold text-emerald-700 bg-transparent border-b border-emerald-300 focus:border-emerald-500 outline-none text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  />
+                </div>
                 <p className="text-[10px] text-slate-400">per stay</p>
               </div>
               <div className="bg-slate-50 rounded-lg p-3 text-center">
@@ -561,12 +585,12 @@ export default function OptimizationPage() {
                 : pitiPctRevenue > 40 ? 'bg-amber-50 border border-amber-200'
                 : 'bg-emerald-50 border border-emerald-200'
               }`}>
-                <p className="text-xs text-slate-400 mb-1">PITI % of Revenue</p>
+                <p className="text-xs text-slate-400 mb-1">PITI % of YTD Revenue</p>
                 <p className={`text-2xl font-bold ${pitiPctRevenue > 60 ? 'text-red-700' : pitiPctRevenue > 40 ? 'text-amber-700' : 'text-emerald-700'}`}>
                   {grossRevenue > 0 ? pct(pitiPctRevenue) : '—'}
                 </p>
                 <p className="text-[10px] text-slate-400 mt-1">
-                  {pitiPctRevenue > 60 ? 'High' : pitiPctRevenue > 40 ? 'Medium' : 'Good'}
+                  {ytdMonths}mo PITI ÷ YTD revenue
                 </p>
               </div>
             </div>
