@@ -131,8 +131,14 @@ export interface Settings {
   // Guest welcome / in-stay capture
   wifiNetwork?: string;
   wifiPassword?: string;
-  welcomeMessage?: string;       // shown after guest registers
-  localGuideUrl?: string;        // optional link to local guide PDF or page
+  welcomeMessage?: string;
+  localGuideUrl?: string;
+  // Direct booking site
+  airbnbIcalUrl?: string;
+  vrboIcalUrl?: string;
+  directNightlyRate?: number;
+  directMinNights?: number;
+  directDescription?: string;
 }
 
 export interface ForecastYear {

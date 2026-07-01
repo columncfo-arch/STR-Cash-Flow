@@ -55,6 +55,10 @@ export async function GET() {
       welcomeMessage: settings.welcomeMessage ?? null,
       hasWifi: !!(settings.wifiNetwork || settings.wifiPassword),
       hasLocalGuide: !!settings.localGuideUrl,
+      directNightlyRate: settings.directNightlyRate ?? null,
+      directMinNights: settings.directMinNights ?? 2,
+      directDescription: settings.directDescription ?? null,
+      guestCleaningFee: settings.guestCleaningFeePerBooking ?? 0,
     });
   } catch {
     return NextResponse.json({ error: 'Failed to load property info' }, { status: 500 });

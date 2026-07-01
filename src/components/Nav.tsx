@@ -1,7 +1,7 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, Upload, TrendingUp, Target, Users } from 'lucide-react';
+import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, Upload, TrendingUp, Target, Users, Zap, Wifi } from 'lucide-react';
 
 type SubLink = { href: string; label: string; icon: React.ComponentType<{ className?: string }> };
 type NavLink = { href: string; label: string; icon: React.ComponentType<{ className?: string }>; children?: SubLink[] };
@@ -15,16 +15,25 @@ const links: NavLink[] = [
     children: [
       { href: '/bookings', label: 'Bookings', icon: CalendarDays },
       { href: '/expenses', label: 'Expenses', icon: Receipt },
-      { href: '/guests', label: 'Guests', icon: Users },
     ],
   },
   { href: '/forecast', label: 'Long Term Forecast', icon: TrendingUp },
   { href: '/optimization', label: 'Optimization', icon: Target },
+  {
+    href: '/guest-list',
+    label: 'Guest List',
+    icon: Users,
+    children: [
+      { href: '/guest-list/guests', label: 'Guest Roster', icon: Users },
+      { href: '/guest-list/direct-booking', label: 'Direct Booking', icon: Zap },
+      { href: '/guest-list/welcome', label: 'Welcome Page', icon: Wifi },
+    ],
+  },
   { href: '/import', label: 'Import Earnings', icon: Upload },
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
-const PUBLIC_PATHS = ['/welcome', '/book-direct'];
+const PUBLIC_PATHS = ['/welcome', '/book-direct', '/book'];
 
 export default function Nav() {
   const pathname = usePathname();

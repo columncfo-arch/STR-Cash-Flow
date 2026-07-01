@@ -1,5 +1,5 @@
 import { redirect } from 'next/navigation';
 
-export default function GuestsRedirect() {
+export default function GuestListPage() {
   redirect('/guest-list/guests');
 }
