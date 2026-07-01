@@ -111,7 +111,12 @@ function buildMonthly(
     byPlatform[b.platform].nights += b.nights;
     byPlatform[b.platform].bookings += 1;
   }
-  const pnl = buildPnL(monthBookings, monthExpenses, monthlyPITI, 1, cleaningFeePerBooking);
+
+  // Only charge PITI for months that have fully elapsed; current and future months
+  // show actual revenue/expenses without PITI so YTD doesn't crater on the 1st.
+  const now = new Date();
+  const monthElapsed = year < now.getFullYear() || month < now.getMonth() + 1;
+  const pnl = buildPnL(monthBookings, monthExpenses, monthElapsed ? monthlyPITI : 0, 1, cleaningFeePerBooking);
 
   return {
     year,
