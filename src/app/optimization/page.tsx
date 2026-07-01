@@ -238,14 +238,17 @@ export default function OptimizationPage() {
 
   // ── Occupancy optimization ────────────────────────────────────────────────────
 
-  const annualOccPct = totalNights > 0 ? (totalNights / 365) * 100 : 0;
-  const nightsAtRisk = Math.max(0, 365 - totalNights);
+  // YTD occupancy: denominator = calendar days in months with actual data (not 365)
+  const ytdDays = activeMonths.reduce((s, m) => s + new Date(m.year, m.month, 0).getDate(), 0);
+  const ytdOccPct = ytdDays > 0 ? (totalNights / ytdDays) * 100 : 0;
+  // Nights at risk = remaining calendar days in the year not yet reached
+  const nightsAtRisk = Math.max(0, 365 - ytdDays);
 
   const occupancyChartData = (statement?.months ?? []).map(m => {
     const daysInMonth = new Date(m.year, m.month, 0).getDate();
     const occ = parseFloat(((m.totalNights / daysInMonth) * 100).toFixed(1));
     const monthAdr = m.totalNights > 0 ? m.grossRevenue / m.totalNights : 0;
-    const flag = m.totalNights > 0 && overallAvgAdr > 0 && monthAdr > overallAvgAdr * 1.1 && occ < annualOccPct * 0.85;
+    const flag = m.totalNights > 0 && overallAvgAdr > 0 && monthAdr > overallAvgAdr * 1.1 && occ < ytdOccPct * 0.85;
     return { name: MONTHS[m.month - 1], occupancy: occ, nights: m.totalNights, monthAdr, flag };
   });
 
@@ -569,18 +572,18 @@ export default function OptimizationPage() {
 
           <div className="grid grid-cols-3 gap-4 mb-4">
             <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 text-center">
-              <p className="text-xs text-slate-400 mb-1">Annual Occupancy</p>
+              <p className="text-xs text-slate-400 mb-1">YTD Occupancy</p>
               <p className="text-2xl font-bold text-slate-900">
-                {totalNights > 0 ? pct(annualOccPct) : '—'}
+                {totalNights > 0 ? pct(ytdOccPct) : '—'}
               </p>
-              <p className="text-[10px] text-slate-400 mt-1">{totalNights} nights booked of 365</p>
+              <p className="text-[10px] text-slate-400 mt-1">{totalNights} nights / {ytdDays} days elapsed</p>
             </div>
             <div className={`rounded-xl border shadow-sm p-4 text-center ${nightsAtRisk > 180 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
               <p className="text-xs text-slate-400 mb-1">Nights at Risk</p>
               <p className={`text-2xl font-bold ${nightsAtRisk > 180 ? 'text-amber-700' : 'text-slate-900'}`}>
                 {nightsAtRisk}
               </p>
-              <p className="text-[10px] text-slate-400 mt-1">unbooked days remaining</p>
+              <p className="text-[10px] text-slate-400 mt-1">calendar days left in {year}</p>
             </div>
             <div className={`rounded-xl border shadow-sm p-4 text-center ${flaggedMonths.length > 0 ? 'bg-amber-50 border-amber-200' : 'bg-white border-slate-200'}`}>
               <p className="text-xs text-slate-400 mb-1">Price-Suppressed Months</p>
@@ -611,9 +614,9 @@ export default function OptimizationPage() {
                       return d ? `${label} · ${d.nights} nights · ADR ${d.monthAdr > 0 ? fmt(d.monthAdr) : '—'}` : label;
                     }}
                   />
-                  {annualOccPct > 0 && (
-                    <ReferenceLine y={annualOccPct} stroke="#94a3b8" strokeDasharray="4 4"
-                      label={{ value: `Avg ${annualOccPct.toFixed(0)}%`, position: 'insideTopRight', fontSize: 10, fill: '#94a3b8' }} />
+                  {ytdOccPct > 0 && (
+                    <ReferenceLine y={ytdOccPct} stroke="#94a3b8" strokeDasharray="4 4"
+                      label={{ value: `YTD avg ${ytdOccPct.toFixed(0)}%`, position: 'insideTopRight', fontSize: 10, fill: '#94a3b8' }} />
                   )}
                   <Bar dataKey="occupancy" name="Occupancy" radius={[4, 4, 0, 0]}>
                     {occupancyChartData.map((d, i) => (
