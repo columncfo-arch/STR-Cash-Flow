@@ -7,8 +7,8 @@ import MainWrapper from '@/components/MainWrapper';
 const geist = Geist({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'STR Cash Flow',
-  description: 'Short-term rental income tracker',
+  title: 'HostIQ',
+  description: 'Short-term rental financial intelligence',
 };
 
 export const viewport: Viewport = {

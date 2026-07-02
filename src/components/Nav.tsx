@@ -43,7 +43,7 @@ export default function Nav() {
       <div className="px-4 py-5 border-b border-slate-700">
         <div className="flex items-center gap-2">
           <BookOpen className="w-5 h-5 text-emerald-400" />
-          <span className="font-semibold text-sm leading-tight">STR Cash Flow</span>
+          <span className="font-semibold text-sm leading-tight">HostIQ</span>
         </div>
       </div>
       <ul className="flex-1 py-4 space-y-1 px-2">
@@ -92,7 +92,7 @@ export default function Nav() {
         })}
       </ul>
       <div className="px-4 py-3 border-t border-slate-700 text-xs text-slate-500">
-        STR Income Tracker
+        HostIQ
       </div>
     </nav>
   );
