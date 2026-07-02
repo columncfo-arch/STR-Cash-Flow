@@ -67,7 +67,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-emerald-600" />
-            <span className="font-bold text-slate-900">HostIQ</span>
+            <span className="font-bold text-slate-900">HostCFO</span>
           </div>
           <div className="flex items-center gap-3">
             <Link href="/" className="hidden sm:block text-sm text-slate-500 hover:text-slate-800 transition-colors">Log in</Link>
@@ -87,7 +87,7 @@ export default function LandingPage() {
           Start treating your rental like a business.
         </h1>
         <p className="text-base sm:text-lg text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
-          Platform fees, mortgage, ADR, occupancy rate, expenses — they all eat your payout. HostIQ shows your actual net cash flow, forecasts where you're heading, and tells you what to fix.
+          Platform fees, mortgage, ADR, occupancy rate, expenses — they all eat your payout. HostCFO shows your actual net cash flow, forecasts where you're heading, and tells you what to fix.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
           <Link href="/onboarding" className="w-full sm:w-auto bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
@@ -104,7 +104,7 @@ export default function LandingPage() {
             <div className="w-3 h-3 rounded-full bg-red-400" />
             <div className="w-3 h-3 rounded-full bg-amber-400" />
             <div className="w-3 h-3 rounded-full bg-emerald-400" />
-            <span className="text-slate-500 text-xs ml-3">hostiq.app</span>
+            <span className="text-slate-500 text-xs ml-3">hostcfo.com</span>
           </div>
           <div className="bg-slate-50 p-4 sm:p-6 space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
@@ -240,9 +240,9 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-emerald-600" />
-            <span className="font-semibold text-sm text-slate-700">HostIQ</span>
+            <span className="font-semibold text-sm text-slate-700">HostCFO</span>
           </div>
-          <p className="text-xs text-slate-400">© 2026 HostIQ · Financial intelligence for STR operators</p>
+          <p className="text-xs text-slate-400">© 2026 HostCFO · Financial intelligence for STR operators</p>
         </div>
       </footer>
     </div>

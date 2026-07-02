@@ -82,7 +82,7 @@ export default function OnboardingPage() {
       <div className="bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BookOpen className="w-5 h-5 text-emerald-600" />
-          <span className="font-bold text-slate-900">HostIQ</span>
+          <span className="font-bold text-slate-900">HostCFO</span>
         </div>
         <p className="text-xs text-slate-400">Step {step + 1} of {STEP_LABELS.length}</p>
       </div>
@@ -119,7 +119,7 @@ export default function OnboardingPage() {
           {/* ── Step 0: Account ── */}
           {step === 0 && (
             <>
-              <h1 className="text-2xl font-bold text-slate-900 mb-1">Welcome to HostIQ</h1>
+              <h1 className="text-2xl font-bold text-slate-900 mb-1">Welcome to HostCFO</h1>
               <p className="text-slate-500 text-sm mb-8">Your 3-month free trial starts today. No credit card needed.</p>
               <div className="space-y-4">
                 <div>
@@ -223,7 +223,7 @@ export default function OnboardingPage() {
           {step === 3 && (
             <>
               <h1 className="text-2xl font-bold text-slate-900 mb-1">Set your targets</h1>
-              <p className="text-slate-500 text-sm mb-8">Optional — you can set these any time in the app. These help HostIQ show you how you're pacing.</p>
+              <p className="text-slate-500 text-sm mb-8">Optional — you can set these any time in the app. These help HostCFO show you how you're pacing.</p>
               <div className="space-y-5">
                 <div>
                   <label className="text-sm font-medium text-slate-700 block mb-1.5">Monthly mortgage (PITI)</label>

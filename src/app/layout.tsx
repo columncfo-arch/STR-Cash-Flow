@@ -7,7 +7,7 @@ import MainWrapper from '@/components/MainWrapper';
 const geist = Geist({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'HostIQ',
+  title: 'HostCFO',
   description: 'Short-term rental financial intelligence',
 };
 
