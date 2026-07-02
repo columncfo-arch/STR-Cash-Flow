@@ -341,6 +341,13 @@ export default function Dashboard() {
 
   const hasData = ytdGross > 0;
 
+  // Occupancy and ADR targets for scoring
+  const targetOcc = settings?.targetOccupancyPct ?? null;
+  const occVariance = targetOcc != null ? ytdOccupancy - targetOcc : null;
+  const targetAdrVal = settings?.targetAdr ?? null;
+  const adrVariance = targetAdrVal != null && ytdAdr != null ? ytdAdr - targetAdrVal : null;
+  const adrVariancePct = adrVariance != null && targetAdrVal ? (adrVariance / targetAdrVal) * 100 : null;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function handleChartClick(data: any) {
     const idx: number | null | undefined = data?.activeTooltipIndex;
