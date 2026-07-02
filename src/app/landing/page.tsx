@@ -84,7 +84,7 @@ export default function LandingPage() {
           3-month free trial · No credit card required
         </div>
         <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 leading-tight mb-4 sm:mb-5 max-w-3xl mx-auto">
-          Know exactly what your rental makes. After everything.
+          Measure what matters. Measure cash flow — and then grow cash flow.
         </h1>
         <p className="text-base sm:text-lg text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
           HostIQ is the financial intelligence layer for short-term rental operators — real P&L, revenue forecasting, and optimization — so you can hold your PM, or yourself, accountable.
