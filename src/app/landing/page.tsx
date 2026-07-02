@@ -19,8 +19,8 @@ const FEATURES = [
   },
   {
     icon: Users,
-    title: 'Direct booking',
-    description: 'Build your guest list and give guests a direct booking page. Reduce platform fees and own your relationships.',
+    title: 'Build customer loyalty',
+    description: 'Own your guest relationships. Build a repeat-guest list, send direct booking links, and reduce your dependence on platform fees over time.',
     iconColor: 'text-violet-600',
     iconBg: 'bg-violet-50',
   },
