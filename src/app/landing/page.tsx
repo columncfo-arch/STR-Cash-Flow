@@ -111,8 +111,8 @@ export default function LandingPage() {
           <div className="bg-slate-50 p-4 sm:p-6 space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
               {[
-                { label: 'This Year Target', value: '$42,914', sub: 'of $44,923 YTD target', tag: '▼ $2,009 (4.5%)', green: false },
-                { label: 'July Target', value: '$8,098', sub: 'of $8,148 target', tag: '▼ $50 (0.6%)', green: false },
+                { label: 'This Year Target', value: '$47,211', sub: 'of $44,923 YTD target', tag: '▲ $2,288 (5.1%)', green: true },
+                { label: 'July Target', value: '$8,940', sub: 'of $8,148 target', tag: '▲ $792 (9.7%)', green: true },
                 { label: 'Avg Occupancy', value: '79.9%', sub: 'Target 67%', tag: '▲ 12.9pts', green: true },
                 { label: 'Avg Daily Rate', value: '$254', sub: 'Target $225', tag: '▲ $29 (12.9%)', green: true },
               ].map(c => (
