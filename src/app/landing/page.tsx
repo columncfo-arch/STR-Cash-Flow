@@ -87,7 +87,7 @@ export default function LandingPage() {
           Your Airbnb payout isn't your profit. See — and grow — your real STR cash flow.
         </h1>
         <p className="text-base sm:text-lg text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
-          HostIQ is the financial intelligence layer for short-term rental operators — real P&L, revenue forecasting, and optimization — so you can hold your PM, or yourself, accountable.
+          Platform fees, mortgage, ADR, occupancy rate, expenses — they all eat your payout. HostIQ shows your actual net cash flow, forecasts where you're heading, and tells you what to fix.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
           <Link href="/onboarding" className="w-full sm:w-auto bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
