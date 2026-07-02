@@ -126,7 +126,7 @@ export default function LandingPage() {
               <p className="text-sm font-semibold text-slate-700 mb-4">Monthly Revenue by Platform</p>
               <div className="flex items-end gap-1 h-24">
                 {BARS.map((h, i) => (
-                  <div key={i} className="flex-1 flex flex-col gap-0.5 justify-end">
+                  <div key={i} className="flex-1 h-full flex flex-col gap-0.5 justify-end">
                     <div className="w-full bg-indigo-400 rounded-t-sm" style={{ height: `${h * 0.22}%` }} />
                     <div className="w-full bg-rose-400 rounded-t-sm" style={{ height: `${h * 0.55}%` }} />
                   </div>
