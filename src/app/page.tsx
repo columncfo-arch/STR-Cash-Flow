@@ -6,7 +6,7 @@ import { TrendingUp, X, Pencil } from 'lucide-react';
 import { format } from 'date-fns';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Legend, ReferenceLine, Cell,
+  Legend, Cell,
 } from 'recharts';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
@@ -31,8 +31,6 @@ function ChartTooltip({
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
   const gross = d._gross as number | null;
-  const expenses = d._expenses as number | null;
-  const netIncome = d['Net Income'] as number | null;
   const target = d['Monthly Target'] as number | null;
   const bookedRevenue = ((d.Airbnb ?? 0) as number) + ((d['Booking.com'] ?? 0) as number) + ((d.VRBO ?? 0) as number);
   const hasActual = gross != null;
@@ -45,22 +43,10 @@ function ChartTooltip({
     <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm min-w-[190px]">
       <p className="font-semibold text-slate-800 mb-2">{label}</p>
       {hasActual && (
-        <>
-          <div className="flex justify-between gap-6">
-            <span className="text-slate-500">Revenue</span>
-            <span className="font-medium">{fmt(gross!)}</span>
-          </div>
-          <div className="flex justify-between gap-6">
-            <span className="text-slate-500">Expenses</span>
-            <span className="font-medium text-red-600">({fmt(expenses!)})</span>
-          </div>
-          <div className="flex justify-between gap-6 border-t border-slate-100 mt-2 pt-2">
-            <span className="font-medium text-slate-700">Net Income</span>
-            <span className={`font-semibold ${(netIncome ?? 0) >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-              {fmt(netIncome ?? 0)}
-            </span>
-          </div>
-        </>
+        <div className="flex justify-between gap-6">
+          <span className="text-slate-500">Revenue</span>
+          <span className="font-medium">{fmt(gross!)}</span>
+        </div>
       )}
       {hasPreBooked && (
         <div className="flex justify-between gap-6">
@@ -350,10 +336,8 @@ export default function Dashboard() {
       Airbnb: m.byPlatform.airbnb.income,
       'Booking.com': m.byPlatform.booking.income,
       VRBO: m.byPlatform.vrbo.income,
-      'Net Income': isActual ? m.netIncome : null,
       'Monthly Target': monthlyForecasts[i],
       _gross: isActual ? m.grossRevenue : null,
-      _expenses: isActual ? m.grossRevenue - m.netIncome : null,
     };
   }) ?? [];
 
@@ -625,7 +609,7 @@ export default function Dashboard() {
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
         <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-emerald-600" />
-          Monthly Revenue by Platform &amp; Net Income
+          Monthly Revenue by Platform
         </h2>
         <p className="text-xs text-slate-400 mb-4">Click a month to drill into its P&amp;L</p>
         {hasData ? (
@@ -653,10 +637,7 @@ export default function Dashboard() {
                     </g>
                   );
                 }} />
-                <YAxis yAxisId="left" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}
-                  label={{ value: 'Gross Revenue', angle: -90, position: 'insideLeft', dx: -5, style: { textAnchor: 'middle', fontSize: 11, fill: '#94a3b8' } }} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}
-                  label={{ value: 'Net Income', angle: 90, position: 'insideRight', dx: 10, style: { textAnchor: 'middle', fontSize: 11, fill: '#94a3b8' } }} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
                 <Tooltip content={(props) => (
                   <ChartTooltip
                     active={props.active}
@@ -666,9 +647,8 @@ export default function Dashboard() {
                   />
                 )} />
                 <Legend />
-                <ReferenceLine yAxisId="right" y={0} stroke="#e2e8f0" />
                 {(['Airbnb', 'Booking.com', 'VRBO'] as const).map(p => (
-                  <Bar key={p} yAxisId="left" dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com', '')]}>
+                  <Bar key={p} dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com', '')]}>
                     {chartData.map((_, i) => (
                       <Cell
                         key={i}
@@ -678,11 +658,7 @@ export default function Dashboard() {
                   </Bar>
                 ))}
                 <Line
-                  yAxisId="right" type="monotone" dataKey="Net Income" stroke="#f97316"
-                  strokeWidth={3} dot={{ r: 4, fill: '#f97316', strokeWidth: 0 }} connectNulls
-                />
-                <Line
-                  yAxisId="left" type="monotone" dataKey="Monthly Target" stroke="#475569"
+                  type="monotone" dataKey="Monthly Target" stroke="#475569"
                   strokeWidth={2} strokeDasharray="6 3" dot={{ r: 4, fill: '#475569', strokeWidth: 0 }}
                 />
               </ComposedChart>

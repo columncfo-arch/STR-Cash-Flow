@@ -10,7 +10,7 @@ const links: NavLink[] = [
   { href: '/', label: 'Dashboard', icon: Home },
   {
     href: '/income-statement',
-    label: 'P&L Statement',
+    label: 'Income Statement',
     icon: BarChart3,
     children: [
       { href: '/bookings', label: 'Bookings', icon: CalendarDays },

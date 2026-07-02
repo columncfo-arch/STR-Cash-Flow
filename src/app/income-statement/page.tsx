@@ -5,7 +5,7 @@ import { format, getMonth, getYear } from 'date-fns';
 import { Download, ChevronDown, ChevronRight } from 'lucide-react';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
-  ReferenceLine,
+  ReferenceLine, Cell,
 } from 'recharts';
 
 const MONTHS_LONG = [
@@ -422,6 +422,31 @@ export default function IncomeStatementPage() {
           <Download className="w-4 h-4" /> Export CSV
         </button>
       </div>
+
+      {/* Net Income overview chart */}
+      {statement && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
+          <h2 className="font-semibold text-slate-800 mb-1">Monthly Net Income — {fetchYear}</h2>
+          <p className="text-xs text-slate-400 mb-4">Net income after all expenses and debt service</p>
+          <ResponsiveContainer width="100%" height={200}>
+            <ComposedChart data={statement.months.map(m => ({
+              name: MONTHS_SHORT[m.month - 1],
+              netIncome: m.grossRevenue > 0 ? m.netIncome : null,
+            }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+              <Tooltip formatter={(v) => fmt(Number(v))} />
+              <ReferenceLine y={0} stroke="#cbd5e1" />
+              <Bar dataKey="netIncome" name="Net Income" radius={[3, 3, 0, 0]}>
+                {statement.months.map((m, i) => (
+                  <Cell key={i} fill={m.netIncome >= 0 ? '#10b981' : '#ef4444'} />
+                ))}
+              </Bar>
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* Mode selector */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
