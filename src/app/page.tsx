@@ -246,10 +246,7 @@ export default function Dashboard() {
   const effectivePriorAnnual = effectivePriorMonthly?.reduce((s, v) => s + v, 0) ?? 0;
   const effectiveMonthsWithData = effectivePriorMonthly?.filter(v => v > 0).length ?? 0;
   const prevHasData = effectiveMonthsWithData > 0;
-  // User-entered data is trusted unconditionally; database fallback requires ≥6 months to avoid sparse-data skew
-  const useSeasonality = storedPriorMonthly != null
-    ? effectivePriorAnnual > 0
-    : effectivePriorAnnual > 0 && effectiveMonthsWithData >= 6;
+  const useSeasonality = effectivePriorAnnual > 0;
 
   async function saveTarget() {
     if (!settings) return;
@@ -302,10 +299,19 @@ export default function Dashboard() {
     setEditingTarget(false);
   }
 
+  // For seasonal distribution: zero-history months get the flat rate; the remaining
+  // budget is split proportionally among months that had prior revenue.
+  const priorNonZeroTotal = effectivePriorMonthly?.reduce((s, v) => s + v, 0) ?? 0;
+  const priorZeroCount = effectivePriorMonthly?.filter(v => v === 0).length ?? 0;
+
   const monthlyForecasts: (number | null)[] = Array.from({ length: 12 }, (_, i) => {
     if (manualTarget) {
       if (useSeasonality && effectivePriorMonthly) {
-        return Math.round(manualTarget * (effectivePriorMonthly[i] / effectivePriorAnnual));
+        const prev = effectivePriorMonthly[i];
+        const flatMonth = manualTarget / 12;
+        if (prev === 0 || priorNonZeroTotal === 0) return Math.round(flatMonth);
+        const proportionalBudget = manualTarget * ((12 - priorZeroCount) / 12);
+        return Math.round(proportionalBudget * (prev / priorNonZeroTotal));
       }
       return Math.round(manualTarget / 12);
     }
