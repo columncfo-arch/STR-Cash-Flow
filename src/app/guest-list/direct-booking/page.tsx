@@ -11,7 +11,6 @@ export default function DirectBookingPage() {
   const [leads, setLeads] = useState<DirectLead[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [search, setSearch] = useState('');
-  const [saved, setSaved] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<string | null>(null);
 
@@ -26,15 +25,12 @@ export default function DirectBookingPage() {
 
   useEffect(() => { load(); }, []);
 
-  async function save() {
-    if (!settings) return;
+  async function save(updated: Settings) {
     await fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings),
+      body: JSON.stringify(updated),
     });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   }
 
   async function bustCalendarCache() {
@@ -270,6 +266,7 @@ export default function DirectBookingPage() {
                   type="number"
                   value={settings.directNightlyRate ?? ''}
                   onChange={e => setSettings({ ...settings, directNightlyRate: parseFloat(e.target.value) || undefined })}
+                  onBlur={() => save(settings)}
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
                   placeholder="150"
                   min="0"
@@ -281,6 +278,7 @@ export default function DirectBookingPage() {
                   type="number"
                   value={settings.guestCleaningFeePerBooking ?? ''}
                   onChange={e => setSettings({ ...settings, guestCleaningFeePerBooking: parseFloat(e.target.value) || 0 })}
+                  onBlur={() => save(settings)}
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
                   placeholder="85"
                   min="0"
@@ -292,6 +290,7 @@ export default function DirectBookingPage() {
                   type="number"
                   value={settings.directMinNights ?? 2}
                   onChange={e => setSettings({ ...settings, directMinNights: parseInt(e.target.value) || 2 })}
+                  onBlur={() => save(settings)}
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
                   placeholder="2"
                   min="1"
@@ -306,6 +305,7 @@ export default function DirectBookingPage() {
             <textarea
               value={settings.directDescription ?? ''}
               onChange={e => setSettings({ ...settings, directDescription: e.target.value || undefined })}
+              onBlur={() => save(settings)}
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 resize-none"
               rows={3}
               placeholder="3BR / 2BA · sleeps 6 · private pool · 5 min from downtown"
@@ -325,6 +325,7 @@ export default function DirectBookingPage() {
                   type="url"
                   value={settings.airbnbIcalUrl ?? ''}
                   onChange={e => setSettings({ ...settings, airbnbIcalUrl: e.target.value || undefined })}
+                  onBlur={() => save(settings)}
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 font-mono text-xs"
                   placeholder="https://www.airbnb.com/calendar/ical/12345.ics?s=…"
                 />
@@ -335,6 +336,7 @@ export default function DirectBookingPage() {
                   type="url"
                   value={settings.vrboIcalUrl ?? ''}
                   onChange={e => setSettings({ ...settings, vrboIcalUrl: e.target.value || undefined })}
+                  onBlur={() => save(settings)}
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 font-mono text-xs"
                   placeholder="https://www.vrbo.com/icalendar/…"
                 />
@@ -353,18 +355,6 @@ export default function DirectBookingPage() {
             </div>
           </section>
 
-          <div className="flex items-center gap-3">
-            <button
-              onClick={save}
-              className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm hover:bg-emerald-700 transition-colors"
-            >
-              {saved ? <Check className="w-4 h-4" /> : null}
-              {saved ? 'Saved!' : 'Save Settings'}
-            </button>
-            <p className="text-xs text-slate-400">
-              Save before testing the sync.
-            </p>
-          </div>
         </div>
       )}
     </div>

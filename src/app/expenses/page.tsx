@@ -24,11 +24,12 @@ function emptyForm(): FormState {
   };
 }
 
-function ExpenseForm({ f, onChange, onSave, onCancel }: {
+function ExpenseForm({ f, onChange, onSave, onCancel, submitLabel = 'Add' }: {
   f: FormState;
   onChange: (patch: Partial<FormState>) => void;
   onSave: () => void;
   onCancel: () => void;
+  submitLabel?: string;
 }) {
   const [attempted, setAttempted] = useState(false);
   const err = {
@@ -88,7 +89,7 @@ function ExpenseForm({ f, onChange, onSave, onCancel }: {
       <div className="flex items-end gap-2 col-span-2 md:col-span-4">
         <button onClick={handleSave}
           className="flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700">
-          <Check className="w-3.5 h-3.5" /> Save
+          <Check className="w-3.5 h-3.5" /> {submitLabel}
         </button>
         <button onClick={onCancel}
           className="flex items-center gap-1.5 border border-slate-200 px-4 py-2 rounded-lg text-sm hover:bg-slate-50">
@@ -235,17 +236,16 @@ export default function ExpensesPage() {
               type="number"
               value={pitiDraft}
               onChange={e => setPitiDraft(e.target.value)}
+              onBlur={savePiti}
               autoFocus
               placeholder="0"
               min="0"
               className="w-32 text-sm border border-slate-300 rounded-lg px-3 py-2 text-right"
               onKeyDown={e => { if (e.key === 'Enter') savePiti(); if (e.key === 'Escape') setPitiEdit(false); }}
             />
-            <button onClick={savePiti}
-              className="flex items-center gap-1.5 bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-emerald-700">
-              <Check className="w-3.5 h-3.5" /> Save
-            </button>
-            <button onClick={() => setPitiEdit(false)}
+            <button
+              onMouseDown={e => e.preventDefault()}
+              onClick={() => setPitiEdit(false)}
               className="flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 rounded-lg text-sm hover:bg-slate-50">
               <X className="w-3.5 h-3.5" /> Cancel
             </button>
@@ -285,6 +285,7 @@ export default function ExpensesPage() {
             onChange={patch => setForm(p => ({ ...p, ...patch }))}
             onSave={addExpense}
             onCancel={() => { setShowAdd(false); setForm(emptyForm()); }}
+            submitLabel="Add Expense"
           />
         </div>
       )}
@@ -316,6 +317,7 @@ export default function ExpensesPage() {
                       onChange={patch => setEditForm(p => ({ ...p, ...patch }))}
                       onSave={() => saveEdit(e.id)}
                       onCancel={() => setEditId(null)}
+                      submitLabel="Update"
                     />
                   </td>
                 </tr>

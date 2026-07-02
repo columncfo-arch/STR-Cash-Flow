@@ -1,11 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Settings } from '@/types';
-import { Check, AlertTriangle } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [saved, setSaved] = useState(false);
   const [cleared, setCleared] = useState(false);
   const [seeded, setSeeded] = useState<string | null>(null);
 
@@ -36,15 +35,12 @@ export default function SettingsPage() {
     fetch('/api/settings').then(r => r.json()).then(setSettings);
   }, []);
 
-  async function save() {
-    if (!settings) return;
+  async function save(updated: Settings) {
     await fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings),
+      body: JSON.stringify(updated),
     });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   }
 
   if (!settings) return <div className="text-slate-400 text-sm">Loading…</div>;
@@ -63,6 +59,7 @@ export default function SettingsPage() {
               type="text"
               value={settings.propertyName}
               onChange={e => setSettings({ ...settings, propertyName: e.target.value })}
+              onBlur={() => save(settings)}
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
               placeholder="My STR Property"
             />
@@ -71,7 +68,11 @@ export default function SettingsPage() {
             <label className="text-xs text-slate-500 block mb-1">Currency</label>
             <select
               value={settings.currency}
-              onChange={e => setSettings({ ...settings, currency: e.target.value })}
+              onChange={e => {
+                const updated = { ...settings, currency: e.target.value };
+                setSettings(updated);
+                save(updated);
+              }}
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
             >
               <option value="USD">USD — US Dollar</option>
@@ -88,6 +89,7 @@ export default function SettingsPage() {
               type="number"
               value={settings.cleaningFeePerBooking ?? 0}
               onChange={e => setSettings({ ...settings, cleaningFeePerBooking: parseFloat(e.target.value) || 0 })}
+              onBlur={() => save(settings)}
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
               placeholder="0"
               min="0"
@@ -108,16 +110,6 @@ export default function SettingsPage() {
         Guest engagement settings (WiFi, welcome message, direct booking) are managed in{' '}
         <a href="/guest-list" className="text-emerald-600 underline font-medium">Guest List</a>.
       </p>
-
-      <div className="flex items-center gap-3">
-        <button
-          onClick={save}
-          className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm hover:bg-emerald-700 transition-colors"
-        >
-          {saved ? <Check className="w-4 h-4" /> : null}
-          {saved ? 'Saved!' : 'Save Settings'}
-        </button>
-      </div>
 
       <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm mt-8">
         <h2 className="font-semibold text-slate-800 mb-2">Data Management</h2>

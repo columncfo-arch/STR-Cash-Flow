@@ -1,25 +1,21 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { Settings } from '@/types';
-import { Wifi, Copy, Check, ExternalLink } from 'lucide-react';
+import { Wifi, Copy, ExternalLink } from 'lucide-react';
 
 export default function WelcomeSettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(setSettings);
   }, []);
 
-  async function save() {
-    if (!settings) return;
+  async function save(updated: Settings) {
     await fetch('/api/settings', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(settings),
+      body: JSON.stringify(updated),
     });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
   }
 
   if (!settings) return <div className="text-slate-400 text-sm">Loading…</div>;
@@ -45,6 +41,7 @@ export default function WelcomeSettingsPage() {
               type="text"
               value={settings.wifiNetwork ?? ''}
               onChange={e => setSettings({ ...settings, wifiNetwork: e.target.value || undefined })}
+              onBlur={() => save(settings)}
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
               placeholder="HomeNetwork_5G"
             />
@@ -55,6 +52,7 @@ export default function WelcomeSettingsPage() {
               type="text"
               value={settings.wifiPassword ?? ''}
               onChange={e => setSettings({ ...settings, wifiPassword: e.target.value || undefined })}
+              onBlur={() => save(settings)}
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 font-mono"
               placeholder="hunter2"
             />
@@ -70,6 +68,7 @@ export default function WelcomeSettingsPage() {
             <textarea
               value={settings.welcomeMessage ?? ''}
               onChange={e => setSettings({ ...settings, welcomeMessage: e.target.value || undefined })}
+              onBlur={() => save(settings)}
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 resize-none"
               rows={4}
               placeholder="Welcome! We hope you have a wonderful stay. Check-out is at 10am. Text us any time at…"
@@ -82,6 +81,7 @@ export default function WelcomeSettingsPage() {
               type="url"
               value={settings.localGuideUrl ?? ''}
               onChange={e => setSettings({ ...settings, localGuideUrl: e.target.value || undefined })}
+              onBlur={() => save(settings)}
               className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
               placeholder="https://notion.so/your-local-guide"
             />
@@ -114,14 +114,6 @@ export default function WelcomeSettingsPage() {
         </div>
         <p className="text-xs text-slate-400 mt-3">Print as a QR code and place it on the kitchen counter or inside the front door.</p>
       </section>
-
-      <button
-        onClick={save}
-        className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm hover:bg-emerald-700 transition-colors"
-      >
-        {saved ? <Check className="w-4 h-4" /> : null}
-        {saved ? 'Saved!' : 'Save Settings'}
-      </button>
     </div>
   );
 }
