@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Geist } from 'next/font/google';
 import './globals.css';
 import Nav from '@/components/Nav';
@@ -9,6 +9,11 @@ const geist = Geist({ subsets: ['latin'] });
 export const metadata: Metadata = {
   title: 'STR Cash Flow',
   description: 'Short-term rental income tracker',
+};
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

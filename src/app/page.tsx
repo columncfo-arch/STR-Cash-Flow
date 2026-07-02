@@ -368,7 +368,7 @@ export default function Dashboard() {
       {!selMonth && (hasTarget || hasData) && (
         <div className={`grid gap-4 mb-6 ${hasTarget && annualForecast != null ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2'}`}>
           {/* This Year + This Month — only when target is configured */}
-          {hasTarget && annualForecast != null && <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+          {hasTarget && annualForecast != null && <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">This Year Target</p>
               {!editingTarget ? (
@@ -387,7 +387,7 @@ export default function Dashboard() {
             </div>
             {editingTarget ? (
               <div className="space-y-2">
-                <p className="text-xs text-slate-500">Set your {year} annual revenue target</p>
+                <p className="text-xs text-slate-500">Set your {year} annual target</p>
                 <div className="flex items-center gap-2">
                   <span className="text-sm text-slate-400">$</span>
                   <input
@@ -401,26 +401,17 @@ export default function Dashboard() {
                     autoFocus
                   />
                 </div>
-                <p className="text-xs text-slate-400">Monthly targets will follow prior-year seasonal pattern.</p>
               </div>
             ) : (
               <>
-                <div className="flex items-baseline gap-2 mb-2">
-                  <span className="text-2xl font-bold text-slate-900">{fmt(ytdGross)}</span>
-                  <span className="text-sm text-slate-400">of {ytdForecast != null ? fmt(ytdForecast) : '—'} YTD target</span>
-                </div>
+                <p className="text-2xl font-bold text-slate-900">{fmt(ytdGross)}</p>
+                <p className="text-xs text-slate-400 mt-0.5 mb-2">of {ytdForecast != null ? fmt(ytdForecast) : '—'} YTD target</p>
                 {pacingVariance != null && (
-                  <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2.5 py-1 rounded-lg ${pacingVariance >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                  <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2 py-1 rounded-lg ${pacingVariance >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
                     {pacingVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(pacingVariance))}
-                    {pacingVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(pacingVariancePct).toFixed(1)}%) {pacingVariance >= 0 ? 'ahead' : 'behind'}</span>}
+                    {pacingVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(pacingVariancePct).toFixed(1)}%)</span>}
                   </span>
                 )}
-                <div className="flex items-center justify-between mt-3">
-                  <p className="text-xs text-slate-400">Full-year target {fmt(annualForecast)}</p>
-                  <p className={`text-xs font-medium ${ytdNetIncome >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                    Net {fmt(ytdNetIncome)} YTD
-                  </p>
-                </div>
               </>
             )}
           </div>}
@@ -432,9 +423,9 @@ export default function Dashboard() {
             const monthlyVariance = monthlyActual - monthlyTarget;
             const monthlyVariancePct = monthlyTarget > 0 ? (monthlyVariance / monthlyTarget) * 100 : null;
             return (
-              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+              <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">{MONTHS_LONG[currentMonthIdx]} — Monthly Target</p>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">{MONTHS_LONG[currentMonthIdx]} Target</p>
                   <button
                     onClick={openSeasonalityEditor}
                     className="text-slate-300 hover:text-slate-500 transition-colors"
@@ -443,21 +434,12 @@ export default function Dashboard() {
                     <Pencil className="w-3.5 h-3.5" />
                   </button>
                 </div>
-                <div className="flex items-baseline gap-2 mb-2">
-                  <span className="text-2xl font-bold text-slate-900">{fmt(monthlyActual)}</span>
-                  <span className="text-sm text-slate-400">of {fmt(monthlyTarget)} target</span>
-                </div>
-                <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2.5 py-1 rounded-lg ${monthlyVariance >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                <p className="text-2xl font-bold text-slate-900">{fmt(monthlyActual)}</p>
+                <p className="text-xs text-slate-400 mt-0.5 mb-2">of {fmt(monthlyTarget)} target</p>
+                <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2 py-1 rounded-lg ${monthlyVariance >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
                   {monthlyVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(monthlyVariance))}
-                  {monthlyVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(monthlyVariancePct).toFixed(1)}%) {monthlyVariance >= 0 ? 'ahead' : 'behind'}</span>}
+                  {monthlyVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(monthlyVariancePct).toFixed(1)}%)</span>}
                 </span>
-                <div className="mt-3">
-                  <p className="text-xs text-slate-400">
-                    Full-month target {fmt(monthlyTarget)}
-                    {useSeasonality && <span className="ml-1 text-emerald-600">· seasonal</span>}
-                    {!useSeasonality && <span className="ml-1">· flat (<button onClick={openSeasonalityEditor} className="underline hover:text-slate-600">add {year - 1} data</button>)</span>}
-                  </p>
-                </div>
               </div>
             );
           })()}
@@ -467,7 +449,7 @@ export default function Dashboard() {
             const targetOcc = settings?.targetOccupancyPct ?? null;
             const occVariance = targetOcc != null ? ytdOccupancy - targetOcc : null;
             return (
-              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+              <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Avg Occupancy</p>
                   {editingOccTarget ? (
@@ -516,7 +498,7 @@ export default function Dashboard() {
             const adrVariance = targetAdrVal != null && ytdAdr != null ? ytdAdr - targetAdrVal : null;
             const adrVariancePct = adrVariance != null && targetAdrVal ? (adrVariance / targetAdrVal) * 100 : null;
             return (
-              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+              <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Avg Daily Rate</p>
                   {editingAdrTarget ? (
