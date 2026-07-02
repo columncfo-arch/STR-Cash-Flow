@@ -61,17 +61,17 @@ const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-white">
+    <div className="min-h-screen bg-white overflow-x-hidden">
       {/* Top nav */}
       <header className="border-b border-slate-100 bg-white/90 backdrop-blur sticky top-0 z-10">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <BookOpen className="w-5 h-5 text-emerald-600" />
             <span className="font-bold text-slate-900">HostIQ</span>
           </div>
-          <div className="flex items-center gap-4">
-            <Link href="/" className="text-sm text-slate-500 hover:text-slate-800 transition-colors">Log in</Link>
-            <Link href="/onboarding" className="bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg font-medium hover:bg-emerald-700 transition-colors">
+          <div className="flex items-center gap-3">
+            <Link href="/" className="hidden sm:block text-sm text-slate-500 hover:text-slate-800 transition-colors">Log in</Link>
+            <Link href="/onboarding" className="bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg font-medium hover:bg-emerald-700 transition-colors whitespace-nowrap">
               Start free trial
             </Link>
           </div>
@@ -79,18 +79,18 @@ export default function LandingPage() {
       </header>
 
       {/* Hero */}
-      <section className="max-w-6xl mx-auto px-6 pt-20 pb-20 text-center">
-        <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-8">
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 sm:pt-20 pb-12 sm:pb-20 text-center">
+        <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-6 sm:mb-8">
           3-month free trial · No credit card required
         </div>
-        <h1 className="text-4xl md:text-5xl font-bold text-slate-900 leading-tight mb-5 max-w-3xl mx-auto">
+        <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 leading-tight mb-4 sm:mb-5 max-w-3xl mx-auto">
           Know exactly what your rental makes. After everything.
         </h1>
-        <p className="text-lg text-slate-500 mb-10 max-w-xl mx-auto leading-relaxed">
+        <p className="text-base sm:text-lg text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
           HostIQ is the financial command center for short-term rental operators — real P&L, revenue forecasting, and direct booking in one place.
         </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-          <Link href="/onboarding" className="bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center gap-2">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+          <Link href="/onboarding" className="w-full sm:w-auto bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
             Start your free trial <ChevronRight className="w-4 h-4" />
           </Link>
           <Link href="/" className="text-slate-400 text-sm hover:text-slate-600 transition-colors">
@@ -99,24 +99,24 @@ export default function LandingPage() {
         </div>
 
         {/* App preview */}
-        <div className="mt-16 rounded-2xl border border-slate-200 shadow-2xl overflow-hidden text-left">
+        <div className="mt-10 sm:mt-16 rounded-2xl border border-slate-200 shadow-2xl overflow-hidden text-left">
           <div className="bg-slate-900 px-4 py-3 flex items-center gap-2">
             <div className="w-3 h-3 rounded-full bg-red-400" />
             <div className="w-3 h-3 rounded-full bg-amber-400" />
             <div className="w-3 h-3 rounded-full bg-emerald-400" />
             <span className="text-slate-500 text-xs ml-3">hostiq.app</span>
           </div>
-          <div className="bg-slate-50 p-6 space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <div className="bg-slate-50 p-4 sm:p-6 space-y-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
               {[
                 { label: 'This Year Target', value: '$42,914', sub: 'of $44,923 YTD target', tag: '▼ $2,009 (4.5%)', green: false },
                 { label: 'July Target', value: '$8,098', sub: 'of $8,148 target', tag: '▼ $50 (0.6%)', green: false },
                 { label: 'Avg Occupancy', value: '79.9%', sub: 'Target 67%', tag: '▲ 12.9pts', green: true },
                 { label: 'Avg Daily Rate', value: '$254', sub: 'Target $225', tag: '▲ $29 (12.9%)', green: true },
               ].map(c => (
-                <div key={c.label} className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-                  <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-2 leading-tight">{c.label}</p>
-                  <p className="text-xl font-bold text-slate-900">{c.value}</p>
+                <div key={c.label} className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-sm">
+                  <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1 sm:mb-2 leading-tight">{c.label}</p>
+                  <p className="text-lg sm:text-xl font-bold text-slate-900">{c.value}</p>
                   <p className="text-xs text-slate-400 mt-0.5 mb-2">{c.sub}</p>
                   <span className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded-lg ${c.green ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>{c.tag}</span>
                 </div>
@@ -145,13 +145,13 @@ export default function LandingPage() {
       </section>
 
       {/* Features */}
-      <section className="bg-slate-50 py-24">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-slate-900 mb-4">Everything your rental investment needs</h2>
-            <p className="text-slate-500 text-lg max-w-lg mx-auto">Built for operators who treat their rental like a business, not a side project.</p>
+      <section className="bg-slate-50 py-16 sm:py-24">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-10 sm:mb-16">
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Everything your rental investment needs</h2>
+            <p className="text-slate-500 text-base sm:text-lg max-w-lg mx-auto">Built for operators who treat their rental like a business, not a side project.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
             {FEATURES.map(f => (
               <div key={f.title} className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
                 <div className={`w-12 h-12 ${f.iconBg} rounded-xl flex items-center justify-center mb-6`}>
@@ -166,13 +166,13 @@ export default function LandingPage() {
       </section>
 
       {/* How it works */}
-      <section className="py-24">
-        <div className="max-w-6xl mx-auto px-6">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold text-slate-900 mb-4">Up and running in minutes</h2>
-            <p className="text-slate-500 text-lg">No accountant required.</p>
+      <section className="py-16 sm:py-24">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-10 sm:mb-16">
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Up and running in minutes</h2>
+            <p className="text-slate-500 text-base sm:text-lg">No accountant required.</p>
           </div>
-          <div className="grid md:grid-cols-3 gap-10">
+          <div className="grid sm:grid-cols-3 gap-8 sm:gap-10">
             {STEPS.map(s => (
               <div key={s.n} className="text-center">
                 <div className="text-6xl font-black text-emerald-100 mb-3 leading-none">{s.n}</div>
@@ -185,14 +185,14 @@ export default function LandingPage() {
       </section>
 
       {/* Pricing */}
-      <section className="bg-slate-50 py-24">
-        <div className="max-w-6xl mx-auto px-6">
+      <section className="bg-slate-50 py-16 sm:py-24">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-4">
-            <h2 className="text-3xl font-bold text-slate-900 mb-4">Simple pricing</h2>
-            <p className="text-slate-500 text-lg">3 months free, then pay by property count. No feature gating.</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Simple pricing</h2>
+            <p className="text-slate-500 text-base sm:text-lg">3 months free, then pay by property count. No feature gating.</p>
           </div>
-          <p className="text-center text-sm text-emerald-600 font-medium mb-12">Save 20% with annual billing</p>
-          <div className="grid md:grid-cols-3 gap-6 max-w-4xl mx-auto">
+          <p className="text-center text-sm text-emerald-600 font-medium mb-8 sm:mb-12">Save 20% with annual billing</p>
+          <div className="grid sm:grid-cols-3 gap-4 sm:gap-6 max-w-4xl mx-auto">
             {PRICING.map(p => (
               <div key={p.name} className={`rounded-2xl border p-8 ${p.highlight ? 'bg-emerald-600 border-emerald-600 shadow-xl shadow-emerald-200' : 'bg-white border-slate-200 shadow-sm'}`}>
                 {p.highlight && <p className="text-xs font-bold text-emerald-200 uppercase tracking-widest mb-4">Most popular</p>}
@@ -226,9 +226,9 @@ export default function LandingPage() {
       </section>
 
       {/* Bottom CTA */}
-      <section className="py-24">
-        <div className="max-w-xl mx-auto px-6 text-center">
-          <h2 className="text-3xl font-bold text-slate-900 mb-4">Start treating your rental like a business</h2>
+      <section className="py-16 sm:py-24">
+        <div className="max-w-xl mx-auto px-4 sm:px-6 text-center">
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Start treating your rental like a business</h2>
           <p className="text-slate-500 mb-8">3 months free. No credit card. Full access from day one.</p>
           <Link href="/onboarding" className="inline-flex items-center gap-2 bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors">
             Get started free <ChevronRight className="w-4 h-4" />
@@ -237,7 +237,7 @@ export default function LandingPage() {
       </section>
 
       <footer className="border-t border-slate-100 py-8">
-        <div className="max-w-6xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-emerald-600" />
             <span className="font-semibold text-sm text-slate-700">HostIQ</span>
