@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Booking, Platform, Settings } from '@/types';
 import PlatformBadge from '@/components/PlatformBadge';
 import { format } from 'date-fns';
@@ -49,9 +49,13 @@ export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
+  const editStateRef = useRef(editState);
+  editStateRef.current = editState;
   const [showAdd, setShowAdd] = useState(false);
   const [newBooking, setNewBooking] = useState<NewBooking>(emptyNew());
   const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
+  const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const skipBlurRef = useRef(false);
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', {
@@ -71,18 +75,27 @@ export default function BookingsPage() {
     fetch('/api/settings').then(r => r.json()).then(setSettings);
   }, [filterYear]);
 
+  function scheduleEditSave(id: string) {
+    if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
+    saveTimerRef.current = setTimeout(() => saveEdit(id), 200);
+  }
+  function cancelEditSave() {
+    if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+  }
+
   async function saveEdit(id: string) {
-    if (!editState) return;
+    const current = editStateRef.current;
+    if (!current || current.id !== id) return;
     await fetch(`/api/bookings/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        checkIn: editState.checkIn,
-        income: parseFloat(editState.income) || 0,
-        guestName: editState.guestName || undefined,
-        email: editState.email || undefined,
-        phone: editState.phone || undefined,
-        notes: editState.notes || undefined,
+        checkIn: current.checkIn,
+        income: parseFloat(current.income) || 0,
+        guestName: current.guestName || undefined,
+        email: current.email || undefined,
+        phone: current.phone || undefined,
+        notes: current.notes || undefined,
       }),
     });
     setEditState(null);
@@ -301,7 +314,7 @@ export default function BookingsPage() {
               onClick={addBooking}
               className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700"
             >
-              <Check className="w-4 h-4" /> Save
+              <Check className="w-4 h-4" /> Add Booking
             </button>
             <button
               onClick={() => { setShowAdd(false); setNewBooking(emptyNew()); }}
@@ -351,6 +364,8 @@ export default function BookingsPage() {
                             type="text"
                             value={editState.guestName}
                             onChange={e => setEditState(s => s ? { ...s, guestName: e.target.value } : s)}
+                            onBlur={() => scheduleEditSave(b.id)}
+                            onFocus={cancelEditSave}
                             className="w-full border border-emerald-300 rounded px-2 py-1 text-sm"
                             placeholder="Guest name"
                           />
@@ -371,6 +386,8 @@ export default function BookingsPage() {
                             type="date"
                             value={editState.checkIn}
                             onChange={e => setEditState(s => s ? { ...s, checkIn: e.target.value } : s)}
+                            onBlur={() => scheduleEditSave(b.id)}
+                            onFocus={cancelEditSave}
                             className="border border-emerald-300 rounded px-2 py-1 text-sm"
                           />
                         ) : (
@@ -387,6 +404,8 @@ export default function BookingsPage() {
                             type="number"
                             value={editState.income}
                             onChange={e => setEditState(s => s ? { ...s, income: e.target.value } : s)}
+                            onBlur={() => scheduleEditSave(b.id)}
+                            onFocus={cancelEditSave}
                             className="w-24 text-right border border-emerald-300 rounded px-2 py-1 text-sm"
                             min="0"
                           />
@@ -403,32 +422,29 @@ export default function BookingsPage() {
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
                           {isEditing ? (
-                            <>
-                              <button
-                                onClick={() => saveEdit(b.id)}
-                                className="p-1.5 rounded hover:bg-emerald-50 text-emerald-600"
-                              >
-                                <Check className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => setEditState(null)}
-                                className="p-1.5 rounded hover:bg-slate-100 text-slate-400"
-                              >
-                                <X className="w-3.5 h-3.5" />
-                              </button>
-                            </>
+                            <button
+                              onMouseDown={e => e.preventDefault()}
+                              onClick={() => { cancelEditSave(); setEditState(null); }}
+                              className="p-1.5 rounded hover:bg-slate-100 text-slate-400"
+                              title="Discard changes"
+                            >
+                              <X className="w-3.5 h-3.5" />
+                            </button>
                           ) : (
                             <>
                               <button
-                                onClick={() => setEditState({
-                                  id: b.id,
-                                  checkIn: b.checkIn,
-                                  income: String(b.income),
-                                  guestName: b.guestName ?? b.bookerName ?? '',
-                                  email: b.email ?? '',
-                                  phone: b.phone ?? '',
-                                  notes: b.notes ?? '',
-                                })}
+                                onClick={() => {
+                                  cancelEditSave();
+                                  setEditState({
+                                    id: b.id,
+                                    checkIn: b.checkIn,
+                                    income: String(b.income),
+                                    guestName: b.guestName ?? b.bookerName ?? '',
+                                    email: b.email ?? '',
+                                    phone: b.phone ?? '',
+                                    notes: b.notes ?? '',
+                                  });
+                                }}
                                 className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"
                                 title="Edit booking"
                               >
@@ -457,6 +473,8 @@ export default function BookingsPage() {
                                 type="email"
                                 value={editState.email}
                                 onChange={e => setEditState(s => s ? { ...s, email: e.target.value } : s)}
+                                onBlur={() => scheduleEditSave(b.id)}
+                                onFocus={cancelEditSave}
                                 className="w-full text-sm border border-emerald-300 rounded px-2 py-1"
                                 placeholder="guest@example.com"
                               />
@@ -467,6 +485,8 @@ export default function BookingsPage() {
                                 type="tel"
                                 value={editState.phone}
                                 onChange={e => setEditState(s => s ? { ...s, phone: e.target.value } : s)}
+                                onBlur={() => scheduleEditSave(b.id)}
+                                onFocus={cancelEditSave}
                                 className="w-full text-sm border border-emerald-300 rounded px-2 py-1"
                                 placeholder="+1 555 000 0000"
                               />
@@ -477,6 +497,8 @@ export default function BookingsPage() {
                                 type="text"
                                 value={editState.notes}
                                 onChange={e => setEditState(s => s ? { ...s, notes: e.target.value } : s)}
+                                onBlur={() => scheduleEditSave(b.id)}
+                                onFocus={cancelEditSave}
                                 className="w-full text-sm border border-emerald-300 rounded px-2 py-1"
                                 placeholder="Optional notes"
                               />

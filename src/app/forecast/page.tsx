@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { ForecastYear, Settings, ForecastOverride } from '@/types';
 import { Pencil, Check, X, Plus, Trash2, TrendingUp } from 'lucide-react';
 import {
@@ -69,7 +69,14 @@ export default function ForecastPage() {
 
   const [configOpen, setConfigOpen] = useState(false);
   const [configDraft, setConfigDraft] = useState<Partial<Settings>>({});
-  const [savedConfig, setSavedConfig] = useState(false);
+
+  const rowSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const overrideDraftRef = useRef(overrideDraft);
+  overrideDraftRef.current = overrideDraft;
+  const editingYearRef = useRef(editingYear);
+  editingYearRef.current = editingYear;
+  const configDraftRef = useRef<Partial<Settings>>({});
+  configDraftRef.current = configDraft;
 
   const fmt = useCallback((n: number) =>
     new Intl.NumberFormat('en-US', {
@@ -91,7 +98,16 @@ export default function ForecastPage() {
 
   // ── Row override (pencil edit) ──────────────────────────────────────────────
 
+  function scheduleRowSave(year: number) {
+    if (rowSaveTimerRef.current) clearTimeout(rowSaveTimerRef.current);
+    rowSaveTimerRef.current = setTimeout(() => saveRowOverride(year), 200);
+  }
+  function cancelRowSave() {
+    if (rowSaveTimerRef.current) { clearTimeout(rowSaveTimerRef.current); rowSaveTimerRef.current = null; }
+  }
+
   function startEditRow(row: ForecastYear) {
+    cancelRowSave();
     setEditingYear(row.year);
     setOverrideDraft({
       revenue: row.isManualRevenue ? String(row.grossRevenue) : '',
@@ -101,15 +117,16 @@ export default function ForecastPage() {
   }
 
   async function saveRowOverride(year: number) {
-    if (!settings) return;
+    if (!settings || editingYearRef.current !== year) return;
+    const draft = overrideDraftRef.current;
     const existing = settings.forecastOverrides ?? {};
     const prev = existing[String(year)] ?? {};
     const entry: ForecastOverride = { ...prev };
-    if (overrideDraft.revenue !== '') entry.revenue = parseFloat(overrideDraft.revenue) || 0;
+    if (draft.revenue !== '') entry.revenue = parseFloat(draft.revenue) || 0;
     else delete entry.revenue;
-    if (overrideDraft.expenses !== '') entry.expenses = parseFloat(overrideDraft.expenses) || 0;
+    if (draft.expenses !== '') entry.expenses = parseFloat(draft.expenses) || 0;
     else delete entry.expenses;
-    if (overrideDraft.piti !== '') entry.piti = parseFloat(overrideDraft.piti) || 0;
+    if (draft.piti !== '') entry.piti = parseFloat(draft.piti) || 0;
     else delete entry.piti;
 
     const next: Settings = { ...settings, forecastOverrides: { ...existing, [String(year)]: entry } };
@@ -166,11 +183,18 @@ export default function ForecastPage() {
 
   async function saveConfig() {
     if (!settings) return;
-    const next: Settings = { ...settings, ...configDraft };
+    const next: Settings = { ...settings, ...configDraftRef.current };
     await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) });
     setSettings(next);
-    setSavedConfig(true);
-    setTimeout(() => setSavedConfig(false), 2000);
+    await load();
+  }
+
+  async function saveConfigWith(patch: Partial<Settings>) {
+    if (!settings) return;
+    const next: Settings = { ...settings, ...configDraftRef.current, ...patch };
+    setConfigDraft(d => ({ ...d, ...patch }));
+    await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(next) });
+    setSettings(next);
     await load();
   }
 
@@ -307,6 +331,8 @@ export default function ForecastPage() {
                 <input type="range" min="-50" max="100" step="1"
                   value={configDraft.forecastGrowthPct ?? 0}
                   onChange={e => setConfigDraft(d => ({ ...d, forecastGrowthPct: parseFloat(e.target.value) }))}
+                  onMouseUp={saveConfig}
+                  onTouchEnd={saveConfig}
                   className="flex-1" />
                 <span className={`text-sm font-semibold w-14 text-right ${
                   (configDraft.forecastGrowthPct ?? 0) > 0 ? 'text-emerald-600' :
@@ -323,6 +349,8 @@ export default function ForecastPage() {
                 <input type="range" min="0" max="50" step="1"
                   value={configDraft.vacancyRate ?? 0}
                   onChange={e => setConfigDraft(d => ({ ...d, vacancyRate: parseFloat(e.target.value) }))}
+                  onMouseUp={saveConfig}
+                  onTouchEnd={saveConfig}
                   className="flex-1" />
                 <span className="text-sm font-semibold w-14 text-right text-slate-600">{configDraft.vacancyRate ?? 0}%</span>
               </div>
@@ -357,11 +385,14 @@ export default function ForecastPage() {
                       next[e.target.value] = pct;
                       setConfigDraft(d => ({ ...d, forecastGrowthByYear: next }));
                     }}
+                    onBlur={saveConfig}
                     className="w-20 text-sm border border-slate-200 rounded-lg px-2 py-1.5" />
                   <input type="range" min="-50" max="100" step="1" value={pct}
                     onChange={e => setConfigDraft(d => ({
                       ...d, forecastGrowthByYear: { ...growthByYear, [yr]: parseFloat(e.target.value) },
                     }))}
+                    onMouseUp={saveConfig}
+                    onTouchEnd={saveConfig}
                     className="flex-1" />
                   <span className={`text-sm font-semibold w-14 text-right ${pct > 0 ? 'text-emerald-600' : pct < 0 ? 'text-red-500' : 'text-slate-600'}`}>
                     {pct > 0 ? '+' : ''}{pct}%
@@ -369,7 +400,7 @@ export default function ForecastPage() {
                   <button onClick={() => {
                     const next = { ...growthByYear };
                     delete next[yr];
-                    setConfigDraft(d => ({ ...d, forecastGrowthByYear: next }));
+                    saveConfigWith({ forecastGrowthByYear: next });
                   }} className="text-slate-400 hover:text-red-500">
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -387,6 +418,8 @@ export default function ForecastPage() {
                   <input type="range" min="0" max="15" step="0.5"
                     value={configDraft.propertyAppreciationPct ?? 0}
                     onChange={e => setConfigDraft(d => ({ ...d, propertyAppreciationPct: parseFloat(e.target.value) }))}
+                    onMouseUp={saveConfig}
+                    onTouchEnd={saveConfig}
                     className="flex-1" />
                   <span className={`text-sm font-semibold w-14 text-right ${
                     (configDraft.propertyAppreciationPct ?? 0) > 0 ? 'text-emerald-600' : 'text-slate-600'
@@ -413,11 +446,6 @@ export default function ForecastPage() {
             </div>
           </div>
 
-          <button onClick={saveConfig}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-5 py-2.5 rounded-lg text-sm hover:bg-emerald-700 transition-colors">
-            {savedConfig ? <Check className="w-4 h-4" /> : null}
-            {savedConfig ? 'Saved!' : 'Save Settings'}
-          </button>
         </div>
       )}
 
@@ -763,28 +791,29 @@ export default function ForecastPage() {
                     <td className="px-4 py-3 text-right text-slate-400 text-xs">—</td>
                     <td className="px-4 py-3">
                       <EditCell value={overrideDraft.revenue} placeholder={String(row.grossRevenue)}
-                        onChange={v => setOverrideDraft(d => ({ ...d, revenue: v }))} />
+                        onChange={v => setOverrideDraft(d => ({ ...d, revenue: v }))}
+                        onBlur={() => scheduleRowSave(row.year)} onFocus={cancelRowSave} />
                     </td>
                     <td className="px-4 py-3">
                       <EditCell value={overrideDraft.expenses} placeholder={String(row.operatingExpenses)}
-                        onChange={v => setOverrideDraft(d => ({ ...d, expenses: v }))} />
+                        onChange={v => setOverrideDraft(d => ({ ...d, expenses: v }))}
+                        onBlur={() => scheduleRowSave(row.year)} onFocus={cancelRowSave} />
                     </td>
                     <td className="px-4 py-3">
                       <EditCell value={overrideDraft.piti} placeholder={String(row.piti)}
-                        onChange={v => setOverrideDraft(d => ({ ...d, piti: v }))} />
+                        onChange={v => setOverrideDraft(d => ({ ...d, piti: v }))}
+                        onBlur={() => scheduleRowSave(row.year)} onFocus={cancelRowSave} />
                     </td>
                     <td className="px-4 py-3" />
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-1">
-                        <button onClick={() => saveRowOverride(row.year)}
-                          className="p-1.5 rounded bg-emerald-600 hover:bg-emerald-700 text-white">
-                          <Check className="w-3.5 h-3.5" />
-                        </button>
-                        <button onClick={() => setEditingYear(null)}
-                          className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600">
-                          <X className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      <button
+                        onMouseDown={e => e.preventDefault()}
+                        onClick={() => { cancelRowSave(); setEditingYear(null); }}
+                        className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"
+                        title="Discard changes"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
                     </td>
                   </tr>
                 );
@@ -969,11 +998,15 @@ export default function ForecastPage() {
   );
 }
 
-function EditCell({ value, placeholder, onChange }: { value: string; placeholder: string; onChange: (v: string) => void }) {
+function EditCell({ value, placeholder, onChange, onBlur, onFocus }: {
+  value: string; placeholder: string; onChange: (v: string) => void;
+  onBlur?: () => void; onFocus?: () => void;
+}) {
   return (
     <div className="flex flex-col items-end gap-0.5">
       <input type="number" value={value} placeholder={placeholder}
         onChange={e => onChange(e.target.value)}
+        onBlur={onBlur} onFocus={onFocus}
         className="w-32 text-sm border border-emerald-300 rounded-lg px-2 py-1 text-right" />
       <span className="text-[10px] text-slate-400">blank = auto</span>
     </div>

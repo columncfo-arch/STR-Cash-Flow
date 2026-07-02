@@ -1,9 +1,9 @@
 'use client';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Booking, Platform, Settings } from '@/types';
 import PlatformBadge from '@/components/PlatformBadge';
 import { format } from 'date-fns';
-import { Users, ChevronDown, ChevronRight, Pencil, Check, X, Search, Download } from 'lucide-react';
+import { Users, ChevronDown, ChevronRight, Pencil, X, Search, Download } from 'lucide-react';
 
 interface GuestRecord {
   key: string;
@@ -67,7 +67,10 @@ export default function GuestRosterPage() {
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editContact, setEditContact] = useState<ContactEditState | null>(null);
   const [search, setSearch] = useState('');
-  const [saving, setSaving] = useState(false);
+
+  const contactSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const editContactRef = useRef(editContact);
+  editContactRef.current = editContact;
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: settings?.currency ?? 'USD', maximumFractionDigits: 0 }).format(n);
@@ -103,19 +106,26 @@ export default function GuestRosterPage() {
     });
   }
 
+  function scheduleContactSave(guest: GuestRecord) {
+    if (contactSaveTimerRef.current) clearTimeout(contactSaveTimerRef.current);
+    contactSaveTimerRef.current = setTimeout(() => saveContact(guest), 200);
+  }
+  function cancelContactSave() {
+    if (contactSaveTimerRef.current) { clearTimeout(contactSaveTimerRef.current); contactSaveTimerRef.current = null; }
+  }
+
   async function saveContact(guest: GuestRecord) {
-    if (!editContact) return;
-    setSaving(true);
+    const current = editContactRef.current;
+    if (!current || current.key !== guest.key) return;
     await Promise.all(
       guest.bookings.map(b =>
         fetch(`/api/bookings/${b.id}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ email: editContact.email || undefined, phone: editContact.phone || undefined, notes: editContact.notes || undefined }),
+          body: JSON.stringify({ email: current.email || undefined, phone: current.phone || undefined, notes: current.notes || undefined }),
         })
       )
     );
-    setSaving(false);
     setEditContact(null);
     load();
   }
@@ -250,17 +260,17 @@ export default function GuestRosterPage() {
                     </td>
                     <td className="px-4 py-3 text-right" onClick={e => e.stopPropagation()}>
                       {isEditingContact ? (
-                        <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => saveContact(guest)} disabled={saving} className="p-1.5 rounded hover:bg-emerald-50 text-emerald-600 disabled:opacity-50">
-                            <Check className="w-3.5 h-3.5" />
-                          </button>
-                          <button onClick={() => setEditContact(null)} className="p-1.5 rounded hover:bg-slate-100 text-slate-400">
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
+                        <button
+                          onMouseDown={e => e.preventDefault()}
+                          onClick={() => { cancelContactSave(); setEditContact(null); }}
+                          className="p-1.5 rounded hover:bg-slate-100 text-slate-400"
+                          title="Discard changes"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
                       ) : (
                         <button
-                          onClick={() => { setEditContact({ key: guest.key, email: guest.email, phone: guest.phone, notes: guest.bookings[0]?.notes ?? '' }); if (!isOpen) toggleExpand(guest.key); }}
+                          onClick={() => { cancelContactSave(); setEditContact({ key: guest.key, email: guest.email, phone: guest.phone, notes: guest.bookings[0]?.notes ?? '' }); if (!isOpen) toggleExpand(guest.key); }}
                           className="p-1.5 rounded hover:bg-slate-100 text-slate-400 hover:text-slate-600"
                           title="Edit contact info"
                         >
@@ -277,15 +287,15 @@ export default function GuestRosterPage() {
                         <div className="grid grid-cols-3 gap-3">
                           <div>
                             <label className="text-xs text-slate-500 block mb-1">Email</label>
-                            <input type="email" value={editContact.email} onChange={e => setEditContact(s => s ? { ...s, email: e.target.value } : s)} className="w-full text-sm border border-emerald-300 rounded-lg px-3 py-1.5" placeholder="guest@example.com" autoFocus />
+                            <input type="email" value={editContact.email} onChange={e => setEditContact(s => s ? { ...s, email: e.target.value } : s)} onBlur={() => scheduleContactSave(guest)} onFocus={cancelContactSave} className="w-full text-sm border border-emerald-300 rounded-lg px-3 py-1.5" placeholder="guest@example.com" autoFocus />
                           </div>
                           <div>
                             <label className="text-xs text-slate-500 block mb-1">Phone</label>
-                            <input type="tel" value={editContact.phone} onChange={e => setEditContact(s => s ? { ...s, phone: e.target.value } : s)} className="w-full text-sm border border-emerald-300 rounded-lg px-3 py-1.5" placeholder="+1 555 000 0000" />
+                            <input type="tel" value={editContact.phone} onChange={e => setEditContact(s => s ? { ...s, phone: e.target.value } : s)} onBlur={() => scheduleContactSave(guest)} onFocus={cancelContactSave} className="w-full text-sm border border-emerald-300 rounded-lg px-3 py-1.5" placeholder="+1 555 000 0000" />
                           </div>
                           <div>
                             <label className="text-xs text-slate-500 block mb-1">Notes</label>
-                            <input type="text" value={editContact.notes} onChange={e => setEditContact(s => s ? { ...s, notes: e.target.value } : s)} className="w-full text-sm border border-emerald-300 rounded-lg px-3 py-1.5" placeholder="Any notes about this guest" />
+                            <input type="text" value={editContact.notes} onChange={e => setEditContact(s => s ? { ...s, notes: e.target.value } : s)} onBlur={() => scheduleContactSave(guest)} onFocus={cancelContactSave} className="w-full text-sm border border-emerald-300 rounded-lg px-3 py-1.5" placeholder="Any notes about this guest" />
                           </div>
                         </div>
                         <p className="text-xs text-slate-400 mt-2">Applied to all {guest.bookings.length} booking{guest.bookings.length !== 1 ? 's' : ''} for this guest.</p>

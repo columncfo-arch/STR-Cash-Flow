@@ -1,5 +1,5 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AnnualStatement, MonthlyStatement, Settings, Platform } from '@/types';
 import StatCard from '@/components/StatCard';
 import { TrendingUp, X, Pencil } from 'lucide-react';
@@ -181,6 +181,11 @@ export default function Dashboard() {
   const [occTargetInput, setOccTargetInput] = useState('');
   const [editingAdrTarget, setEditingAdrTarget] = useState(false);
   const [adrTargetInput, setAdrTargetInput] = useState('');
+
+  const seasonalityInputsRef = useRef(seasonalityInputs);
+  seasonalityInputsRef.current = seasonalityInputs;
+  const seasonalitySaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const now = new Date();
   const year = now.getFullYear();
   const currentMonthIdx = now.getMonth();
@@ -262,14 +267,21 @@ export default function Dashboard() {
 
   async function saveSeasonality() {
     if (!settings) return;
-    const values = seasonalityInputs.map(v => parseFloat(v.replace(/,/g, '')) || 0);
+    const values = seasonalityInputsRef.current.map(v => parseFloat(v.replace(/,/g, '')) || 0);
     const priorYear = String(year - 1);
     const overrides = { ...(settings.forecastOverrides ?? {}) };
     overrides[priorYear] = { ...(overrides[priorYear] ?? {}), monthlyRevenue: values };
     const updated = { ...settings, forecastOverrides: overrides };
     await fetch('/api/settings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updated) });
     setSettings(updated);
-    setEditingSeasonality(false);
+  }
+
+  function scheduleSeasonalitySave() {
+    if (seasonalitySaveTimerRef.current) clearTimeout(seasonalitySaveTimerRef.current);
+    seasonalitySaveTimerRef.current = setTimeout(saveSeasonality, 200);
+  }
+  function cancelSeasonalitySave() {
+    if (seasonalitySaveTimerRef.current) { clearTimeout(seasonalitySaveTimerRef.current); seasonalitySaveTimerRef.current = null; }
   }
 
   async function saveOccTarget() {
@@ -384,7 +396,7 @@ export default function Dashboard() {
                   <Pencil className="w-3.5 h-3.5" />
                 </button>
               ) : (
-                <button onClick={() => setEditingTarget(false)} className="text-slate-300 hover:text-slate-500">
+                <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingTarget(false)} className="text-slate-300 hover:text-slate-500">
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
@@ -398,14 +410,12 @@ export default function Dashboard() {
                     type="number"
                     value={targetInput}
                     onChange={e => setTargetInput(e.target.value)}
+                    onBlur={saveTarget}
                     onKeyDown={e => e.key === 'Enter' && saveTarget()}
                     className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5"
                     placeholder="68500"
                     autoFocus
                   />
-                  <button onClick={saveTarget} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-emerald-700">
-                    Save
-                  </button>
                 </div>
                 <p className="text-xs text-slate-400">Monthly targets will follow prior-year seasonal pattern.</p>
               </div>
@@ -477,7 +487,7 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Avg Occupancy</p>
                   {editingOccTarget ? (
-                    <button onClick={() => setEditingOccTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
+                    <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingOccTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
                   ) : (
                     <button onClick={() => { setOccTargetInput(String(targetOcc ?? '')); setEditingOccTarget(true); }} className="text-slate-300 hover:text-slate-500" title="Set occupancy target"><Pencil className="w-3.5 h-3.5" /></button>
                   )}
@@ -488,11 +498,11 @@ export default function Dashboard() {
                     <div className="flex items-center gap-2">
                       <input
                         type="number" value={occTargetInput} onChange={e => setOccTargetInput(e.target.value)}
+                        onBlur={saveOccTarget}
                         onKeyDown={e => e.key === 'Enter' && saveOccTarget()}
                         className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="75" autoFocus
                       />
                       <span className="text-sm text-slate-400">%</span>
-                      <button onClick={saveOccTarget} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-emerald-700">Save</button>
                     </div>
                   </div>
                 ) : (
@@ -526,7 +536,7 @@ export default function Dashboard() {
                 <div className="flex items-center justify-between mb-3">
                   <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Avg Daily Rate</p>
                   {editingAdrTarget ? (
-                    <button onClick={() => setEditingAdrTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
+                    <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingAdrTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
                   ) : (
                     <button onClick={() => { setAdrTargetInput(String(targetAdrVal ?? '')); setEditingAdrTarget(true); }} className="text-slate-300 hover:text-slate-500" title="Set ADR target"><Pencil className="w-3.5 h-3.5" /></button>
                   )}
@@ -538,10 +548,10 @@ export default function Dashboard() {
                       <span className="text-sm text-slate-400">$</span>
                       <input
                         type="number" value={adrTargetInput} onChange={e => setAdrTargetInput(e.target.value)}
+                        onBlur={saveAdrTarget}
                         onKeyDown={e => e.key === 'Enter' && saveAdrTarget()}
                         className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="225" autoFocus
                       />
-                      <button onClick={saveAdrTarget} className="bg-emerald-600 text-white px-3 py-1.5 rounded-lg text-sm hover:bg-emerald-700">Save</button>
                     </div>
                   </div>
                 ) : (
@@ -572,7 +582,7 @@ export default function Dashboard() {
         <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm mb-6">
           <div className="flex items-center justify-between mb-1">
             <p className="font-semibold text-slate-800">{year - 1} Monthly Revenue</p>
-            <button onClick={() => setEditingSeasonality(false)} className="text-slate-400 hover:text-slate-600">
+            <button onMouseDown={e => e.preventDefault()} onClick={() => { cancelSeasonalitySave(); setEditingSeasonality(false); }} className="text-slate-400 hover:text-slate-600">
               <X className="w-4 h-4" />
             </button>
           </div>
@@ -593,6 +603,8 @@ export default function Dashboard() {
                       next[i] = e.target.value;
                       setSeasonalityInputs(next);
                     }}
+                    onBlur={scheduleSeasonalitySave}
+                    onFocus={cancelSeasonalitySave}
                     className="flex-1 text-sm py-1.5 pr-2 outline-none min-w-0"
                     placeholder="0"
                   />
@@ -601,10 +613,7 @@ export default function Dashboard() {
             ))}
           </div>
           <div className="flex items-center gap-3">
-            <button onClick={saveSeasonality} className="bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700">
-              Save {year - 1} Actuals
-            </button>
-            <button onClick={() => setEditingSeasonality(false)} className="text-slate-500 text-sm hover:text-slate-700">Cancel</button>
+            <button onMouseDown={e => e.preventDefault()} onClick={() => { cancelSeasonalitySave(); setEditingSeasonality(false); }} className="text-slate-500 text-sm hover:text-slate-700">Close</button>
             <span className="text-xs text-slate-400 ml-auto">
               Total: {fmt(seasonalityInputs.reduce((s, v) => s + (parseFloat(v) || 0), 0))}
             </span>
