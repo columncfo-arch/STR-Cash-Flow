@@ -1,10 +1,10 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { AnnualStatement, MonthlyStatement, Platform, PnLSummary, Settings } from '@/types';
-import { format, getMonth, getYear } from 'date-fns';
-import { Download, ChevronDown, ChevronRight } from 'lucide-react';
+import { getMonth, getYear } from 'date-fns';
+import { Download } from 'lucide-react';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
+  ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine, Cell,
 } from 'recharts';
 
@@ -14,14 +14,8 @@ const MONTHS_LONG = [
 ];
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
-const PLATFORM_COLORS: Record<string, string> = {
-  airbnb: '#f43f5e',
-  booking: '#3b82f6',
-  vrbo: '#6366f1',
-  direct: '#10b981',
-  other: '#94a3b8',
-};
 const PLATFORMS = ['airbnb','booking','vrbo','direct','other'] as Platform[];
+const platformLabel = (p: string) => p === 'booking' ? 'Booking.com' : p.charAt(0).toUpperCase() + p.slice(1);
 
 type Mode = 'month' | 'ytd' | 'prior_year' | 'full_year';
 
@@ -88,8 +82,6 @@ export default function IncomeStatementPage() {
   const [selectedYear, setSelectedYear] = useState(new Date().getFullYear());
   const [selectedMonth, setSelectedMonth] = useState(new Date().getMonth() + 1);
   const [mode, setMode] = useState<Mode>('ytd');
-  const [expandedMonths, setExpandedMonths] = useState<Set<number>>(new Set());
-
   const today = new Date();
   const currentMonthIdx = getMonth(today);
   const currentYear = getYear(today);
@@ -119,14 +111,6 @@ export default function IncomeStatementPage() {
         setYears(available.sort((a, b) => b - a));
       });
   }, [fetchYear]);
-
-  function toggleMonth(m: number) {
-    setExpandedMonths(prev => {
-      const next = new Set(prev);
-      next.has(m) ? next.delete(m) : next.add(m);
-      return next;
-    });
-  }
 
   // Slice of months to display based on selected mode
   const activeMonthsSlice: MonthlyStatement[] = statement
@@ -183,6 +167,11 @@ export default function IncomeStatementPage() {
               <td colSpan={2} className="px-4 pt-3 pb-1 text-xs font-semibold text-slate-400 uppercase tracking-wide">Revenue</td>
             </tr>
             <Row label="Gross Revenue" value={pnl.grossRevenue} />
+            {PLATFORMS.filter(p => pnl.byPlatform[p].income > 0)
+              .sort((a, b) => pnl.byPlatform[b].income - pnl.byPlatform[a].income)
+              .map(p => (
+                <Row key={p} label={platformLabel(p)} value={pnl.byPlatform[p].income} indent />
+              ))}
             {hasFees && <Row label="Platform Fees" value={pnl.platformFees} indent negative />}
             {hasFastPayFees && <Row label="Fast Pay Fees" value={pnl.fastPayFees} indent negative />}
             {hasTaxRemitted && <Row label="Tax Remitted by Platform" value={pnl.taxRemitted} indent negative />}
@@ -242,120 +231,6 @@ export default function IncomeStatementPage() {
             <p className={`text-xl font-bold mt-1 ${c.accent ? (parseFloat(c.v.replace(/[^0-9.-]/g, '')) >= 0 ? 'text-emerald-700' : 'text-red-600') : 'text-slate-900'}`}>{c.v}</p>
           </div>
         ))}
-      </div>
-    );
-  }
-
-  function MonthTable({ months }: { months: MonthlyStatement[] }) {
-    return (
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mt-4">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-left">
-              <th className="px-4 py-3 font-medium w-8" />
-              <th className="px-4 py-3 font-medium">Month</th>
-              <th className="px-4 py-3 font-medium text-right">Bookings</th>
-              <th className="px-4 py-3 font-medium text-right">Nights</th>
-              <th className="px-4 py-3 font-medium text-right">Occ.</th>
-              <th className="px-4 py-3 font-medium text-right">Gross Rev.</th>
-              <th className="px-4 py-3 font-medium text-right">Net Rev.</th>
-              <th className="px-4 py-3 font-medium text-right">Op. Income</th>
-              <th className="px-4 py-3 font-medium text-right">Net Income</th>
-            </tr>
-          </thead>
-          <tbody>
-            {months.map((m) => {
-              const i = m.month - 1;
-              return (
-                <>
-                  <tr
-                    key={i}
-                    className={`border-b border-slate-50 ${m.bookings.length > 0 ? 'cursor-pointer hover:bg-slate-50' : ''}`}
-                    onClick={() => m.bookings.length > 0 && toggleMonth(i)}
-                  >
-                    <td className="px-4 py-3">
-                      {m.bookings.length > 0 && (expandedMonths.has(i)
-                        ? <ChevronDown className="w-4 h-4 text-slate-400" />
-                        : <ChevronRight className="w-4 h-4 text-slate-400" />)}
-                    </td>
-                    <td className="px-4 py-3 font-medium text-slate-800">{MONTHS_LONG[i]}</td>
-                    <td className="px-4 py-3 text-right text-slate-600">{m.bookings.length}</td>
-                    <td className="px-4 py-3 text-right text-slate-600">{m.totalNights}</td>
-                    <td className="px-4 py-3 text-right text-slate-500 text-xs">{m.occupancyRate.toFixed(0)}%</td>
-                    <td className="px-4 py-3 text-right text-slate-600">{m.grossRevenue > 0 ? fmt(m.grossRevenue) : '—'}</td>
-                    <td className="px-4 py-3 text-right text-slate-600">{m.netRevenue > 0 ? fmt(m.netRevenue) : '—'}</td>
-                    <td className="px-4 py-3 text-right text-slate-600">{m.grossRevenue > 0 ? fmt(m.operatingIncome) : '—'}</td>
-                    <td className={`px-4 py-3 text-right font-semibold ${m.grossRevenue > 0 ? (m.netIncome >= 0 ? 'text-emerald-700' : 'text-red-600') : 'text-slate-300'}`}>
-                      {m.grossRevenue > 0 ? fmt(m.netIncome) : '—'}
-                    </td>
-                  </tr>
-                  {expandedMonths.has(i) && m.bookings.map(b => (
-                    <tr key={b.id} className="bg-slate-50 border-b border-slate-100 text-xs">
-                      <td />
-                      <td className="px-4 py-2 pl-8 text-slate-500">{b.guestName ?? b.confirmationCode ?? 'Guest'}</td>
-                      <td className="px-4 py-2 text-right text-slate-400">1</td>
-                      <td className="px-4 py-2 text-right text-slate-400">{b.nights}</td>
-                      <td className="px-4 py-2 text-right text-slate-400">{format(new Date(b.checkIn), 'MMM d')} – {format(new Date(b.checkOut), 'MMM d')}</td>
-                      <td className="px-4 py-2 text-right text-slate-600">{b.income > 0 ? fmt(b.income) : '—'}</td>
-                      <td className="px-4 py-2 text-right text-slate-600">{b.income > 0 ? fmt(b.income - (b.platformFee ?? 0)) : '—'}</td>
-                      <td colSpan={2} />
-                    </tr>
-                  ))}
-                </>
-              );
-            })}
-          </tbody>
-          {months.length > 1 && (() => {
-            const s = sumMonths(months);
-            return (
-              <tfoot>
-                <tr className="bg-emerald-50 border-t-2 border-emerald-200 font-bold text-sm">
-                  <td className="px-4 py-4" />
-                  <td className="px-4 py-4 text-slate-800">Total</td>
-                  <td className="px-4 py-4 text-right text-slate-700">{months.reduce((n, m) => n + m.bookings.length, 0)}</td>
-                  <td className="px-4 py-4 text-right text-slate-700">{s.totalNights}</td>
-                  <td className="px-4 py-4 text-right text-slate-500">{s.avgOccupancy.toFixed(0)}%</td>
-                  <td className="px-4 py-4 text-right text-slate-700">{fmt(s.grossRevenue)}</td>
-                  <td className="px-4 py-4 text-right text-slate-700">{fmt(s.netRevenue)}</td>
-                  <td className="px-4 py-4 text-right text-slate-700">{fmt(s.operatingIncome)}</td>
-                  <td className={`px-4 py-4 text-right text-base ${s.netIncome >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>{fmt(s.netIncome)}</td>
-                </tr>
-              </tfoot>
-            );
-          })()}
-        </table>
-      </div>
-    );
-  }
-
-  function PlatformTable({ byPlatform, total }: { byPlatform: Record<Platform, { income: number; nights: number; bookings: number }>; total: number }) {
-    const rows = Object.entries(byPlatform).filter(([, v]) => v.income > 0).sort(([, a], [, b]) => b.income - a.income);
-    if (!rows.length) return null;
-    return (
-      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mt-4">
-        <h2 className="font-semibold text-slate-800 mb-4">Platform Breakdown</h2>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-left text-slate-500 border-b border-slate-100">
-              <th className="pb-2 font-medium">Platform</th>
-              <th className="pb-2 font-medium text-right">Bookings</th>
-              <th className="pb-2 font-medium text-right">Nights</th>
-              <th className="pb-2 font-medium text-right">Gross Revenue</th>
-              <th className="pb-2 font-medium text-right">% of Total</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map(([platform, data]) => (
-              <tr key={platform} className="border-b border-slate-50">
-                <td className="py-2 capitalize font-medium">{platform === 'booking' ? 'Booking.com' : platform}</td>
-                <td className="py-2 text-right text-slate-600">{data.bookings}</td>
-                <td className="py-2 text-right text-slate-600">{data.nights}</td>
-                <td className="py-2 text-right font-semibold text-slate-800">{fmt(data.income)}</td>
-                <td className="py-2 text-right text-slate-500">{total > 0 ? ((data.income / total) * 100).toFixed(1) : 0}%</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
       </div>
     );
   }
@@ -505,39 +380,6 @@ export default function IncomeStatementPage() {
 
       {activePnL && <KPICards pnl={activePnL} />}
       {activePnL && <PnLTable pnl={activePnL} label={activeLabel} months={pitiMonths} />}
-
-      {/* Monthly chart — shown for multi-month views */}
-      {activeMonthsSlice.length > 1 && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mt-4">
-          <h2 className="font-semibold text-slate-800 mb-4">Monthly Revenue &amp; Net Income</h2>
-          <ResponsiveContainer width="100%" height={220}>
-            <ComposedChart data={activeMonthsSlice.map(m => ({
-              name: MONTHS_SHORT[m.month - 1],
-              Airbnb: m.byPlatform.airbnb.income,
-              'Booking.com': m.byPlatform.booking.income,
-              VRBO: m.byPlatform.vrbo.income,
-              Direct: m.byPlatform.direct.income,
-              Other: m.byPlatform.other.income,
-              'Net Income': m.netIncome,
-            }))}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis yAxisId="left" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-              <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-              <Tooltip formatter={(v) => fmt(Number(v))} />
-              <Legend />
-              <ReferenceLine yAxisId="right" y={0} stroke="#e2e8f0" />
-              {(['Airbnb','Booking.com','VRBO','Direct','Other'] as const).map(p => (
-                <Bar key={p} yAxisId="left" dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com','')]} />
-              ))}
-              <Line yAxisId="right" type="monotone" dataKey="Net Income" stroke="#f97316" strokeWidth={3} dot={{ r: 4, fill: '#f97316', strokeWidth: 0 }} connectNulls />
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      <MonthTable months={activeMonthsSlice} />
-      {activePnL && <PlatformTable byPlatform={activePnL.byPlatform} total={activePnL.grossRevenue} />}
     </div>
   );
 }
