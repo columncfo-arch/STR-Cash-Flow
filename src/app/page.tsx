@@ -374,7 +374,7 @@ export default function Dashboard() {
           {/* This Year + This Month — only when target is configured */}
           {hasTarget && annualForecast != null && <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">This Year — On Track?</p>
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">This Year Target</p>
               {!editingTarget ? (
                 <button
                   onClick={() => { setTargetInput(String(manualTarget ?? Math.round(annualForecast))); setEditingTarget(true); }}
@@ -432,37 +432,41 @@ export default function Dashboard() {
           </div>}
 
           {/* This Month */}
-          {hasTarget && annualForecast != null && monthlyForecasts[currentMonthIdx] != null && (
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">{MONTHS_LONG[currentMonthIdx]} — Monthly Target</p>
-                <button
-                  onClick={openSeasonalityEditor}
-                  className="text-slate-300 hover:text-slate-500 transition-colors"
-                  title={`Edit ${year - 1} monthly actuals for seasonal distribution`}
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
+          {hasTarget && annualForecast != null && monthlyForecasts[currentMonthIdx] != null && (() => {
+            const monthlyActual = statement?.months[currentMonthIdx].grossRevenue ?? 0;
+            const monthlyTarget = monthlyForecasts[currentMonthIdx]!;
+            const monthlyVariance = monthlyActual - monthlyTarget;
+            const monthlyVariancePct = monthlyTarget > 0 ? (monthlyVariance / monthlyTarget) * 100 : null;
+            return (
+              <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
+                <div className="flex items-center justify-between mb-3">
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">{MONTHS_LONG[currentMonthIdx]} — Monthly Target</p>
+                  <button
+                    onClick={openSeasonalityEditor}
+                    className="text-slate-300 hover:text-slate-500 transition-colors"
+                    title={`Edit ${year - 1} monthly actuals for seasonal distribution`}
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+                <div className="flex items-baseline gap-2 mb-2">
+                  <span className="text-2xl font-bold text-slate-900">{fmt(monthlyActual)}</span>
+                  <span className="text-sm text-slate-400">of {fmt(monthlyTarget)} target</span>
+                </div>
+                <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2.5 py-1 rounded-lg ${monthlyVariance >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                  {monthlyVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(monthlyVariance))}
+                  {monthlyVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(monthlyVariancePct).toFixed(1)}%) {monthlyVariance >= 0 ? 'ahead' : 'behind'}</span>}
+                </span>
+                <div className="mt-3">
+                  <p className="text-xs text-slate-400">
+                    Full-month target {fmt(monthlyTarget)}
+                    {useSeasonality && <span className="ml-1 text-emerald-600">· seasonal</span>}
+                    {!useSeasonality && <span className="ml-1">· flat (<button onClick={openSeasonalityEditor} className="underline hover:text-slate-600">add {year - 1} data</button>)</span>}
+                  </p>
+                </div>
               </div>
-              <div className="flex items-baseline gap-2 mb-3">
-                <span className="text-2xl font-bold text-slate-900">{fmt(statement?.months[currentMonthIdx].grossRevenue ?? 0)}</span>
-                <span className="text-sm text-slate-400">of {fmt(monthlyForecasts[currentMonthIdx]!)} target</span>
-              </div>
-              <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-emerald-500 rounded-full"
-                  style={{ width: `${Math.min(100, ((statement?.months[currentMonthIdx].grossRevenue ?? 0) / monthlyForecasts[currentMonthIdx]!) * 100)}%` }}
-                />
-              </div>
-              <p className="text-xs text-slate-400 mt-1.5">
-                {(((statement?.months[currentMonthIdx].grossRevenue ?? 0) / monthlyForecasts[currentMonthIdx]!) * 100).toFixed(0)}% of monthly target
-                {useSeasonality && <span className="ml-1 text-emerald-600">· seasonal</span>}
-                {!useSeasonality && <span className="ml-1">· flat (
-                  <button onClick={openSeasonalityEditor} className="underline hover:text-slate-600">add {year - 1} data</button>
-                  )</span>}
-              </p>
-            </div>
-          )}
+            );
+          })()}
 
           {/* Avg Occupancy */}
           {hasData && (() => {
