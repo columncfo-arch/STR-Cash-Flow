@@ -84,7 +84,7 @@ export default function LandingPage() {
           3-month free trial · No credit card required
         </div>
         <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 leading-tight mb-4 sm:mb-5 max-w-3xl mx-auto">
-          Your Airbnb payout isn't your profit. See — and grow — your real STR cash flow.
+          Start treating your rental like a business.
         </h1>
         <p className="text-base sm:text-lg text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
           Platform fees, mortgage, ADR, occupancy rate, expenses — they all eat your payout. HostIQ shows your actual net cash flow, forecasts where you're heading, and tells you what to fix.
@@ -228,7 +228,7 @@ export default function LandingPage() {
       {/* Bottom CTA */}
       <section className="py-16 sm:py-24">
         <div className="max-w-xl mx-auto px-4 sm:px-6 text-center">
-          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Start treating your rental like a business</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Ready to see your real numbers?</h2>
           <p className="text-slate-500 mb-8">3 months free. No credit card. Full access from day one.</p>
           <Link href="/onboarding" className="inline-flex items-center gap-2 bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors">
             Get started free <ChevronRight className="w-4 h-4" />
