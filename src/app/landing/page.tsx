@@ -87,7 +87,7 @@ export default function LandingPage() {
           Know exactly what your rental makes. After everything.
         </h1>
         <p className="text-base sm:text-lg text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
-          HostIQ is the financial command center for short-term rental operators — real P&L, revenue forecasting, and direct booking in one place.
+          HostIQ is the financial intelligence layer for short-term rental operators — real P&L, revenue forecasting, and optimization — so you can hold your PM, or yourself, accountable.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
           <Link href="/onboarding" className="w-full sm:w-auto bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
