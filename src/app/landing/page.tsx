@@ -6,16 +6,16 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
 const FEATURES = [
   {
-    icon: BarChart3,
-    title: 'Your Airbnb payout isn\'t your profit.',
-    description: 'See net income after platform fees, operating expenses, and your mortgage payment. The number that actually matters.',
+    icon: TrendingUp,
+    title: 'AirDNA tells you the market average. We map out your unique plan.',
+    description: "Most owners never set a target — they lean on generic AirDNA projections and find out they're behind only when the season's already over. HostCFO tracks your true historical performance, builds your plan against it, and shows you the specific levers — rate, occupancy, length of stay — to close the gap before it becomes one.",
     iconColor: 'text-emerald-600',
     iconBg: 'bg-emerald-50',
   },
   {
-    icon: TrendingUp,
-    title: 'AirDNA tells you the market average. We map out your unique plan.',
-    description: "Most owners never set a target — they lean on generic AirDNA projections and find out they're behind only when the season's already over. HostCFO tracks your true historical performance, builds your plan against it, and shows you the specific levers — rate, occupancy, length of stay — to close the gap before it becomes one.",
+    icon: BarChart3,
+    title: 'Your Airbnb payout isn\'t your profit.',
+    description: 'See net income after platform fees, operating expenses, and your mortgage payment. The number that actually matters.',
     iconColor: 'text-blue-600',
     iconBg: 'bg-blue-50',
   },
