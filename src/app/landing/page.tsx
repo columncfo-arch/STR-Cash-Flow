@@ -14,8 +14,8 @@ const FEATURES = [
   },
   {
     icon: BarChart3,
-    title: 'Your Airbnb payout isn\'t your profit.',
-    description: 'See net income after platform fees, operating expenses, and your mortgage payment. The number that actually matters.',
+    title: 'Know when you\'re behind — and get back on track.',
+    description: "Set annual targets and track monthly pacing against seasonal forecasts. Know if you're on track before it's too late.",
     iconColor: 'text-blue-600',
     iconBg: 'bg-blue-50',
   },
