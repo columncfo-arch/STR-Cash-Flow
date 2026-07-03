@@ -120,7 +120,7 @@ export default function OnboardingPage() {
           {step === 0 && (
             <>
               <h1 className="text-2xl font-bold text-slate-900 mb-1">Welcome to HostCFO</h1>
-              <p className="text-slate-500 text-sm mb-8">Your 3-month free trial starts today. No credit card needed.</p>
+              <p className="text-slate-500 text-sm mb-8">Your 14-day free trial starts today. No credit card needed.</p>
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium text-slate-700 block mb-1.5">Your name</label>
@@ -146,7 +146,7 @@ export default function OnboardingPage() {
                 </div>
               </div>
               <div className="mt-6 p-4 bg-emerald-50 rounded-xl border border-emerald-100">
-                <p className="text-sm font-semibold text-emerald-800">3 months free, then $19–79/mo</p>
+                <p className="text-sm font-semibold text-emerald-800">14 days free, then $19–79/mo</p>
                 <p className="text-xs text-emerald-600 mt-0.5">Cancel anytime. Pricing based on number of properties.</p>
               </div>
             </>

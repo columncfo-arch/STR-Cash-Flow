@@ -21,8 +21,8 @@ const FEATURES = [
   },
   {
     icon: Users,
-    title: 'Build customer loyalty',
-    description: 'Own your guest relationships. Build a repeat-guest list, send direct booking links, and reduce your dependence on platform fees over time.',
+    title: 'Your guest list is an asset',
+    description: 'After checkout, your guest base is worth nothing — it lives on Airbnb\'s servers. HostCFO helps you build a direct relationship list, so repeat guests book with you, not through a platform taking 15%.',
     iconColor: 'text-violet-600',
     iconBg: 'bg-violet-50',
   },
@@ -83,7 +83,7 @@ export default function LandingPage() {
       {/* Hero */}
       <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 sm:pt-20 pb-12 sm:pb-20 text-center">
         <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-6 sm:mb-8">
-          3-month free trial · No credit card required
+          14-day free trial · No credit card required
         </div>
         <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 leading-tight mb-4 sm:mb-5 max-w-3xl mx-auto">
           Start treating your rental like a business.
@@ -191,7 +191,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-4">
             <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Simple pricing</h2>
-            <p className="text-slate-500 text-base sm:text-lg">3 months free, then pay by property count. No feature gating.</p>
+            <p className="text-slate-500 text-base sm:text-lg">14 days free, then pay by property count. No feature gating.</p>
           </div>
           <p className="text-center text-sm text-emerald-600 font-medium mb-8 sm:mb-12">Save 20% with annual billing</p>
           <div className="grid sm:grid-cols-3 gap-4 sm:gap-6 max-w-4xl mx-auto">
@@ -223,7 +223,7 @@ export default function LandingPage() {
               </div>
             ))}
           </div>
-          <p className="text-center text-xs text-slate-400 mt-8">All plans include a 3-month free trial · Cancel anytime · No credit card required</p>
+          <p className="text-center text-xs text-slate-400 mt-8">All plans include a 14-day free trial · Cancel anytime · No credit card required</p>
         </div>
       </section>
 
@@ -231,7 +231,7 @@ export default function LandingPage() {
       <section className="py-16 sm:py-24">
         <div className="max-w-xl mx-auto px-4 sm:px-6 text-center">
           <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Ready to see your real numbers?</h2>
-          <p className="text-slate-500 mb-8">3 months free. No credit card. Full access from day one.</p>
+          <p className="text-slate-500 mb-8">14 days free. No credit card. Full access from day one.</p>
           <Link href={`${APP_URL}/onboarding`} className="inline-flex items-center gap-2 bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors">
             Get started free <ChevronRight className="w-4 h-4" />
           </Link>
