@@ -14,8 +14,8 @@ const FEATURES = [
   },
   {
     icon: TrendingUp,
-    title: 'Know when you\'re behind — and get back on track.',
-    description: "Set annual targets and track monthly pacing against seasonal forecasts. Know if you're on track before it's too late.",
+    title: 'AirDNA tells you the market average. We map out your unique plan.',
+    description: "Most owners never set a target — they lean on generic AirDNA projections and find out they're behind only when the season's already over. HostCFO tracks your true historical performance, builds your plan against it, and shows you the specific levers — rate, occupancy, length of stay — to close the gap before it becomes one.",
     iconColor: 'text-blue-600',
     iconBg: 'bg-blue-50',
   },
