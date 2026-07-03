@@ -150,7 +150,7 @@ export default function LandingPage() {
       <section className="bg-slate-50 py-16 sm:py-24">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-10 sm:mb-16">
-            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Everything your rental investment needs</h2>
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">The financial layer your STR is missing</h2>
             <p className="text-slate-500 text-base sm:text-lg max-w-lg mx-auto">Built for operators who treat their rental like a business, not a side project.</p>
           </div>
           <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
