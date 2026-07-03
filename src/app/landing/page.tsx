@@ -154,8 +154,8 @@ export default function LandingPage() {
             <p className="text-slate-500 text-base sm:text-lg max-w-lg mx-auto">Built for operators who treat their rental like a business, not a side project.</p>
           </div>
           <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-            {FEATURES.map(f => (
-              <div key={f.title} className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
+            {FEATURES.map((f, i) => (
+              <div key={i} className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
                 <div className={`w-12 h-12 ${f.iconBg} rounded-xl flex items-center justify-center mb-6`}>
                   <f.icon className={`w-6 h-6 ${f.iconColor}`} />
                 </div>

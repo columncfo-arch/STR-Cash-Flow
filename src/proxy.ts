@@ -4,7 +4,7 @@ const MARKETING_HOSTS = ['hostcfo.com', 'www.hostcfo.com'];
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 const MARKETING_URL = process.env.NEXT_PUBLIC_MARKETING_URL ?? '';
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const host = request.headers.get('host') ?? '';
   const { pathname } = request.nextUrl;
 
