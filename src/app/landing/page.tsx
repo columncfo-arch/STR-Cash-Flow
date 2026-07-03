@@ -7,22 +7,22 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 const FEATURES = [
   {
     icon: BarChart3,
-    title: 'Real P&L, not just earnings',
+    title: 'Your Airbnb payout isn\'t your profit.',
     description: 'See net income after platform fees, operating expenses, and your mortgage payment. The number that actually matters.',
     iconColor: 'text-emerald-600',
     iconBg: 'bg-emerald-50',
   },
   {
     icon: TrendingUp,
-    title: 'Revenue forecasting',
+    title: 'Know when you\'re behind — and get back on track.',
     description: "Set annual targets and track monthly pacing against seasonal forecasts. Know if you're on track before it's too late.",
     iconColor: 'text-blue-600',
     iconBg: 'bg-blue-50',
   },
   {
     icon: Users,
-    title: 'Your guest list is an asset',
-    description: 'After checkout, your guest base is worth nothing — it lives on Airbnb\'s servers. HostCFO helps you build a direct relationship list, so repeat guests book with you, not through a platform taking 15%.',
+    title: 'Higher rates lose bookings. Repeat guests win them back.',
+    description: 'Airbnb limits how you can contact past guests, so most hosts lose the relationship the moment checkout ends. HostCFO gives you a direct guest list, so next season\'s booking doesn\'t start from zero.',
     iconColor: 'text-violet-600',
     iconBg: 'bg-violet-50',
   },
