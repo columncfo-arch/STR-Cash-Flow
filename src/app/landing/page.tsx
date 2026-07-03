@@ -4,7 +4,7 @@ import { BookOpen, TrendingUp, Users, BarChart3, ChevronRight, Check } from 'luc
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
-const FEATURES = [
+const FEATURES: { icon: React.ComponentType<{ className?: string }>; title: React.ReactNode; description: string; iconColor: string; iconBg: string }[] = [
   {
     icon: TrendingUp,
     title: 'AirDNA tells you the market average. We map out your unique plan.',
@@ -21,7 +21,7 @@ const FEATURES = [
   },
   {
     icon: Users,
-    title: 'Higher rates lose bookings. Guest List helps you win them back.',
+    title: <>Higher rates lose bookings. <strong>Guest List</strong> helps you win them back.</>,
     description: 'Airbnb limits how you can contact past guests, so most hosts lose the relationship the moment checkout ends. HostCFO gives you a direct guest list, so next season\'s booking doesn\'t start from zero.',
     iconColor: 'text-violet-600',
     iconBg: 'bg-violet-50',
