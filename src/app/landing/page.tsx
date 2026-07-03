@@ -15,7 +15,7 @@ const FEATURES: { icon: React.ComponentType<{ className?: string }>; title: Reac
   {
     icon: BarChart3,
     title: 'Know when you\'re behind — and get back on track.',
-    description: "Set annual targets and track monthly pacing against seasonal forecasts. Know if you're on track before it's too late.",
+    description: "HostCFO tracks your income and expenses automatically, compares them to your plan every month, and tells you exactly what to fix — a rate that's too low, a cost that's crept up — while there's still time to act.",
     iconColor: 'text-blue-600',
     iconBg: 'bg-blue-50',
   },
