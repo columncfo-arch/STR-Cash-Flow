@@ -70,6 +70,14 @@ export default function OnboardingPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(updated),
       });
+
+      // Fire-and-forget — don't block the redirect if this fails
+      fetch('/api/notify-signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: name.trim(), email: email.trim(), propertyName: propertyName.trim() }),
+      }).catch(() => {});
+
       router.push('/');
     } finally {
       setSaving(false);
