@@ -209,7 +209,9 @@ export default function GuestRosterPage() {
               <th className="px-4 py-3 font-medium text-right">Stays</th>
               <th className="px-4 py-3 font-medium text-right">Nights</th>
               <th className="px-4 py-3 font-medium text-right">Total Revenue</th>
-              <th className="px-4 py-3 font-medium text-right">Last Stay</th>
+              <th className="px-4 py-3 font-medium text-right">
+                <span className="inline-flex items-center gap-1 justify-end">Last Stay <ChevronDown className="w-3.5 h-3.5 text-emerald-500" /></span>
+              </th>
               <th className="px-4 py-3 font-medium w-16" />
             </tr>
           </thead>
