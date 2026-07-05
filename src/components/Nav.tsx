@@ -1,7 +1,8 @@
 'use client';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, Upload, TrendingUp, Target, Users, Zap, Wifi } from 'lucide-react';
+import { useState } from 'react';
+import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, Upload, TrendingUp, Target, Users, Zap, Wifi, Menu, X } from 'lucide-react';
 
 type SubLink = { href: string; label: string; icon: React.ComponentType<{ className?: string }> };
 type NavLink = { href: string; label: string; icon: React.ComponentType<{ className?: string }>; children?: SubLink[] };
@@ -35,15 +36,20 @@ const links: NavLink[] = [
 
 export default function Nav() {
   const pathname = usePathname();
-  return (
-    <nav className="bg-slate-900 text-white h-screen w-56 flex flex-col fixed left-0 top-0">
-      <div className="px-4 py-5 border-b border-slate-700">
+  const [open, setOpen] = useState(false);
+
+  const navContent = (
+    <>
+      <div className="px-4 py-5 border-b border-slate-700 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <BookOpen className="w-5 h-5 text-emerald-400" />
           <span className="font-semibold text-sm leading-tight">HostCFO</span>
         </div>
+        <button onClick={() => setOpen(false)} className="md:hidden text-slate-400 hover:text-white">
+          <X className="w-5 h-5" />
+        </button>
       </div>
-      <ul className="flex-1 py-4 space-y-1 px-2">
+      <ul className="flex-1 py-4 space-y-1 px-2 overflow-y-auto">
         {links.map(({ href, label, icon: Icon, children }) => {
           const active = pathname === href;
           const inGroup = children?.some(c => pathname === c.href) ?? false;
@@ -51,6 +57,7 @@ export default function Nav() {
             <li key={href}>
               <Link
                 href={href}
+                onClick={() => setOpen(false)}
                 className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-colors ${
                   active
                     ? 'bg-emerald-600 text-white'
@@ -70,6 +77,7 @@ export default function Nav() {
                       <li key={ch}>
                         <Link
                           href={ch}
+                          onClick={() => setOpen(false)}
                           className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs transition-colors ${
                             childActive
                               ? 'bg-emerald-600 text-white'
@@ -91,6 +99,36 @@ export default function Nav() {
       <div className="px-4 py-3 border-t border-slate-700 text-xs text-slate-500">
         HostCFO
       </div>
-    </nav>
+    </>
+  );
+
+  return (
+    <>
+      {/* Mobile hamburger bar */}
+      <div className="md:hidden fixed top-0 left-0 right-0 z-40 bg-slate-900 text-white flex items-center gap-3 px-4 py-3 border-b border-slate-700">
+        <button onClick={() => setOpen(true)} className="text-slate-300 hover:text-white">
+          <Menu className="w-5 h-5" />
+        </button>
+        <div className="flex items-center gap-2">
+          <BookOpen className="w-4 h-4 text-emerald-400" />
+          <span className="font-semibold text-sm">HostCFO</span>
+        </div>
+      </div>
+
+      {/* Mobile overlay */}
+      {open && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <div className="bg-slate-900 text-white w-56 flex flex-col h-full">
+            {navContent}
+          </div>
+          <div className="flex-1 bg-black/50" onClick={() => setOpen(false)} />
+        </div>
+      )}
+
+      {/* Desktop sidebar */}
+      <nav className="hidden md:flex bg-slate-900 text-white h-screen w-56 flex-col fixed left-0 top-0">
+        {navContent}
+      </nav>
+    </>
   );
 }
