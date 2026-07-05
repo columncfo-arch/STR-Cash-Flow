@@ -1,9 +1,10 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
+import Link from 'next/link';
 import { Booking, Platform, Settings } from '@/types';
 import PlatformBadge from '@/components/PlatformBadge';
 import { format } from 'date-fns';
-import { Users, ChevronDown, ChevronRight, Pencil, X, Search, Download } from 'lucide-react';
+import { Users, ChevronDown, ChevronRight, Pencil, X, Search, Download, ExternalLink } from 'lucide-react';
 
 interface GuestRecord {
   key: string;
@@ -238,7 +239,23 @@ export default function GuestRosterPage() {
                       {isOpen ? <ChevronDown className="w-4 h-4 text-slate-400" /> : <ChevronRight className="w-4 h-4 text-slate-400" />}
                     </td>
                     <td className="px-4 py-3">
-                      <div className="font-medium text-slate-800">{guest.name}</div>
+                      <div className="flex items-center gap-1.5">
+                        <Link
+                          href={`/guest-list/guests/${encodeURIComponent(guest.key)}`}
+                          onClick={e => e.stopPropagation()}
+                          className="font-medium text-slate-800 hover:text-emerald-600 transition-colors"
+                        >
+                          {guest.name}
+                        </Link>
+                        <Link
+                          href={`/guest-list/guests/${encodeURIComponent(guest.key)}`}
+                          onClick={e => e.stopPropagation()}
+                          className="text-slate-300 hover:text-emerald-500 transition-colors"
+                          title="Open detail page"
+                        >
+                          <ExternalLink className="w-3 h-3" />
+                        </Link>
+                      </div>
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         {guest.platforms.map(p => <PlatformBadge key={p} platform={p} />)}
                         {isRepeat && <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-medium">Repeat</span>}
