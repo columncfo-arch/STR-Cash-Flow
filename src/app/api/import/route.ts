@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loadBookings, replaceAllBookings } from '@/lib/storage';
+import { requireAuth, unauthorized } from '@/lib/auth';
 import { Booking, Platform } from '@/types';
 import * as XLSX from 'xlsx';
 
@@ -474,6 +475,7 @@ async function parseExcelToRows(file: File): Promise<[Record<string, string>[], 
 
 export async function POST(req: Request) {
   try {
+    const userId = await requireAuth();
     const contentType = req.headers.get('content-type') ?? '';
 
     // ── Preview: accepts multipart/form-data with the raw file ──
@@ -532,7 +534,7 @@ export async function POST(req: Request) {
       const { platform, rows = [] } = body;
       if (!rows.length) return NextResponse.json({ error: 'No rows to import' }, { status: 400 });
 
-      const existing = await loadBookings();
+      const existing = await loadBookings(userId);
       const now = new Date().toISOString();
       let created = 0;
       let updated = 0;
@@ -617,12 +619,13 @@ export async function POST(req: Request) {
         }
       }
 
-      await replaceAllBookings(existing);
+      await replaceAllBookings(userId, existing);
       return NextResponse.json({ created, updated });
     }
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (err) {
+    if (err instanceof Error && err.message === 'Unauthorized') return unauthorized();
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Import failed' }, { status: 500 });
   }
 }

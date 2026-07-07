@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server';
 import { loadExpenses, addExpense } from '@/lib/storage';
+import { requireAuth, unauthorized } from '@/lib/auth';
 import { Expense } from '@/types';
 
 export async function GET(req: Request) {
   try {
+    const userId = await requireAuth();
     const { searchParams } = new URL(req.url);
     const year = searchParams.get('year');
     const month = searchParams.get('month');
 
-    let expenses = await loadExpenses();
+    let expenses = await loadExpenses(userId);
 
-    if (year && year !== 'all') {
-      expenses = expenses.filter(e => e.date.startsWith(year));
-    }
+    if (year && year !== 'all') expenses = expenses.filter(e => e.date.startsWith(year));
     if (year && month) {
       const prefix = `${year}-${month.padStart(2, '0')}`;
       expenses = expenses.filter(e => e.date.startsWith(prefix));
@@ -21,12 +21,13 @@ export async function GET(req: Request) {
     expenses.sort((a, b) => a.date.localeCompare(b.date));
     return NextResponse.json(expenses);
   } catch {
-    return NextResponse.json({ error: 'Failed to load expenses' }, { status: 500 });
+    return unauthorized();
   }
 }
 
 export async function POST(req: Request) {
   try {
+    const userId = await requireAuth();
     const body: Expense = await req.json();
     const now = new Date().toISOString();
     const expense: Expense = {
@@ -36,10 +37,9 @@ export async function POST(req: Request) {
       updatedAt: now,
     };
 
-    await addExpense(expense);
-
+    await addExpense(userId, expense);
     return NextResponse.json(expense, { status: 201 });
   } catch {
-    return NextResponse.json({ error: 'Failed to create expense' }, { status: 500 });
+    return unauthorized();
   }
 }

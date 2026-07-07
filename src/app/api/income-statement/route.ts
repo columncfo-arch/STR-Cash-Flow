@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loadBookings, loadExpenses, loadSettings } from '@/lib/storage';
+import { requireAuth, unauthorized } from '@/lib/auth';
 import { AnnualStatement, Booking, Expense, ExpenseCategory, MonthlyStatement, Platform, PnLSummary } from '@/types';
 import { getYear, getDaysInMonth } from 'date-fns';
 
@@ -133,13 +134,14 @@ function buildMonthly(
 
 export async function GET(req: Request) {
   try {
+    const userId = await requireAuth();
     const { searchParams } = new URL(req.url);
     const year = parseInt(searchParams.get('year') ?? String(new Date().getFullYear()));
 
     const [allBookings, allExpenses, settings] = await Promise.all([
-      loadBookings(),
-      loadExpenses(),
-      loadSettings(),
+      loadBookings(userId),
+      loadExpenses(userId),
+      loadSettings(userId),
     ]);
 
     const cleaningCostPerBooking = settings.cleaningFeePerBooking ?? 0;
@@ -179,7 +181,8 @@ export async function GET(req: Request) {
 
     const years = [...new Set(allBookings.map(b => getYear(new Date(b.checkIn))))].sort();
     return NextResponse.json({ statement, years });
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && e.message === 'Unauthorized') return unauthorized();
     return NextResponse.json({ error: 'Failed to build income statement' }, { status: 500 });
   }
 }

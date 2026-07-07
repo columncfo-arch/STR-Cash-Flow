@@ -3,10 +3,14 @@ import path from 'path';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 
-const REDIS_SETTINGS_KEY = 'str:settings';
-const REDIS_BOOKINGS_KEY = 'str:bookings';
-const REDIS_EXPENSES_KEY = 'str:expenses';
-const REDIS_LEADS_KEY = 'str:leads';
+// ─── Per-user key factories ────────────────────────────────────────────────────
+
+const K = (userId: string) => ({
+  settings: `str:settings:${userId}`,
+  bookings: `str:bookings:${userId}`,
+  expenses: `str:expenses:${userId}`,
+  leads:    `str:leads:${userId}`,
+});
 
 const DEFAULT_SETTINGS: Settings = {
   currency: 'USD',
@@ -30,7 +34,7 @@ const DEFAULT_SETTINGS: Settings = {
   loanStructure: undefined,
 };
 
-// ─── In-process write lock (serializes read-modify-write on the file backend) ──
+// ─── In-process write lock ─────────────────────────────────────────────────────
 
 const locks = new Map<string, Promise<unknown>>();
 
@@ -65,14 +69,8 @@ async function redisSet(key: string, value: unknown): Promise<void> {
   await client.set(key, JSON.stringify(value));
 }
 
-// Hash-backed collections: each record lives in its own field, keyed by id.
-// This makes add/update/delete atomic per-record — concurrent writes to
-// different records never clobber each other (unlike a single JSON blob).
-
 async function redisHashAll<T extends { id: string }>(key: string): Promise<T[]> {
   const client = await getRedis();
-  // Transparent migration: old code stored the whole array as a JSON string.
-  // If the key is still a STRING type, parse + migrate to Hash, then return.
   const keyType = await client.type(key);
   if (keyType === 'string') {
     const raw = await client.get(key);
@@ -109,18 +107,28 @@ async function redisHashClear(key: string, ids: string[]): Promise<void> {
 // ─── File backend (local dev) ──────────────────────────────────────────────────
 
 const IS_VERCEL = Boolean(process.env.VERCEL);
-const DATA_DIR = IS_VERCEL ? '/tmp/str-data' : path.join(process.cwd(), 'data');
-const SETTINGS_FILE = path.join(DATA_DIR, 'settings.json');
-const BOOKINGS_FILE = path.join(DATA_DIR, 'bookings.json');
-const EXPENSES_FILE = path.join(DATA_DIR, 'expenses.json');
-const LEADS_FILE = path.join(DATA_DIR, 'leads.json');
+const BASE_DIR = IS_VERCEL ? '/tmp/str-data' : path.join(process.cwd(), 'data');
 
-async function ensureDir() {
-  if (!existsSync(DATA_DIR)) await mkdir(DATA_DIR, { recursive: true });
+function userDir(userId: string) {
+  return path.join(BASE_DIR, userId);
+}
+
+function filePaths(userId: string) {
+  const dir = userDir(userId);
+  return {
+    settings: path.join(dir, 'settings.json'),
+    bookings: path.join(dir, 'bookings.json'),
+    expenses: path.join(dir, 'expenses.json'),
+    leads:    path.join(dir, 'leads.json'),
+  };
+}
+
+async function ensureUserDir(userId: string) {
+  const dir = userDir(userId);
+  if (!existsSync(dir)) await mkdir(dir, { recursive: true });
 }
 
 async function fileLoad<T>(file: string, fallback: T): Promise<T> {
-  await ensureDir();
   try {
     return JSON.parse(await readFile(file, 'utf-8')) as T;
   } catch {
@@ -128,18 +136,16 @@ async function fileLoad<T>(file: string, fallback: T): Promise<T> {
   }
 }
 
-async function fileSave(file: string, value: unknown): Promise<void> {
-  await ensureDir();
+async function fileSave(file: string, userId: string, value: unknown): Promise<void> {
+  await ensureUserDir(userId);
   await writeFile(file, JSON.stringify(value, null, 2));
 }
 
-// file-backend mutation: locked read-modify-write so same-process concurrent
-// requests (e.g. a double click) can't race and drop a record.
-async function fileMutate<T extends { id: string }>(file: string, fn: (items: T[]) => T[]): Promise<T[]> {
+async function fileMutate<T extends { id: string }>(file: string, userId: string, fn: (items: T[]) => T[]): Promise<T[]> {
   return withLock(file, async () => {
     const items = await fileLoad<T[]>(file, []);
     const next = fn(items);
-    await fileSave(file, next);
+    await fileSave(file, userId, next);
     return next;
   });
 }
@@ -148,44 +154,44 @@ async function fileMutate<T extends { id: string }>(file: string, fn: (items: T[
 
 const useRedis = Boolean(process.env.REDIS_URL);
 
-export async function loadSettings(): Promise<Settings> {
+export async function loadSettings(userId: string): Promise<Settings> {
   const raw = useRedis
-    ? await redisGet<Partial<Settings> | null>(REDIS_SETTINGS_KEY, null)
-    : await fileLoad<Partial<Settings>>(SETTINGS_FILE, {});
+    ? await redisGet<Partial<Settings> | null>(K(userId).settings, null)
+    : await fileLoad<Partial<Settings>>(filePaths(userId).settings, {});
   return { ...DEFAULT_SETTINGS, ...(raw ?? {}) };
 }
 
-export async function saveSettings(settings: Settings): Promise<void> {
+export async function saveSettings(userId: string, settings: Settings): Promise<void> {
   useRedis
-    ? await redisSet(REDIS_SETTINGS_KEY, settings)
-    : await fileSave(SETTINGS_FILE, settings);
+    ? await redisSet(K(userId).settings, settings)
+    : await fileSave(filePaths(userId).settings, userId, settings);
 }
 
-export async function loadBookings(): Promise<Booking[]> {
+export async function loadBookings(userId: string): Promise<Booking[]> {
   return useRedis
-    ? redisHashAll<Booking>(REDIS_BOOKINGS_KEY)
-    : fileLoad<Booking[]>(BOOKINGS_FILE, []);
+    ? redisHashAll<Booking>(K(userId).bookings)
+    : fileLoad<Booking[]>(filePaths(userId).bookings, []);
 }
 
-export async function addBooking(booking: Booking): Promise<void> {
+export async function addBooking(userId: string, booking: Booking): Promise<void> {
   if (useRedis) {
-    await redisHashSet(REDIS_BOOKINGS_KEY, booking.id, booking);
+    await redisHashSet(K(userId).bookings, booking.id, booking);
   } else {
-    await fileMutate<Booking>(BOOKINGS_FILE, items => [...items, booking]);
+    await fileMutate<Booking>(filePaths(userId).bookings, userId, items => [...items, booking]);
   }
 }
 
-export async function updateBooking(id: string, patch: Partial<Booking>): Promise<Booking | null> {
+export async function updateBooking(userId: string, id: string, patch: Partial<Booking>): Promise<Booking | null> {
   if (useRedis) {
-    const bookings = await redisHashAll<Booking>(REDIS_BOOKINGS_KEY);
+    const bookings = await redisHashAll<Booking>(K(userId).bookings);
     const existing = bookings.find(b => b.id === id);
     if (!existing) return null;
     const updated = { ...existing, ...patch, id };
-    await redisHashSet(REDIS_BOOKINGS_KEY, id, updated);
+    await redisHashSet(K(userId).bookings, id, updated);
     return updated;
   }
   let updated: Booking | null = null;
-  await fileMutate<Booking>(BOOKINGS_FILE, items => items.map(b => {
+  await fileMutate<Booking>(filePaths(userId).bookings, userId, items => items.map(b => {
     if (b.id !== id) return b;
     updated = { ...b, ...patch, id };
     return updated;
@@ -193,15 +199,15 @@ export async function updateBooking(id: string, patch: Partial<Booking>): Promis
   return updated;
 }
 
-export async function deleteBooking(id: string): Promise<boolean> {
+export async function deleteBooking(userId: string, id: string): Promise<boolean> {
   if (useRedis) {
-    const bookings = await redisHashAll<Booking>(REDIS_BOOKINGS_KEY);
+    const bookings = await redisHashAll<Booking>(K(userId).bookings);
     if (!bookings.some(b => b.id === id)) return false;
-    await redisHashDel(REDIS_BOOKINGS_KEY, id);
+    await redisHashDel(K(userId).bookings, id);
     return true;
   }
   let found = false;
-  await fileMutate<Booking>(BOOKINGS_FILE, items => {
+  await fileMutate<Booking>(filePaths(userId).bookings, userId, items => {
     const next = items.filter(b => b.id !== id);
     found = next.length !== items.length;
     return next;
@@ -209,15 +215,15 @@ export async function deleteBooking(id: string): Promise<boolean> {
   return found;
 }
 
-export async function deleteBookings(predicate: (b: Booking) => boolean): Promise<number> {
+export async function deleteBookings(userId: string, predicate: (b: Booking) => boolean): Promise<number> {
   if (useRedis) {
-    const bookings = await redisHashAll<Booking>(REDIS_BOOKINGS_KEY);
+    const bookings = await redisHashAll<Booking>(K(userId).bookings);
     const toDelete = bookings.filter(predicate).map(b => b.id);
-    await redisHashClear(REDIS_BOOKINGS_KEY, toDelete);
+    await redisHashClear(K(userId).bookings, toDelete);
     return toDelete.length;
   }
   let deleted = 0;
-  await fileMutate<Booking>(BOOKINGS_FILE, items => {
+  await fileMutate<Booking>(filePaths(userId).bookings, userId, items => {
     const next = items.filter(b => !predicate(b));
     deleted = items.length - next.length;
     return next;
@@ -225,34 +231,32 @@ export async function deleteBookings(predicate: (b: Booking) => boolean): Promis
   return deleted;
 }
 
-// Bulk replace for the CSV importer, which builds the full next-state array
-// in memory across hundreds of rows before persisting once.
-export async function replaceAllBookings(bookings: Booking[]): Promise<void> {
+export async function replaceAllBookings(userId: string, bookings: Booking[]): Promise<void> {
   if (useRedis) {
     const client = await getRedis();
     const pipeline = client.multi();
-    pipeline.del(REDIS_BOOKINGS_KEY);
-    for (const b of bookings) pipeline.hSet(REDIS_BOOKINGS_KEY, b.id, JSON.stringify(b));
+    pipeline.del(K(userId).bookings);
+    for (const b of bookings) pipeline.hSet(K(userId).bookings, b.id, JSON.stringify(b));
     await pipeline.exec();
   } else {
-    await withLock(BOOKINGS_FILE, async () => fileSave(BOOKINGS_FILE, bookings));
+    await withLock(filePaths(userId).bookings, async () => fileSave(filePaths(userId).bookings, userId, bookings));
   }
 }
 
-export async function replaceAllExpenses(expenses: Expense[]): Promise<void> {
+export async function replaceAllExpenses(userId: string, expenses: Expense[]): Promise<void> {
   if (useRedis) {
     const client = await getRedis();
     const pipeline = client.multi();
-    pipeline.del(REDIS_EXPENSES_KEY);
-    for (const e of expenses) pipeline.hSet(REDIS_EXPENSES_KEY, e.id, JSON.stringify(e));
+    pipeline.del(K(userId).expenses);
+    for (const e of expenses) pipeline.hSet(K(userId).expenses, e.id, JSON.stringify(e));
     await pipeline.exec();
   } else {
-    await withLock(EXPENSES_FILE, async () => fileSave(EXPENSES_FILE, expenses));
+    await withLock(filePaths(userId).expenses, async () => fileSave(filePaths(userId).expenses, userId, expenses));
   }
 }
 
-export async function upsertBooking(booking: Booking): Promise<void> {
-  const bookings = await loadBookings();
+export async function upsertBooking(userId: string, booking: Booking): Promise<void> {
+  const bookings = await loadBookings(userId);
   const existing = bookings.find(b =>
     (b.uid === booking.uid && b.sourceId === booking.sourceId) ||
     (booking.confirmationCode && b.confirmationCode === booking.confirmationCode && b.platform === booking.platform)
@@ -267,40 +271,40 @@ export async function upsertBooking(booking: Booking): Promise<void> {
       notes: existing.notes ?? booking.notes,
     };
     if (useRedis) {
-      await redisHashSet(REDIS_BOOKINGS_KEY, existing.id, merged);
+      await redisHashSet(K(userId).bookings, existing.id, merged);
     } else {
-      await fileMutate<Booking>(BOOKINGS_FILE, items => items.map(b => b.id === existing.id ? merged : b));
+      await fileMutate<Booking>(filePaths(userId).bookings, userId, items => items.map(b => b.id === existing.id ? merged : b));
     }
   } else {
-    await addBooking(booking);
+    await addBooking(userId, booking);
   }
 }
 
-export async function loadExpenses(): Promise<Expense[]> {
+export async function loadExpenses(userId: string): Promise<Expense[]> {
   return useRedis
-    ? redisHashAll<Expense>(REDIS_EXPENSES_KEY)
-    : fileLoad<Expense[]>(EXPENSES_FILE, []);
+    ? redisHashAll<Expense>(K(userId).expenses)
+    : fileLoad<Expense[]>(filePaths(userId).expenses, []);
 }
 
-export async function addExpense(expense: Expense): Promise<void> {
+export async function addExpense(userId: string, expense: Expense): Promise<void> {
   if (useRedis) {
-    await redisHashSet(REDIS_EXPENSES_KEY, expense.id, expense);
+    await redisHashSet(K(userId).expenses, expense.id, expense);
   } else {
-    await fileMutate<Expense>(EXPENSES_FILE, items => [...items, expense]);
+    await fileMutate<Expense>(filePaths(userId).expenses, userId, items => [...items, expense]);
   }
 }
 
-export async function updateExpense(id: string, patch: Partial<Expense>): Promise<Expense | null> {
+export async function updateExpense(userId: string, id: string, patch: Partial<Expense>): Promise<Expense | null> {
   if (useRedis) {
-    const expenses = await redisHashAll<Expense>(REDIS_EXPENSES_KEY);
+    const expenses = await redisHashAll<Expense>(K(userId).expenses);
     const existing = expenses.find(e => e.id === id);
     if (!existing) return null;
     const updated = { ...existing, ...patch, id, updatedAt: new Date().toISOString() };
-    await redisHashSet(REDIS_EXPENSES_KEY, id, updated);
+    await redisHashSet(K(userId).expenses, id, updated);
     return updated;
   }
   let updated: Expense | null = null;
-  await fileMutate<Expense>(EXPENSES_FILE, items => items.map(e => {
+  await fileMutate<Expense>(filePaths(userId).expenses, userId, items => items.map(e => {
     if (e.id !== id) return e;
     updated = { ...e, ...patch, id, updatedAt: new Date().toISOString() };
     return updated;
@@ -308,46 +312,46 @@ export async function updateExpense(id: string, patch: Partial<Expense>): Promis
   return updated;
 }
 
-export async function loadLeads(): Promise<DirectLead[]> {
-  return useRedis
-    ? redisHashAll<DirectLead>(REDIS_LEADS_KEY)
-    : fileLoad<DirectLead[]>(LEADS_FILE, []);
-}
-
-export async function addLead(lead: DirectLead): Promise<void> {
+export async function deleteExpense(userId: string, id: string): Promise<boolean> {
   if (useRedis) {
-    await redisHashSet(REDIS_LEADS_KEY, lead.id, lead);
-  } else {
-    await fileMutate<DirectLead>(LEADS_FILE, items => [...items, lead]);
-  }
-}
-
-export async function deleteLead(id: string): Promise<boolean> {
-  if (useRedis) {
-    const leads = await redisHashAll<DirectLead>(REDIS_LEADS_KEY);
-    if (!leads.some(l => l.id === id)) return false;
-    await redisHashDel(REDIS_LEADS_KEY, id);
+    const expenses = await redisHashAll<Expense>(K(userId).expenses);
+    if (!expenses.some(e => e.id === id)) return false;
+    await redisHashDel(K(userId).expenses, id);
     return true;
   }
   let found = false;
-  await fileMutate<DirectLead>(LEADS_FILE, items => {
-    const next = items.filter(l => l.id !== id);
+  await fileMutate<Expense>(filePaths(userId).expenses, userId, items => {
+    const next = items.filter(e => e.id !== id);
     found = next.length !== items.length;
     return next;
   });
   return found;
 }
 
-export async function deleteExpense(id: string): Promise<boolean> {
+export async function loadLeads(userId: string): Promise<DirectLead[]> {
+  return useRedis
+    ? redisHashAll<DirectLead>(K(userId).leads)
+    : fileLoad<DirectLead[]>(filePaths(userId).leads, []);
+}
+
+export async function addLead(userId: string, lead: DirectLead): Promise<void> {
   if (useRedis) {
-    const expenses = await redisHashAll<Expense>(REDIS_EXPENSES_KEY);
-    if (!expenses.some(e => e.id === id)) return false;
-    await redisHashDel(REDIS_EXPENSES_KEY, id);
+    await redisHashSet(K(userId).leads, lead.id, lead);
+  } else {
+    await fileMutate<DirectLead>(filePaths(userId).leads, userId, items => [...items, lead]);
+  }
+}
+
+export async function deleteLead(userId: string, id: string): Promise<boolean> {
+  if (useRedis) {
+    const leads = await redisHashAll<DirectLead>(K(userId).leads);
+    if (!leads.some(l => l.id === id)) return false;
+    await redisHashDel(K(userId).leads, id);
     return true;
   }
   let found = false;
-  await fileMutate<Expense>(EXPENSES_FILE, items => {
-    const next = items.filter(e => e.id !== id);
+  await fileMutate<DirectLead>(filePaths(userId).leads, userId, items => {
+    const next = items.filter(l => l.id !== id);
     found = next.length !== items.length;
     return next;
   });

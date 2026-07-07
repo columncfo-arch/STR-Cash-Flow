@@ -2,17 +2,25 @@ import { NextResponse } from 'next/server';
 import { loadBookings, loadSettings, updateBooking } from '@/lib/storage';
 
 // Public endpoint — no auth. Guests call this from the /welcome page.
-// Matches their visit to a booking that is currently active (today is within check-in..check-out).
+// The host embeds ?u=<userId> in their welcome page URL so we know whose data to load.
+
+function resolveUserId(req: Request): string | null {
+  const { searchParams } = new URL(req.url);
+  return searchParams.get('u') ?? process.env.DEFAULT_HOST_USER_ID ?? null;
+}
 
 export async function POST(req: Request) {
   try {
+    const userId = resolveUserId(req);
+    if (!userId) return NextResponse.json({ error: 'Missing host identifier' }, { status: 400 });
+
     const { firstName, lastName, email, phone, tcpaConsent } = await req.json() as {
       firstName?: string; lastName?: string; email?: string; phone?: string; tcpaConsent?: boolean;
     };
 
     if (!email) return NextResponse.json({ error: 'Email is required' }, { status: 400 });
 
-    const [settings, bookings] = await Promise.all([loadSettings(), loadBookings()]);
+    const [settings, bookings] = await Promise.all([loadSettings(userId), loadBookings(userId)]);
 
     const guestName = [firstName, lastName].filter(Boolean).join(' ') || undefined;
     const today = new Date().toISOString().slice(0, 10);
@@ -24,7 +32,7 @@ export async function POST(req: Request) {
       const notes = tcpaConsent
         ? (activeSell.notes ? activeSell.notes + ' | TCPA consent: yes' : 'TCPA consent: yes')
         : activeSell.notes;
-      await updateBooking(activeSell.id, {
+      await updateBooking(userId, activeSell.id, {
         email: email || undefined,
         phone: phone || activeSell.phone || undefined,
         guestName: guestName || activeSell.guestName || undefined,
@@ -47,9 +55,12 @@ export async function POST(req: Request) {
 }
 
 // GET /api/welcome — returns public property info (no sensitive financial data)
-export async function GET() {
+export async function GET(req: Request) {
   try {
-    const settings = await loadSettings();
+    const userId = resolveUserId(req);
+    if (!userId) return NextResponse.json({ error: 'Missing host identifier' }, { status: 400 });
+
+    const settings = await loadSettings(userId);
     return NextResponse.json({
       propertyName: settings.propertyName,
       welcomeMessage: settings.welcomeMessage ?? null,

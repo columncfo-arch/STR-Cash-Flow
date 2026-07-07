@@ -1,8 +1,8 @@
 import { NextResponse } from 'next/server';
 import { loadSettings } from '@/lib/storage';
 
-// Simple in-memory cache: avoids hammering Airbnb/VRBO iCal endpoints
-let _cached: { blocked: BlockedRange[]; expiry: number } | null = null;
+// Simple in-memory cache per userId
+const _cache = new Map<string, { blocked: BlockedRange[]; expiry: number }>();
 const TTL = 4 * 60 * 60 * 1000; // 4 hours
 
 export interface BlockedRange {
@@ -32,19 +32,28 @@ async function fetchICal(url: string): Promise<BlockedRange[]> {
   return parseICal(await res.text());
 }
 
-export async function GET() {
+function resolveUserId(req: Request): string | null {
+  const { searchParams } = new URL(req.url);
+  return searchParams.get('u') ?? process.env.DEFAULT_HOST_USER_ID ?? null;
+}
+
+export async function GET(req: Request) {
   try {
-    if (_cached && Date.now() < _cached.expiry) {
-      return NextResponse.json({ blocked: _cached.blocked });
+    const userId = resolveUserId(req);
+    if (!userId) return NextResponse.json({ blocked: [] });
+
+    const cached = _cache.get(userId);
+    if (cached && Date.now() < cached.expiry) {
+      return NextResponse.json({ blocked: cached.blocked });
     }
 
-    const settings = await loadSettings();
+    const settings = await loadSettings(userId);
     const urls = [settings.airbnbIcalUrl, settings.vrboIcalUrl].filter(Boolean) as string[];
 
     const results = await Promise.allSettled(urls.map(fetchICal));
     const blocked = results.flatMap(r => r.status === 'fulfilled' ? r.value : []);
 
-    _cached = { blocked, expiry: Date.now() + TTL };
+    _cache.set(userId, { blocked, expiry: Date.now() + TTL });
     return NextResponse.json({ blocked });
   } catch {
     return NextResponse.json({ blocked: [] });
@@ -52,7 +61,8 @@ export async function GET() {
 }
 
 // POST to bust the cache when a direct booking is confirmed
-export async function POST() {
-  _cached = null;
+export async function POST(req: Request) {
+  const userId = resolveUserId(req);
+  if (userId) _cache.delete(userId);
   return NextResponse.json({ ok: true });
 }

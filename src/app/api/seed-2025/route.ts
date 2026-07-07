@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loadBookings, loadExpenses, replaceAllBookings, replaceAllExpenses } from '@/lib/storage';
+import { requireAuth, unauthorized } from '@/lib/auth';
 import { Booking, Expense } from '@/types';
 
 // 2025 monthly actuals from property spreadsheet (Jan–Oct)
@@ -104,13 +105,12 @@ function buildSeedData(now: string): { bookings: Booking[]; expenses: Expense[] 
 
 export async function POST(req: Request) {
   try {
+    const userId = await requireAuth();
     const force = new URL(req.url).searchParams.get('force') === 'true';
 
-    // loadBookings/loadExpenses go through the storage module which auto-migrates
-    // any old STRING-format Redis keys to Hash format before we read or write.
     const [existingBookings, existingExpenses] = await Promise.all([
-      loadBookings(),
-      loadExpenses(),
+      loadBookings(userId),
+      loadExpenses(userId),
     ]);
 
     const has2025 = existingBookings.some(b => b.checkIn.startsWith('2025'))
@@ -135,8 +135,8 @@ export async function POST(req: Request) {
 
     // replaceAll uses a single pipeline — one Redis round-trip each
     await Promise.all([
-      replaceAllBookings([...keptBookings, ...seedBookings]),
-      replaceAllExpenses([...keptExpenses, ...seedExpenses]),
+      replaceAllBookings(userId, [...keptBookings, ...seedBookings]),
+      replaceAllExpenses(userId, [...keptExpenses, ...seedExpenses]),
     ]);
 
     return NextResponse.json({
@@ -146,6 +146,7 @@ export async function POST(req: Request) {
       note: 'PITI not seeded — confirm monthlyPITI in Settings ($3,676/mo). Also set Cleaning Fee per Booking to $0 since cleaning costs are included in the seeded expenses.',
     });
   } catch (err) {
+    if (err instanceof Error && err.message === 'Unauthorized') return unauthorized();
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Seed failed' }, { status: 500 });
   }
 }

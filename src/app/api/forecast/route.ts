@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loadBookings, loadExpenses, loadSettings } from '@/lib/storage';
+import { requireAuth, unauthorized } from '@/lib/auth';
 import { ForecastYear, Expense } from '@/types';
 import { getYear } from 'date-fns';
 
@@ -73,10 +74,11 @@ function computeMonthActuals(
 
 export async function GET() {
   try {
+    const userId = await requireAuth();
     const [allBookings, allExpenses, settings] = await Promise.all([
-      loadBookings(),
-      loadExpenses(),
-      loadSettings(),
+      loadBookings(userId),
+      loadExpenses(userId),
+      loadSettings(userId),
     ]);
 
     const now = new Date();
@@ -222,7 +224,8 @@ export async function GET() {
     }
 
     return NextResponse.json({ rows, settings });
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && e.message === 'Unauthorized') return unauthorized();
     return NextResponse.json({ error: 'Failed to build forecast' }, { status: 500 });
   }
 }

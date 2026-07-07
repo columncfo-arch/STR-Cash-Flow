@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
+import { UserButton } from '@clerk/nextjs';
 import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, Upload, TrendingUp, Target, Users, Zap, Wifi, Menu, X } from 'lucide-react';
 
 type SubLink = { href: string; label: string; icon: React.ComponentType<{ className?: string }> };
@@ -96,8 +97,9 @@ export default function Nav() {
           );
         })}
       </ul>
-      <div className="px-4 py-3 border-t border-slate-700 text-xs text-slate-500">
-        HostCFO
+      <div className="px-4 py-3 border-t border-slate-700 flex items-center gap-3">
+        <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
+        <span className="text-xs text-slate-500 truncate">My account</span>
       </div>
     </>
   );

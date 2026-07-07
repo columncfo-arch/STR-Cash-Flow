@@ -1,9 +1,16 @@
 import { NextResponse } from 'next/server';
 import { addLead, loadLeads } from '@/lib/storage';
+import { requireAuth, unauthorized } from '@/lib/auth';
 import { DirectLead } from '@/types';
 
 export async function POST(req: Request) {
   try {
+    // The booking form is public — the host embeds ?u=<userId> in their form URL
+    // so we know which host's lead bucket to write to.
+    const { searchParams } = new URL(req.url);
+    const userId = searchParams.get('u');
+    if (!userId) return NextResponse.json({ error: 'Missing host identifier' }, { status: 400 });
+
     const { firstName, lastName, email, phone, preferredDates, tcpaConsent } = await req.json() as {
       firstName?: string;
       lastName?: string;
@@ -29,7 +36,7 @@ export async function POST(req: Request) {
       createdAt: new Date().toISOString(),
     };
 
-    await addLead(lead);
+    await addLead(userId, lead);
     return NextResponse.json({ success: true });
   } catch {
     return NextResponse.json({ error: 'Something went wrong' }, { status: 500 });
@@ -38,10 +45,11 @@ export async function POST(req: Request) {
 
 export async function GET() {
   try {
-    const leads = await loadLeads();
+    const userId = await requireAuth();
+    const leads = await loadLeads(userId);
     const sorted = [...leads].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return NextResponse.json(sorted);
   } catch {
-    return NextResponse.json({ error: 'Failed to load leads' }, { status: 500 });
+    return unauthorized();
   }
 }

@@ -1,6 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
 import { BookOpen, Check, ChevronRight, Home, Building2, TreePine, Waves } from 'lucide-react';
 
 const PROPERTY_TYPES = [
@@ -17,15 +18,14 @@ const PLATFORMS = [
   { id: 'direct',  label: 'Direct bookings',  color: 'bg-emerald-500' },
 ];
 
-const STEP_LABELS = ['Account', 'Your property', 'Platforms', 'Set targets'];
+const STEP_LABELS = ['Your property', 'Platforms', 'Set targets'];
 
 export default function OnboardingPage() {
   const router = useRouter();
+  const { user } = useUser();
   const [step, setStep] = useState(0);
   const [saving, setSaving] = useState(false);
 
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
   const [propertyName, setPropertyName] = useState('');
   const [propertyType, setPropertyType] = useState('');
   const [platforms, setPlatforms] = useState<string[]>([]);
@@ -38,7 +38,6 @@ export default function OnboardingPage() {
   }
 
   const canAdvance = [
-    name.trim().length > 0 && email.includes('@'),
     propertyName.trim().length > 0 && propertyType.length > 0,
     platforms.length > 0,
     true,
@@ -72,13 +71,15 @@ export default function OnboardingPage() {
       });
 
       // Fire-and-forget — don't block the redirect if this fails
+      const name = user?.fullName ?? user?.firstName ?? '';
+      const email = user?.primaryEmailAddress?.emailAddress ?? '';
       fetch('/api/notify-signup', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: name.trim(), email: email.trim(), propertyName: propertyName.trim() }),
+        body: JSON.stringify({ name, email, propertyName: propertyName.trim() }),
       }).catch(() => {});
 
-      router.push('/');
+      router.push('/onboarding/confirm?property=' + encodeURIComponent(propertyName.trim() || 'My Property'));
     } finally {
       setSaving(false);
     }
@@ -124,44 +125,8 @@ export default function OnboardingPage() {
       <div className="flex-1 flex items-start justify-center py-12 px-4">
         <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 w-full max-w-lg">
 
-          {/* ── Step 0: Account ── */}
+          {/* ── Step 0: Property ── */}
           {step === 0 && (
-            <>
-              <h1 className="text-2xl font-bold text-slate-900 mb-1">Welcome to HostCFO</h1>
-              <p className="text-slate-500 text-sm mb-8">Your 14-day free trial starts today. No credit card needed.</p>
-              <div className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium text-slate-700 block mb-1.5">Your name</label>
-                  <input
-                    autoFocus
-                    type="text"
-                    value={name}
-                    onChange={e => setName(e.target.value)}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="Jane Smith"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium text-slate-700 block mb-1.5">Email address</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={e => setEmail(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && canAdvance && setStep(1)}
-                    className="w-full border border-slate-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                    placeholder="jane@example.com"
-                  />
-                </div>
-              </div>
-              <div className="mt-6 p-4 bg-emerald-50 rounded-xl border border-emerald-100">
-                <p className="text-sm font-semibold text-emerald-800">14 days free, then $19–79/mo</p>
-                <p className="text-xs text-emerald-600 mt-0.5">Cancel anytime. Pricing based on number of properties.</p>
-              </div>
-            </>
-          )}
-
-          {/* ── Step 1: Property ── */}
-          {step === 1 && (
             <>
               <h1 className="text-2xl font-bold text-slate-900 mb-1">Your property</h1>
               <p className="text-slate-500 text-sm mb-8">Tell us about the property you want to track first.</p>
@@ -200,8 +165,8 @@ export default function OnboardingPage() {
             </>
           )}
 
-          {/* ── Step 2: Platforms ── */}
-          {step === 2 && (
+          {/* ── Step 1: Platforms ── */}
+          {step === 1 && (
             <>
               <h1 className="text-2xl font-bold text-slate-900 mb-1">Where do you list?</h1>
               <p className="text-slate-500 text-sm mb-8">Select all platforms you use. You'll import earnings from each one.</p>
@@ -227,8 +192,8 @@ export default function OnboardingPage() {
             </>
           )}
 
-          {/* ── Step 3: Targets ── */}
-          {step === 3 && (
+          {/* ── Step 2: Targets ── */}
+          {step === 2 && (
             <>
               <h1 className="text-2xl font-bold text-slate-900 mb-1">Set your targets</h1>
               <p className="text-slate-500 text-sm mb-8">Optional — you can set these any time in the app. These help HostCFO show you how you're pacing.</p>
@@ -307,7 +272,7 @@ export default function OnboardingPage() {
                   disabled={saving}
                   className="flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-40"
                 >
-                  {saving ? 'Setting up…' : 'Go to dashboard'}
+                  {saving ? 'Setting up…' : 'Finish setup'}
                   {!saving && <ChevronRight className="w-4 h-4" />}
                 </button>
               </div>
