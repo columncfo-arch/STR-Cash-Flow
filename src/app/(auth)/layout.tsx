@@ -10,7 +10,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           <span className="font-bold text-slate-900">HostCFO</span>
         </Link>
       </div>
-      <div className="flex-1 flex items-center justify-center p-4">
+      <div className="flex-1 flex flex-col items-center justify-center p-4 gap-4">
+        <p className="text-sm text-slate-500">14 days free · No credit card needed</p>
         {children}
       </div>
     </div>
