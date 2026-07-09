@@ -5,10 +5,14 @@ import { useUser } from '@clerk/nextjs';
 import { Suspense, useState } from 'react';
 import { BookOpen, Check, Upload, DollarSign, LayoutDashboard, MessageSquare, ArrowRight, Loader2 } from 'lucide-react';
 
+// Prefix app-domain links so they work whether onboarding is served from the
+// marketing domain (hostcfo.com) or the app domain (app.hostcfo.com / single Vercel deploy).
+const APP = process.env.NEXT_PUBLIC_APP_URL ?? '';
+
 const SELF_SERVE_STEPS = [
-  { n: 1, icon: Upload,          title: 'Import your earnings', body: 'Upload a CSV from Airbnb, VRBO, or Booking.com.',  href: '/import' },
-  { n: 2, icon: DollarSign,      title: 'Add your expenses',    body: 'Enter your mortgage (PITI) and recurring costs.',  href: '/expenses' },
-  { n: 3, icon: LayoutDashboard, title: 'See your cash flow',   body: 'Your P&L, forecast, and pacing — all in one view.', href: '/' },
+  { n: 1, icon: Upload,          title: 'Import your earnings', body: 'Upload a CSV from Airbnb, VRBO, or Booking.com.',    href: `${APP}/import` },
+  { n: 2, icon: DollarSign,      title: 'Add your expenses',    body: 'Enter your mortgage (PITI) and recurring costs.',    href: `${APP}/expenses` },
+  { n: 3, icon: LayoutDashboard, title: 'See your cash flow',   body: 'Your P&L, forecast, and pacing — all in one view.', href: `${APP}/` },
 ];
 
 function ConfirmContent() {
@@ -75,7 +79,7 @@ function ConfirmContent() {
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-4">Set up yourself</p>
               <div className="space-y-4 flex-1">
                 {SELF_SERVE_STEPS.map(s => (
-                  <Link
+                  <a
                     key={s.href}
                     href={s.href}
                     className="flex items-start gap-3 group"
@@ -90,15 +94,15 @@ function ConfirmContent() {
                       <p className="text-xs text-slate-400 mt-0.5 leading-snug">{s.body}</p>
                     </div>
                     <ArrowRight className="w-3.5 h-3.5 text-slate-300 group-hover:text-emerald-500 flex-shrink-0 mt-1 transition-colors" />
-                  </Link>
+                  </a>
                 ))}
               </div>
-              <Link
-                href="/import"
+              <a
+                href={`${APP}/import`}
                 className="mt-6 block text-center bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
               >
                 Import your earnings →
-              </Link>
+              </a>
             </div>
 
             {/* Path B — Assisted setup */}
@@ -114,9 +118,9 @@ function ConfirmContent() {
                   <p className="text-slate-400 text-xs leading-relaxed">
                     We'll reach out within one business day to schedule your walkthrough.
                   </p>
-                  <Link href="/" className="mt-5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
+                  <a href={`${APP}/`} className="mt-5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
                     Go to dashboard →
-                  </Link>
+                  </a>
                 </div>
               ) : (
                 <>
@@ -178,9 +182,9 @@ function ConfirmContent() {
 
           <p className="text-center text-xs text-slate-400">
             Already familiar with the app?{' '}
-            <Link href="/" className="text-slate-500 hover:text-slate-700 underline underline-offset-2 transition-colors">
+            <a href={`${APP}/`} className="text-slate-500 hover:text-slate-700 underline underline-offset-2 transition-colors">
               Go straight to the dashboard
-            </Link>
+            </a>
           </p>
         </div>
       </div>

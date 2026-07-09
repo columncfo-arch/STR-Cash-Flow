@@ -262,7 +262,7 @@ export default function OnboardingPage() {
             ) : (
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => router.push('/')}
+                  onClick={() => router.push('/onboarding/confirm?property=' + encodeURIComponent(propertyName.trim() || 'My Property'))}
                   className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
                 >
                   Skip for now
