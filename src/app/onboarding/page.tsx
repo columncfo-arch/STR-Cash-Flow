@@ -1,7 +1,6 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useUser } from '@clerk/nextjs';
 import { BookOpen, Check, ChevronRight, Home, Building2, TreePine, Waves } from 'lucide-react';
 
 const PROPERTY_TYPES = [
@@ -22,9 +21,7 @@ const STEP_LABELS = ['Your property', 'Platforms', 'Set targets'];
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { user } = useUser();
   const [step, setStep] = useState(0);
-  const [saving, setSaving] = useState(false);
 
   const [propertyName, setPropertyName] = useState('');
   const [propertyType, setPropertyType] = useState('');
@@ -43,46 +40,16 @@ export default function OnboardingPage() {
     true,
   ][step];
 
-  async function finish() {
-    setSaving(true);
-    try {
-      const res = await fetch('/api/settings');
-      const current = await res.json();
-      const year = String(new Date().getFullYear());
-      const updated = {
-        ...current,
-        propertyName: propertyName.trim() || 'My Property',
-        ...(piti ? { monthlyPITI: parseFloat(piti) } : {}),
-        ...(occTarget ? { targetOccupancyPct: parseFloat(occTarget) } : {}),
-        ...(annualTarget ? {
-          forecastOverrides: {
-            ...(current.forecastOverrides ?? {}),
-            [year]: {
-              ...(current.forecastOverrides?.[year] ?? {}),
-              revenue: parseFloat(annualTarget),
-            },
-          },
-        } : {}),
-      };
-      await fetch('/api/settings', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(updated),
-      });
-
-      // Fire-and-forget — don't block the redirect if this fails
-      const name = user?.fullName ?? user?.firstName ?? '';
-      const email = user?.primaryEmailAddress?.emailAddress ?? '';
-      fetch('/api/notify-signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, propertyName: propertyName.trim() }),
-      }).catch(() => {});
-
-      router.push('/onboarding/confirm?property=' + encodeURIComponent(propertyName.trim() || 'My Property'));
-    } finally {
-      setSaving(false);
-    }
+  function goToSignUp() {
+    sessionStorage.setItem('hostcfo_onboarding', JSON.stringify({
+      propertyName: propertyName.trim() || 'My Property',
+      propertyType,
+      platforms,
+      piti: piti ? parseFloat(piti) : undefined,
+      occTarget: occTarget ? parseFloat(occTarget) : undefined,
+      annualTarget: annualTarget ? parseFloat(annualTarget) : undefined,
+    }));
+    router.push('/sign-up');
   }
 
   return (
@@ -262,18 +229,16 @@ export default function OnboardingPage() {
             ) : (
               <div className="flex items-center gap-3">
                 <button
-                  onClick={() => router.push('/onboarding/confirm?property=' + encodeURIComponent(propertyName.trim() || 'My Property'))}
+                  onClick={goToSignUp}
                   className="text-sm text-slate-400 hover:text-slate-600 transition-colors"
                 >
                   Skip for now
                 </button>
                 <button
-                  onClick={finish}
-                  disabled={saving}
-                  className="flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors disabled:opacity-40"
+                  onClick={goToSignUp}
+                  className="flex items-center gap-2 bg-emerald-600 text-white px-6 py-2.5 rounded-xl text-sm font-semibold hover:bg-emerald-700 transition-colors"
                 >
-                  {saving ? 'Setting up…' : 'Finish setup'}
-                  {!saving && <ChevronRight className="w-4 h-4" />}
+                  Create your account <ChevronRight className="w-4 h-4" />
                 </button>
               </div>
             )}

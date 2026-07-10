@@ -24,7 +24,7 @@ export const proxy = clerkMiddleware(async (auth, request) => {
   const host = request.headers.get('host') ?? '';
   const { pathname } = request.nextUrl;
 
-  const isMarketingHost = MARKETING_HOSTS.includes(host);
+  const isMarketingHost = !!APP_URL && MARKETING_HOSTS.includes(host);
   const isAppHost = host === 'app.hostcfo.com';
 
   if (isMarketingHost) {

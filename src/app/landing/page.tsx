@@ -72,8 +72,8 @@ export default function LandingPage() {
             <span className="font-bold text-slate-900">HostCFO</span>
           </div>
           <div className="flex items-center gap-3">
-            <Link href={`${APP_URL}/`} className="hidden sm:block text-sm text-slate-500 hover:text-slate-800 transition-colors">Log in</Link>
-            <Link href={`${APP_URL}/sign-up`} className="bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg font-medium hover:bg-emerald-700 transition-colors whitespace-nowrap">
+            <Link href={`${APP_URL}/sign-in`} className="hidden sm:block text-sm text-slate-500 hover:text-slate-800 transition-colors">Log in</Link>
+            <Link href={`${APP_URL}/onboarding`} className="bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg font-medium hover:bg-emerald-700 transition-colors whitespace-nowrap">
               Start free trial
             </Link>
           </div>
@@ -92,10 +92,10 @@ export default function LandingPage() {
           Platform fees, mortgage, ADR, occupancy rate, expenses — they all eat your payout. HostCFO shows your actual net cash flow, forecasts where you're heading, and tells you what to fix.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-          <Link href={`${APP_URL}/sign-up`} className="w-full sm:w-auto bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+          <Link href={`${APP_URL}/onboarding`} className="w-full sm:w-auto bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
             Start your free trial <ChevronRight className="w-4 h-4" />
           </Link>
-          <Link href={`${APP_URL}/`} className="text-slate-400 text-sm hover:text-slate-600 transition-colors">
+          <Link href={`${APP_URL}/sign-in`} className="text-slate-400 text-sm hover:text-slate-600 transition-colors">
             Already have an account? Log in →
           </Link>
         </div>
@@ -213,7 +213,7 @@ export default function LandingPage() {
                   ))}
                 </ul>
                 <Link
-                  href={`${APP_URL}/sign-up`}
+                  href={`${APP_URL}/onboarding`}
                   className={`block text-center py-2.5 rounded-xl font-semibold text-sm transition-colors ${
                     p.highlight ? 'bg-white text-emerald-700 hover:bg-emerald-50' : 'bg-emerald-600 text-white hover:bg-emerald-700'
                   }`}
@@ -232,7 +232,7 @@ export default function LandingPage() {
         <div className="max-w-xl mx-auto px-4 sm:px-6 text-center">
           <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Ready to see your real numbers?</h2>
           <p className="text-slate-500 mb-8">14 days free. No credit card. Full access from day one.</p>
-          <Link href={`${APP_URL}/sign-up`} className="inline-flex items-center gap-2 bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors">
+          <Link href={`${APP_URL}/onboarding`} className="inline-flex items-center gap-2 bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors">
             Get started free <ChevronRight className="w-4 h-4" />
           </Link>
         </div>

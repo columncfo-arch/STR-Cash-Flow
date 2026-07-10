@@ -2,27 +2,79 @@
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
-import { Suspense, useState } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { BookOpen, Check, Upload, DollarSign, LayoutDashboard, MessageSquare, ArrowRight, Loader2 } from 'lucide-react';
 
-// Prefix app-domain links so they work whether onboarding is served from the
-// marketing domain (hostcfo.com) or the app domain (app.hostcfo.com / single Vercel deploy).
 const APP = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
 const SELF_SERVE_STEPS = [
   { n: 1, icon: Upload,          title: 'Import your earnings', body: 'Upload a CSV from Airbnb, VRBO, or Booking.com.',    href: `${APP}/import` },
   { n: 2, icon: DollarSign,      title: 'Add your expenses',    body: 'Enter your mortgage (PITI) and recurring costs.',    href: `${APP}/expenses` },
-  { n: 3, icon: LayoutDashboard, title: 'See your cash flow',   body: 'Your P&L, forecast, and pacing — all in one view.', href: `${APP}/` },
+  { n: 3, icon: LayoutDashboard, title: 'See your cash flow',   body: 'Your P&L, forecast, and pacing — all in one view.', href: `${APP}/import` },
 ];
 
 function ConfirmContent() {
   const { user } = useUser();
   const searchParams = useSearchParams();
-  const propertyName = searchParams.get('property') || 'My Property';
+  const [propertyName, setPropertyName] = useState(searchParams.get('property') || 'My Property');
 
   const [helpOpen, setHelpOpen] = useState(false);
   const [note, setNote] = useState('');
   const [helpState, setHelpState] = useState<'idle' | 'sending' | 'sent'>('idle');
+
+  // Apply onboarding data collected before sign-up
+  useEffect(() => {
+    if (!user) return;
+    const saved = sessionStorage.getItem('hostcfo_onboarding');
+    if (!saved) return;
+    const data = JSON.parse(saved) as {
+      propertyName?: string;
+      piti?: number;
+      occTarget?: number;
+      annualTarget?: number;
+    };
+    if (data.propertyName) setPropertyName(data.propertyName);
+
+    async function applySettings() {
+      try {
+        const res = await fetch('/api/settings');
+        const current = await res.json();
+        const year = String(new Date().getFullYear());
+        const updated = {
+          ...current,
+          ...(data.propertyName ? { propertyName: data.propertyName } : {}),
+          ...(data.piti ? { monthlyPITI: data.piti } : {}),
+          ...(data.occTarget ? { targetOccupancyPct: data.occTarget } : {}),
+          ...(data.annualTarget ? {
+            forecastOverrides: {
+              ...(current.forecastOverrides ?? {}),
+              [year]: {
+                ...(current.forecastOverrides?.[year] ?? {}),
+                revenue: data.annualTarget,
+              },
+            },
+          } : {}),
+        };
+        await fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(updated),
+        });
+        sessionStorage.removeItem('hostcfo_onboarding');
+
+        const name = user?.fullName ?? user?.firstName ?? '';
+        const email = user?.primaryEmailAddress?.emailAddress ?? '';
+        fetch('/api/notify-signup', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, email, propertyName: data.propertyName ?? 'My Property' }),
+        }).catch(() => {});
+      } catch {
+        // settings can be re-applied from the app; don't block the user
+      }
+    }
+    applySettings();
+  }, [user]);
 
   async function requestHelp() {
     setHelpState('sending');
@@ -80,7 +132,7 @@ function ConfirmContent() {
               <div className="space-y-4 flex-1">
                 {SELF_SERVE_STEPS.map(s => (
                   <a
-                    key={s.href}
+                    key={s.n}
                     href={s.href}
                     className="flex items-start gap-3 group"
                   >
@@ -118,8 +170,8 @@ function ConfirmContent() {
                   <p className="text-slate-400 text-xs leading-relaxed">
                     We'll reach out within one business day to schedule your walkthrough.
                   </p>
-                  <a href={`${APP}/`} className="mt-5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
-                    Go to dashboard →
+                  <a href={`${APP}/import`} className="mt-5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
+                    Go to app →
                   </a>
                 </div>
               ) : (
@@ -182,8 +234,8 @@ function ConfirmContent() {
 
           <p className="text-center text-xs text-slate-400">
             Already familiar with the app?{' '}
-            <a href={`${APP}/`} className="text-slate-500 hover:text-slate-700 underline underline-offset-2 transition-colors">
-              Go straight to the dashboard
+            <a href={`${APP}/import`} className="text-slate-500 hover:text-slate-700 underline underline-offset-2 transition-colors">
+              Go straight to the app
             </a>
           </p>
         </div>
