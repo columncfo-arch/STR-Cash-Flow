@@ -98,7 +98,7 @@ export default function Nav() {
         })}
       </ul>
       <div className="px-4 py-3 border-t border-slate-700 flex items-center gap-3">
-        <UserButton afterSignOutUrl="/sign-in" appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
+        <UserButton appearance={{ elements: { avatarBox: 'w-7 h-7' } }} />
         <span className="text-xs text-slate-500 truncate">My account</span>
       </div>
     </>
