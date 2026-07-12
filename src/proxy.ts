@@ -37,7 +37,10 @@ export const proxy = clerkMiddleware(async (auth, request) => {
 
   if (isAppHost) {
     if ((pathname === '/' || pathname === '/landing') && MARKETING_URL) {
-      return NextResponse.redirect(new URL(MARKETING_URL, request.url));
+      const { userId } = await auth();
+      if (!userId) {
+        return NextResponse.redirect(new URL(MARKETING_URL, request.url));
+      }
     }
   }
 
