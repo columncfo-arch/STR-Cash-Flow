@@ -1,7 +1,6 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@clerk/nextjs';
 import { BookOpen, Check, ChevronRight, Home, Building2, TreePine, Waves } from 'lucide-react';
 
 const PROPERTY_TYPES = [
@@ -18,13 +17,10 @@ const PLATFORMS = [
   { id: 'direct',  label: 'Direct bookings',  color: 'bg-emerald-500' },
 ];
 
-const STEP_LABELS_NEW  = ['Your property', 'Platforms', 'Set targets', 'Create account'];
-const STEP_LABELS_AUTH = ['Your property', 'Platforms', 'Set targets'];
+const STEP_LABELS = ['Your property', 'Platforms', 'Set targets', 'Create account'];
 
 export default function OnboardingPage() {
   const router = useRouter();
-  const { isSignedIn } = useAuth();
-  const STEP_LABELS = isSignedIn ? STEP_LABELS_AUTH : STEP_LABELS_NEW;
   const [step, setStep] = useState(0);
 
   const [propertyName, setPropertyName] = useState('');
@@ -53,8 +49,7 @@ export default function OnboardingPage() {
       occTarget: occTarget ? parseFloat(occTarget) : undefined,
       annualTarget: annualTarget ? parseFloat(annualTarget) : undefined,
     }));
-    // Already signed in — skip account creation, apply settings on confirm page
-    router.push(isSignedIn ? '/onboarding/confirm' : '/sign-up');
+    router.push('/sign-up');
   }
 
   return (

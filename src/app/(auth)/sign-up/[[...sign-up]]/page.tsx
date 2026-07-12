@@ -1,16 +1,25 @@
 'use client';
-import { SignUp } from '@clerk/nextjs';
+import { SignUp, useClerk } from '@clerk/nextjs';
 import { BookOpen, Check } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 const STEP_LABELS = ['Your property', 'Platforms', 'Set targets', 'Create account'];
 
 export default function SignUpPage() {
-  const [fromOnboarding, setFromOnboarding] = useState(false);
+  const { signOut, session } = useClerk();
+  const [ready, setReady] = useState(false);
+  const fromOnboarding = typeof window !== 'undefined' && !!sessionStorage.getItem('hostcfo_onboarding');
 
+  // Sign out any existing session so the user always sees the sign-up form
   useEffect(() => {
-    setFromOnboarding(!!sessionStorage.getItem('hostcfo_onboarding'));
-  }, []);
+    if (session) {
+      signOut().then(() => setReady(true));
+    } else {
+      setReady(true);
+    }
+  }, [session, signOut]);
+
+  if (!ready) return null;
 
   if (!fromOnboarding) {
     return <SignUp fallbackRedirectUrl="/onboarding/confirm" />;
@@ -18,7 +27,6 @@ export default function SignUpPage() {
 
   return (
     <div className="w-full max-w-2xl">
-      {/* Step 4 of 4 progress bar */}
       <div className="bg-white border border-slate-200 rounded-2xl shadow-sm px-6 py-4 mb-4">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
