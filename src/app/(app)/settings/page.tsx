@@ -7,12 +7,35 @@ export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [cleared, setCleared] = useState(false);
   const [seeded, setSeeded] = useState<string | null>(null);
+  const [migrating, setMigrating] = useState(false);
+  const [migrateResult, setMigrateResult] = useState<string | null>(null);
 
   async function clearAllBookings() {
     if (!confirm('Delete ALL bookings? This cannot be undone.')) return;
     await fetch('/api/bookings?all=true', { method: 'DELETE' });
     setCleared(true);
     setTimeout(() => setCleared(false), 3000);
+  }
+
+  async function migrateLegacyData() {
+    if (!confirm('Copy your legacy data (bookings, expenses, settings, leads) to your account? Existing data will not be overwritten.')) return;
+    setMigrating(true);
+    try {
+      const res = await fetch('/api/admin/migrate', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) {
+        setMigrateResult(`Error: ${data.error}`);
+      } else {
+        const summary = Object.entries(data.results as Record<string, string>)
+          .map(([k, v]) => `${k}: ${v}`)
+          .join(' · ');
+        setMigrateResult(`Migration complete — ${summary}`);
+        // Reload settings since they may have changed
+        fetch('/api/settings').then(r => r.json()).then(setSettings);
+      }
+    } finally {
+      setMigrating(false);
+    }
   }
 
   async function seed2025(force = false) {
@@ -113,8 +136,15 @@ export default function SettingsPage() {
 
       <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm mt-8">
         <h2 className="font-semibold text-slate-800 mb-2">Data Management</h2>
-        <p className="text-sm text-slate-500 mb-4">Seed historical data or clear the database.</p>
+        <p className="text-sm text-slate-500 mb-4">Seed historical data or migrate from a previous version.</p>
         <div className="flex flex-wrap gap-3">
+          <button
+            onClick={migrateLegacyData}
+            disabled={migrating}
+            className="flex items-center gap-2 border border-blue-300 text-blue-700 px-4 py-2 rounded-lg text-sm hover:bg-blue-50 transition-colors disabled:opacity-50"
+          >
+            {migrating ? 'Migrating…' : 'Import My Existing Data'}
+          </button>
           <button
             onClick={() => seed2025()}
             className="flex items-center gap-2 border border-emerald-300 text-emerald-700 px-4 py-2 rounded-lg text-sm hover:bg-emerald-50 transition-colors"
@@ -122,6 +152,7 @@ export default function SettingsPage() {
             Import 2025 Baseline Data
           </button>
         </div>
+        {migrateResult && <p className="text-xs text-slate-600 mt-3 p-3 bg-blue-50 rounded-lg">{migrateResult}</p>}
         {seeded && <p className="text-xs text-slate-600 mt-3 p-3 bg-slate-50 rounded-lg">{seeded}</p>}
       </section>
 
