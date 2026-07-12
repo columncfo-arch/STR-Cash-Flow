@@ -1,6 +1,6 @@
 'use client';
 import { useState } from 'react';
-import { SignUp } from '@clerk/nextjs';
+import { useRouter } from 'next/navigation';
 import { BookOpen, Check, ChevronRight, Home, Building2, TreePine, Waves } from 'lucide-react';
 
 const PROPERTY_TYPES = [
@@ -20,6 +20,7 @@ const PLATFORMS = [
 const STEP_LABELS = ['Your property', 'Platforms', 'Set targets', 'Create account'];
 
 export default function OnboardingPage() {
+  const router = useRouter();
   const [step, setStep] = useState(0);
 
   const [propertyName, setPropertyName] = useState('');
@@ -48,7 +49,7 @@ export default function OnboardingPage() {
       occTarget: occTarget ? parseFloat(occTarget) : undefined,
       annualTarget: annualTarget ? parseFloat(annualTarget) : undefined,
     }));
-    setStep(3);
+    router.push('/sign-up');
   }
 
   return (
@@ -90,13 +91,7 @@ export default function OnboardingPage() {
       {/* Card */}
       <div className="flex-1 flex items-start justify-center py-12 px-4">
 
-        {/* ── Step 3: Create account (Clerk SignUp embedded) ── */}
-        {step === 3 ? (
-          <div className="flex flex-col items-center gap-4">
-            <SignUp fallbackRedirectUrl="/onboarding/confirm" />
-          </div>
-        ) : (
-          <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 w-full max-w-lg">
+        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-8 w-full max-w-lg">
 
             {/* ── Step 0: Property ── */}
             {step === 0 && (
@@ -250,7 +245,6 @@ export default function OnboardingPage() {
               )}
             </div>
           </div>
-        )}
       </div>
     </div>
   );
