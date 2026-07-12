@@ -1,28 +1,27 @@
 'use client';
 import { SignUp, useClerk, useSession } from '@clerk/nextjs';
 import { BookOpen, Check } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useEffect } from 'react';
 
 const STEP_LABELS = ['Your property', 'Platforms', 'Set targets', 'Create account'];
 
 export default function SignUpPage() {
+  const { isLoaded, isSignedIn } = useSession();
   const { signOut } = useClerk();
-  const { isLoaded, session } = useSession();
-  const [cleared, setCleared] = useState(false);
-  const fromOnboarding = typeof window !== 'undefined' && !!sessionStorage.getItem('hostcfo_onboarding');
 
   useEffect(() => {
     if (!isLoaded) return;
-    if (session) {
-      // Active session — sign out so the user always sees the sign-up form fresh
-      signOut().then(() => setCleared(true));
-    } else {
-      setCleared(true);
+    if (isSignedIn) {
+      // Redirect back here after sign-out so the page reloads with no session
+      signOut({ redirectUrl: '/sign-up' });
     }
-  }, [isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [isLoaded, isSignedIn]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Wait until Clerk has loaded AND any sign-out has completed
-  if (!isLoaded || !cleared) return null;
+  // Hide everything until Clerk has loaded and any sign-out redirect has fired
+  if (!isLoaded || isSignedIn) return null;
+
+  const fromOnboarding = typeof window !== 'undefined'
+    && !!sessionStorage.getItem('hostcfo_onboarding');
 
   if (!fromOnboarding) {
     return <SignUp fallbackRedirectUrl="/onboarding/confirm" />;
