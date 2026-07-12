@@ -1,25 +1,28 @@
 'use client';
-import { SignUp, useClerk } from '@clerk/nextjs';
+import { SignUp, useClerk, useSession } from '@clerk/nextjs';
 import { BookOpen, Check } from 'lucide-react';
 import { useEffect, useState } from 'react';
 
 const STEP_LABELS = ['Your property', 'Platforms', 'Set targets', 'Create account'];
 
 export default function SignUpPage() {
-  const { signOut, session } = useClerk();
-  const [ready, setReady] = useState(false);
+  const { signOut } = useClerk();
+  const { isLoaded, session } = useSession();
+  const [cleared, setCleared] = useState(false);
   const fromOnboarding = typeof window !== 'undefined' && !!sessionStorage.getItem('hostcfo_onboarding');
 
-  // Sign out any existing session so the user always sees the sign-up form
   useEffect(() => {
+    if (!isLoaded) return;
     if (session) {
-      signOut().then(() => setReady(true));
+      // Active session — sign out so the user always sees the sign-up form fresh
+      signOut().then(() => setCleared(true));
     } else {
-      setReady(true);
+      setCleared(true);
     }
-  }, [session, signOut]);
+  }, [isLoaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  if (!ready) return null;
+  // Wait until Clerk has loaded AND any sign-out has completed
+  if (!isLoaded || !cleared) return null;
 
   if (!fromOnboarding) {
     return <SignUp fallbackRedirectUrl="/onboarding/confirm" />;
@@ -38,9 +41,7 @@ export default function SignUpPage() {
         <div className="flex items-center gap-1">
           {STEP_LABELS.map((label, i) => (
             <div key={label} className="flex items-center gap-1 flex-1">
-              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${
-                i < 3 ? 'bg-emerald-600 text-white' : 'bg-emerald-600 text-white'
-              }`}>
+              <div className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 bg-emerald-600 text-white">
                 {i < 3 ? <Check className="w-3.5 h-3.5" /> : 4}
               </div>
               <span className={`text-xs hidden sm:block ${i === 3 ? 'text-slate-700 font-medium' : 'text-slate-400'}`}>
