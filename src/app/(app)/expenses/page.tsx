@@ -2,7 +2,138 @@
 import { useEffect, useState } from 'react';
 import { Expense, ExpenseCategory, EXPENSE_CATEGORIES, Settings } from '@/types';
 import { format } from 'date-fns';
-import { Plus, Pencil, Trash2, Check, X } from 'lucide-react';
+import { Plus, Pencil, Trash2, Check, X, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+
+const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function byCategory(expenses: Expense[]): Record<string, number> {
+  return expenses.reduce((acc, e) => {
+    acc[e.category] = (acc[e.category] ?? 0) + e.amount;
+    return acc;
+  }, {} as Record<string, number>);
+}
+
+function pct(value: number, total: number) {
+  return total > 0 ? (value / total) * 100 : 0;
+}
+
+function changePct(curr: number, prev: number) {
+  if (prev === 0) return curr > 0 ? Infinity : 0;
+  return ((curr - prev) / prev) * 100;
+}
+
+function AnomalyBadge({ pctChange, inverse = false }: { pctChange: number; inverse?: boolean }) {
+  const abs = Math.abs(pctChange);
+  if (abs < 15) return null;
+  const isIncrease = pctChange > 0;
+  // For expenses, increase = bad (red), decrease = good (green); inverse flips this
+  const isBad = inverse ? !isIncrease : isIncrease;
+  if (abs >= 50) {
+    return isBad
+      ? <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700"><TrendingUp className="w-2.5 h-2.5" />High</span>
+      : <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700"><TrendingDown className="w-2.5 h-2.5" />Low</span>;
+  }
+  return isBad
+    ? <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700"><TrendingUp className="w-2.5 h-2.5" />Up</span>
+    : <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600"><TrendingDown className="w-2.5 h-2.5" />Down</span>;
+}
+
+function AnalysisTable({
+  current, prior, currentLabel, priorLabel, fmt,
+}: {
+  current: Expense[];
+  prior: Expense[];
+  currentLabel: string;
+  priorLabel: string;
+  fmt: (n: number) => string;
+}) {
+  const currBycat = byCategory(current);
+  const prevBycat = byCategory(prior);
+  const currTotal = current.reduce((s, e) => s + e.amount, 0);
+  const prevTotal = prior.reduce((s, e) => s + e.amount, 0);
+
+  const allCats = Array.from(new Set([
+    ...Object.keys(currBycat),
+    ...Object.keys(prevBycat),
+  ])).sort((a, b) => (currBycat[b] ?? 0) - (currBycat[a] ?? 0));
+
+  if (allCats.length === 0) return null;
+
+  const totalChange = changePct(currTotal, prevTotal);
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm min-w-[640px]">
+        <thead>
+          <tr className="text-xs text-slate-400 font-semibold uppercase tracking-wide border-b border-slate-100">
+            <th className="text-left py-2 pr-4">Category</th>
+            <th className="text-right py-2 px-3">{currentLabel}</th>
+            <th className="text-right py-2 px-3">% of Total</th>
+            <th className="text-right py-2 px-3">{priorLabel}</th>
+            <th className="text-right py-2 px-3">% of Total</th>
+            <th className="text-right py-2 pl-3">Change</th>
+          </tr>
+        </thead>
+        <tbody>
+          {allCats.map(cat => {
+            const curr = currBycat[cat] ?? 0;
+            const prev = prevBycat[cat] ?? 0;
+            const chg = changePct(curr, prev);
+            const label = EXPENSE_CATEGORIES.find(c => c.value === cat)?.label ?? cat;
+            const isNew = prev === 0 && curr > 0;
+            const isGone = curr === 0 && prev > 0;
+            return (
+              <tr key={cat} className="border-b border-slate-50 hover:bg-slate-50">
+                <td className="py-2.5 pr-4 text-slate-700 font-medium">
+                  {label}
+                  {isNew && <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">New</span>}
+                  {isGone && <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">Gone</span>}
+                </td>
+                <td className="py-2.5 px-3 text-right font-medium text-slate-800">
+                  {curr > 0 ? fmt(curr) : '—'}
+                </td>
+                <td className="py-2.5 px-3 text-right text-slate-500">
+                  {curr > 0 ? `${pct(curr, currTotal).toFixed(1)}%` : '—'}
+                </td>
+                <td className="py-2.5 px-3 text-right text-slate-400">
+                  {prev > 0 ? fmt(prev) : '—'}
+                </td>
+                <td className="py-2.5 px-3 text-right text-slate-400">
+                  {prev > 0 ? `${pct(prev, prevTotal).toFixed(1)}%` : '—'}
+                </td>
+                <td className="py-2.5 pl-3 text-right">
+                  {!isNew && !isGone && (
+                    <span className={`font-semibold ${chg > 0 ? 'text-red-600' : chg < 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                      {chg === 0 ? <Minus className="w-3.5 h-3.5 inline" /> : `${chg > 0 ? '+' : ''}${isFinite(chg) ? chg.toFixed(1) : '—'}%`}
+                    </span>
+                  )}
+                  {!isNew && !isGone && <AnomalyBadge pctChange={chg} />}
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+        <tfoot>
+          <tr className="border-t-2 border-slate-200 font-bold">
+            <td className="py-2.5 pr-4 text-slate-800">Total</td>
+            <td className="py-2.5 px-3 text-right text-slate-900">{fmt(currTotal)}</td>
+            <td className="py-2.5 px-3 text-right text-slate-400">100%</td>
+            <td className="py-2.5 px-3 text-right text-slate-500">{prevTotal > 0 ? fmt(prevTotal) : '—'}</td>
+            <td className="py-2.5 px-3 text-right text-slate-400">{prevTotal > 0 ? '100%' : '—'}</td>
+            <td className="py-2.5 pl-3 text-right">
+              {prevTotal > 0 && (
+                <span className={`font-semibold ${totalChange > 0 ? 'text-red-600' : totalChange < 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
+                  {totalChange > 0 ? '+' : ''}{totalChange.toFixed(1)}%
+                </span>
+              )}
+              {prevTotal > 0 && <AnomalyBadge pctChange={totalChange} />}
+            </td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  );
+}
 
 interface FormState {
   date: string;
@@ -102,6 +233,7 @@ function ExpenseForm({ f, onChange, onSave, onCancel, submitLabel = 'Add' }: {
 
 export default function ExpensesPage() {
   const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [prevExpenses, setPrevExpenses] = useState<Expense[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
   const [showAdd, setShowAdd] = useState(false);
@@ -110,6 +242,7 @@ export default function ExpensesPage() {
   const [editForm, setEditForm] = useState<FormState>(emptyForm());
   const [pitiEdit, setPitiEdit] = useState(false);
   const [pitiDraft, setPitiDraft] = useState('');
+  const [analysisTab, setAnalysisTab] = useState<'yoy' | 'mom'>('yoy');
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', {
@@ -121,6 +254,13 @@ export default function ExpensesPage() {
   async function load() {
     const res = await fetch(`/api/expenses?year=${filterYear}`);
     setExpenses(await res.json());
+    if (filterYear !== 'all') {
+      const prevYear = String(parseInt(filterYear) - 1);
+      const prevRes = await fetch(`/api/expenses?year=${prevYear}`);
+      setPrevExpenses(await prevRes.json());
+    } else {
+      setPrevExpenses([]);
+    }
   }
 
   useEffect(() => {
@@ -276,6 +416,72 @@ export default function ExpensesPage() {
           </div>
         )}
       </div>
+
+      {/* Expense Analysis */}
+      {expenses.length > 0 && filterYear !== 'all' && (() => {
+        const now = new Date();
+        const thisMonthIdx = now.getMonth();
+        const prevMonthIdx = thisMonthIdx === 0 ? 11 : thisMonthIdx - 1;
+        const prevMonthYear = thisMonthIdx === 0 ? String(parseInt(filterYear) - 1) : filterYear;
+
+        const currMonthExpenses = expenses.filter(e => {
+          const d = new Date(e.date);
+          return d.getFullYear() === parseInt(filterYear) && d.getMonth() === thisMonthIdx;
+        });
+        const priorMonthExpenses = (prevMonthYear === filterYear ? expenses : prevExpenses).filter(e => {
+          const d = new Date(e.date);
+          return d.getFullYear() === parseInt(prevMonthYear) && d.getMonth() === prevMonthIdx;
+        });
+
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-slate-800">Expense Analysis</h2>
+              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                <button
+                  onClick={() => setAnalysisTab('yoy')}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors ${analysisTab === 'yoy' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Year over Year
+                </button>
+                <button
+                  onClick={() => setAnalysisTab('mom')}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors ${analysisTab === 'mom' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Month over Month
+                </button>
+              </div>
+            </div>
+
+            {analysisTab === 'yoy' ? (
+              <AnalysisTable
+                current={expenses}
+                prior={prevExpenses}
+                currentLabel={filterYear}
+                priorLabel={String(parseInt(filterYear) - 1)}
+                fmt={fmt}
+              />
+            ) : (
+              <AnalysisTable
+                current={currMonthExpenses}
+                prior={priorMonthExpenses}
+                currentLabel={MONTHS_SHORT[thisMonthIdx]}
+                priorLabel={`${MONTHS_SHORT[prevMonthIdx]}${prevMonthYear !== filterYear ? ` '${prevMonthYear.slice(2)}` : ''}`}
+                fmt={fmt}
+              />
+            )}
+
+            <p className="text-xs text-slate-400 mt-3">
+              <span className="inline-flex items-center gap-1 text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded mr-2">↑ Up</span>
+              ≥15% increase &nbsp;
+              <span className="inline-flex items-center gap-1 text-red-700 bg-red-50 px-1.5 py-0.5 rounded mr-2">↑ High</span>
+              ≥50% increase &nbsp;
+              <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded mr-2">↓ Down/Low</span>
+              decrease
+            </p>
+          </div>
+        );
+      })()}
 
       {showAdd && (
         <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6 shadow-sm">
