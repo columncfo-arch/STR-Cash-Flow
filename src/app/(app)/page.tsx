@@ -72,6 +72,32 @@ function ChartTooltip({
   );
 }
 
+function PnLTooltip({
+  active, payload, label, fmt,
+}: {
+  active?: boolean;
+  payload?: { name: string; value: number | null; color: string }[];
+  label?: string;
+  fmt: (n: number) => string;
+}) {
+  if (!active || !payload?.length) return null;
+  const entries = payload.filter(p => p.value != null);
+  if (!entries.length) return null;
+  return (
+    <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm min-w-[190px]">
+      <p className="font-semibold text-slate-800 mb-2">{label}</p>
+      {entries.map(e => (
+        <div key={e.name} className="flex justify-between gap-6">
+          <span className="text-slate-500">{e.name}</span>
+          <span className={`font-medium ${e.name === 'Net Income' && e.value! < 0 ? 'text-red-500' : ''}`}>
+            {fmt(e.value!)}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PlatformTable({
   byPlatform, totalRevenue, fmt,
 }: {
@@ -338,6 +364,23 @@ export default function Dashboard() {
       VRBO: m.byPlatform.vrbo.income,
       'Monthly Target': monthlyForecasts[i],
       _gross: isActual ? m.grossRevenue : null,
+    };
+  }) ?? [];
+
+  const ytdNetMargin = ytdGross > 0 ? ytdNetIncome / ytdGross : null;
+
+  const pnlChartData = statement?.months.map((m, i) => {
+    const isActual = i <= currentMonthIdx;
+    const grossForecast = !isActual ? (monthlyForecasts[i] ?? null) : null;
+    const netForecast = grossForecast != null && ytdNetMargin != null
+      ? Math.round(grossForecast * ytdNetMargin)
+      : null;
+    return {
+      name: MONTHS[i],
+      'Gross Revenue': isActual ? m.grossRevenue : null,
+      'Net Income': isActual ? m.netIncome : null,
+      'Gross Forecast': grossForecast,
+      'Net Forecast': netForecast,
     };
   }) ?? [];
 
@@ -658,6 +701,48 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* P&L Chart */}
+      {hasData && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
+          <h2 className="font-semibold text-slate-800 mb-1">Gross Revenue &amp; Net Income</h2>
+          <p className="text-xs text-slate-400 mb-4">Actuals vs. forecast for remaining months</p>
+          <ResponsiveContainer width="100%" height={280}>
+            <ComposedChart data={pnlChartData} barGap={4} barCategoryGap="30%">
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94a3b8' }} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+              <Tooltip content={(props) => (
+                <PnLTooltip
+                  active={props.active}
+                  payload={props.payload as unknown as { name: string; value: number | null; color: string }[]}
+                  label={String(props.label ?? '')}
+                  fmt={fmt}
+                />
+              )} />
+              <Legend />
+              <Bar dataKey="Gross Revenue" fill="#10b981" radius={[3, 3, 0, 0]} />
+              <Bar dataKey="Net Income" fill="#6366f1" radius={[3, 3, 0, 0]} />
+              <Line
+                dataKey="Gross Forecast"
+                stroke="#10b981"
+                strokeWidth={2}
+                strokeDasharray="6 3"
+                dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }}
+                connectNulls
+              />
+              <Line
+                dataKey="Net Forecast"
+                stroke="#6366f1"
+                strokeWidth={2}
+                strokeDasharray="6 3"
+                dot={{ r: 3, fill: '#6366f1', strokeWidth: 0 }}
+                connectNulls
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       {/* ── Selected month detail — stacked ── */}
       {selMonth && (
