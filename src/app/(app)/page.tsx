@@ -499,7 +499,7 @@ export default function Dashboard() {
             return (
               <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Avg Occupancy</p>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Occupancy</p>
                   {editingOccTarget ? (
                     <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingOccTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
                   ) : (
@@ -548,7 +548,7 @@ export default function Dashboard() {
             return (
               <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
                 <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Avg Daily Rate</p>
+                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Daily Rate</p>
                   {editingAdrTarget ? (
                     <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingAdrTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
                   ) : (
@@ -836,8 +836,9 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── Occupancy vs Target chart (shown when no month selected) ── */}
+      {/* ── Occupancy vs Target chart + YTD tables (shown when no month selected) ── */}
       {hasData && !selMonth && (
+        <>
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
           <div className="flex items-center justify-between mb-1">
             <h2 className="font-semibold text-slate-800">Occupancy vs Target</h2>
@@ -899,6 +900,7 @@ export default function Dashboard() {
             <PlatformTable byPlatform={ytdByPlatform} totalRevenue={ytdGross} fmt={fmt} />
           </div>
         </div>
+        </>
       )}
     </div>
   );
