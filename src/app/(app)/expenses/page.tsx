@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { Plus, Pencil, Trash2, Check, X, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
 function byCategory(expenses: Expense[]): Record<string, number> {
   return expenses.reduce((acc, e) => {
@@ -26,7 +27,6 @@ function AnomalyBadge({ pctChange, inverse = false }: { pctChange: number; inver
   const abs = Math.abs(pctChange);
   if (abs < 15) return null;
   const isIncrease = pctChange > 0;
-  // For expenses, increase = bad (red), decrease = good (green); inverse flips this
   const isBad = inverse ? !isIncrease : isIncrease;
   if (abs >= 50) {
     return isBad
@@ -89,18 +89,10 @@ function AnalysisTable({
                   {isNew && <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">New</span>}
                   {isGone && <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">Gone</span>}
                 </td>
-                <td className="py-2.5 px-3 text-right font-medium text-slate-800">
-                  {curr > 0 ? fmt(curr) : '—'}
-                </td>
-                <td className="py-2.5 px-3 text-right text-slate-500">
-                  {curr > 0 ? `${pct(curr, currTotal).toFixed(1)}%` : '—'}
-                </td>
-                <td className="py-2.5 px-3 text-right text-slate-400">
-                  {prev > 0 ? fmt(prev) : '—'}
-                </td>
-                <td className="py-2.5 px-3 text-right text-slate-400">
-                  {prev > 0 ? `${pct(prev, prevTotal).toFixed(1)}%` : '—'}
-                </td>
+                <td className="py-2.5 px-3 text-right font-medium text-slate-800">{curr > 0 ? fmt(curr) : '—'}</td>
+                <td className="py-2.5 px-3 text-right text-slate-500">{curr > 0 ? `${pct(curr, currTotal).toFixed(1)}%` : '—'}</td>
+                <td className="py-2.5 px-3 text-right text-slate-400">{prev > 0 ? fmt(prev) : '—'}</td>
+                <td className="py-2.5 px-3 text-right text-slate-400">{prev > 0 ? `${pct(prev, prevTotal).toFixed(1)}%` : '—'}</td>
                 <td className="py-2.5 pl-3 text-right">
                   {!isNew && !isGone && (
                     <span className={`font-semibold ${chg > 0 ? 'text-red-600' : chg < 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
@@ -244,12 +236,21 @@ export default function ExpensesPage() {
   const [pitiDraft, setPitiDraft] = useState('');
   const [analysisTab, setAnalysisTab] = useState<'yoy' | 'mom'>('yoy');
 
+  // Bulk entry state
+  const [bulkMode, setBulkMode] = useState<'category' | 'month' | null>(null);
+  const [bulkCategory, setBulkCategory] = useState<ExpenseCategory>('cleaning');
+  const [bulkMonthIdx, setBulkMonthIdx] = useState(new Date().getMonth());
+  const [bulkAmounts, setBulkAmounts] = useState<Record<string, string>>({});
+  const [bulkSaving, setBulkSaving] = useState(false);
+
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: settings?.currency ?? 'USD',
       maximumFractionDigits: 0,
     }).format(n);
+
+  const activeYear = filterYear === 'all' ? new Date().getFullYear() : parseInt(filterYear);
 
   async function load() {
     const res = await fetch(`/api/expenses?year=${filterYear}`);
@@ -333,6 +334,112 @@ export default function ExpensesPage() {
     });
   }
 
+  // ── Bulk entry helpers ──────────────────────────────────────────────────────
+
+  function amountsForCategory(cat: ExpenseCategory): Record<string, string> {
+    const out: Record<string, string> = {};
+    expenses
+      .filter(e => {
+        const d = new Date(e.date + 'T00:00:00');
+        return e.category === cat && d.getFullYear() === activeYear;
+      })
+      .forEach(e => {
+        const m = String(new Date(e.date + 'T00:00:00').getMonth());
+        out[m] = String(Math.round(((parseFloat(out[m] ?? '0') || 0) + e.amount) * 100) / 100);
+      });
+    return out;
+  }
+
+  function amountsForMonth(monthIdx: number): Record<string, string> {
+    const out: Record<string, string> = {};
+    expenses
+      .filter(e => {
+        const d = new Date(e.date + 'T00:00:00');
+        return d.getFullYear() === activeYear && d.getMonth() === monthIdx;
+      })
+      .forEach(e => {
+        out[e.category] = String(Math.round(((parseFloat(out[e.category] ?? '0') || 0) + e.amount) * 100) / 100);
+      });
+    return out;
+  }
+
+  function openByCat(cat: ExpenseCategory) {
+    setBulkCategory(cat);
+    setBulkAmounts(amountsForCategory(cat));
+    setBulkMode('category');
+    setShowAdd(false);
+  }
+
+  function openByMonth(monthIdx: number) {
+    setBulkMonthIdx(monthIdx);
+    setBulkAmounts(amountsForMonth(monthIdx));
+    setBulkMode('month');
+    setShowAdd(false);
+  }
+
+  async function saveBulkByCategory() {
+    setBulkSaving(true);
+    const toDelete = expenses.filter(e => {
+      const d = new Date(e.date + 'T00:00:00');
+      return e.category === bulkCategory && d.getFullYear() === activeYear;
+    });
+    await Promise.all(toDelete.map(e => fetch(`/api/expenses/${e.id}`, { method: 'DELETE' })));
+
+    const catLabel = EXPENSE_CATEGORIES.find(c => c.value === bulkCategory)?.label ?? bulkCategory;
+    await Promise.all(
+      Object.entries(bulkAmounts)
+        .filter(([, v]) => v && parseFloat(v) > 0)
+        .map(([m, v]) => {
+          const mi = parseInt(m);
+          return fetch('/api/expenses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              date: `${activeYear}-${String(mi + 1).padStart(2, '0')}-01`,
+              category: bulkCategory,
+              description: `${MONTHS_SHORT[mi]} ${catLabel.toLowerCase()}`,
+              amount: parseFloat(v),
+            }),
+          });
+        })
+    );
+    setBulkSaving(false);
+    setBulkMode(null);
+    load();
+  }
+
+  async function saveBulkByMonth() {
+    setBulkSaving(true);
+    const toDelete = expenses.filter(e => {
+      const d = new Date(e.date + 'T00:00:00');
+      return d.getFullYear() === activeYear && d.getMonth() === bulkMonthIdx;
+    });
+    await Promise.all(toDelete.map(e => fetch(`/api/expenses/${e.id}`, { method: 'DELETE' })));
+
+    const monthName = MONTHS_SHORT[bulkMonthIdx];
+    const dateStr = `${activeYear}-${String(bulkMonthIdx + 1).padStart(2, '0')}-01`;
+    await Promise.all(
+      Object.entries(bulkAmounts)
+        .filter(([, v]) => v && parseFloat(v) > 0)
+        .map(([cat, v]) => {
+          const catLabel = EXPENSE_CATEGORIES.find(c => c.value === cat)?.label ?? cat;
+          return fetch('/api/expenses', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              date: dateStr,
+              category: cat,
+              description: `${monthName} ${catLabel.toLowerCase()}`,
+              amount: parseFloat(v),
+            }),
+          });
+        })
+    );
+    setBulkSaving(false);
+    setBulkMode(null);
+    load();
+  }
+
   const years = ['all', ...Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i))];
 
   const totalsByCategory = expenses.reduce((acc, e) => {
@@ -346,21 +453,35 @@ export default function ExpensesPage() {
 
   return (
     <div className="max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-6 flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Expenses</h1>
           <p className="text-slate-500 text-sm mt-1">
             {expenses.length} entries {filterYear === 'all' ? 'across all years' : `in ${filterYear}`}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2 flex-wrap">
           <select value={filterYear} onChange={e => setFilterYear(e.target.value)}
             className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white text-slate-700">
             {years.map(y => <option key={y} value={y}>{y === 'all' ? 'All Years' : y}</option>)}
           </select>
-          <button onClick={() => setShowAdd(true)}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700">
-            <Plus className="w-4 h-4" /> Add Expense
+          <button
+            onClick={() => { setBulkMode(null); setShowAdd(true); setForm(emptyForm()); }}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border transition-colors ${showAdd && !bulkMode ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+          >
+            <Plus className="w-4 h-4" /> Single
+          </button>
+          <button
+            onClick={() => openByCat(bulkCategory)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border transition-colors ${bulkMode === 'category' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+          >
+            By Category
+          </button>
+          <button
+            onClick={() => openByMonth(bulkMonthIdx)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border transition-colors ${bulkMode === 'month' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+          >
+            By Month
           </button>
         </div>
       </div>
@@ -483,7 +604,8 @@ export default function ExpensesPage() {
         );
       })()}
 
-      {showAdd && (
+      {/* ── Single expense entry ── */}
+      {showAdd && !bulkMode && (
         <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6 shadow-sm">
           <h2 className="font-semibold text-slate-800 mb-4">New Expense</h2>
           <ExpenseForm
@@ -496,6 +618,127 @@ export default function ExpensesPage() {
         </div>
       )}
 
+      {/* ── By Category bulk entry ── */}
+      {bulkMode === 'category' && (
+        <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-slate-800">Enter by Category</h2>
+            <button onClick={() => setBulkMode(null)} className="text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-3 mb-5">
+            <label className="text-xs text-slate-500 whitespace-nowrap">Category</label>
+            <select
+              value={bulkCategory}
+              onChange={e => {
+                const cat = e.target.value as ExpenseCategory;
+                setBulkCategory(cat);
+                setBulkAmounts(amountsForCategory(cat));
+              }}
+              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+            >
+              {EXPENSE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+            </select>
+            <span className="text-xs text-slate-400">Saving to {activeYear} · leave blank to clear a month</span>
+          </div>
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-5">
+            {MONTHS_SHORT.map((month, i) => (
+              <div key={i}>
+                <label className="text-xs text-slate-500 block mb-1">{month}</label>
+                <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden focus-within:border-emerald-400">
+                  <span className="text-xs text-slate-400 px-2">$</span>
+                  <input
+                    type="number"
+                    value={bulkAmounts[i] ?? ''}
+                    onChange={e => setBulkAmounts(p => ({ ...p, [i]: e.target.value }))}
+                    className="flex-1 text-sm py-1.5 pr-2 outline-none min-w-0"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={saveBulkByCategory}
+              disabled={bulkSaving}
+              className="flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-50"
+            >
+              <Check className="w-3.5 h-3.5" /> {bulkSaving ? 'Saving…' : 'Save All'}
+            </button>
+            <button
+              onClick={() => setBulkMode(null)}
+              className="flex items-center gap-1.5 border border-slate-200 px-4 py-2 rounded-lg text-sm hover:bg-slate-50"
+            >
+              <X className="w-3.5 h-3.5" /> Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── By Month bulk entry ── */}
+      {bulkMode === 'month' && (
+        <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="font-semibold text-slate-800">Enter by Month</h2>
+            <button onClick={() => setBulkMode(null)} className="text-slate-400 hover:text-slate-600">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center gap-3 mb-5">
+            <label className="text-xs text-slate-500 whitespace-nowrap">Month</label>
+            <select
+              value={bulkMonthIdx}
+              onChange={e => {
+                const mi = parseInt(e.target.value);
+                setBulkMonthIdx(mi);
+                setBulkAmounts(amountsForMonth(mi));
+              }}
+              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
+            >
+              {MONTHS_LONG.map((m, i) => <option key={i} value={i}>{m}</option>)}
+            </select>
+            <span className="text-xs text-slate-400">Saving to {activeYear} · leave blank to clear a category</span>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-5">
+            {EXPENSE_CATEGORIES.map(cat => (
+              <div key={cat.value}>
+                <label className="text-xs text-slate-500 block mb-1">{cat.label}</label>
+                <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden focus-within:border-emerald-400">
+                  <span className="text-xs text-slate-400 px-2">$</span>
+                  <input
+                    type="number"
+                    value={bulkAmounts[cat.value] ?? ''}
+                    onChange={e => setBulkAmounts(p => ({ ...p, [cat.value]: e.target.value }))}
+                    className="flex-1 text-sm py-1.5 pr-2 outline-none min-w-0"
+                    placeholder="0"
+                    min="0"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={saveBulkByMonth}
+              disabled={bulkSaving}
+              className="flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-50"
+            >
+              <Check className="w-3.5 h-3.5" /> {bulkSaving ? 'Saving…' : 'Save All'}
+            </button>
+            <button
+              onClick={() => setBulkMode(null)}
+              className="flex items-center gap-1.5 border border-slate-200 px-4 py-2 rounded-lg text-sm hover:bg-slate-50"
+            >
+              <X className="w-3.5 h-3.5" /> Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── Expense list ── */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
