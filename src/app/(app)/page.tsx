@@ -800,18 +800,18 @@ export default function Dashboard() {
                 />
               )}
               <Bar dataKey="Occupancy" radius={[4, 4, 0, 0]}>
-                {occChartData.map((entry, i) => (
-                  <Cell
-                    key={i}
-                    fill={
-                      entry.Occupancy == null
-                        ? '#e2e8f0'
-                        : targetOcc == null || entry.Occupancy >= targetOcc
-                          ? '#10b981'
-                          : '#f43f5e'
+                {occChartData.map((entry, i) => {
+                  let fill = '#e2e8f0';
+                  if (entry.Occupancy != null) {
+                    if (targetOcc == null || entry.Occupancy >= targetOcc) {
+                      fill = '#10b981'; // green — on/above target
+                    } else {
+                      const miss = targetOcc - entry.Occupancy;
+                      fill = miss <= 25 ? '#f59e0b' : '#f43f5e'; // amber ≤25pts, red >25pts
                     }
-                  />
-                ))}
+                  }
+                  return <Cell key={i} fill={fill} />;
+                })}
               </Bar>
             </ComposedChart>
           </ResponsiveContainer>
