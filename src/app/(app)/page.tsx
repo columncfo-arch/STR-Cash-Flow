@@ -418,7 +418,7 @@ export default function Dashboard() {
           {/* This Year + This Month — only when target is configured */}
           {hasTarget && annualForecast != null && <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">This Year Target</p>
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Revenue Pacing</p>
               {!editingTarget ? (
                 <button
                   onClick={() => { setTargetInput(String(manualTarget ?? Math.round(annualForecast))); setEditingTarget(true); }}
