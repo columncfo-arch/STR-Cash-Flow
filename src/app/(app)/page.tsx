@@ -392,9 +392,13 @@ export default function Dashboard() {
   const hasData = ytdGross > 0;
 
   // Occupancy baseline: prior year avg → YTD (if 3+ months in) → manual setting → 70%
-  const prevYearOcc = prevStatement?.months.some(m => m.occupancyRate > 0)
-    ? prevStatement!.months.reduce((s, m) => s + m.occupancyRate, 0) / 12
-    : null;
+  // Require ≥6 months with >5% occupancy so sparse/revenue-only imports don't corrupt the baseline
+  const prevYearOcc = (() => {
+    if (!prevStatement) return null;
+    const meaningfulMonths = prevStatement.months.filter(m => m.occupancyRate > 5);
+    if (meaningfulMonths.length < 6) return null;
+    return prevStatement.months.reduce((s, m) => s + m.occupancyRate, 0) / 12;
+  })();
   const effectiveOccBaseline =
     prevYearOcc ??
     (currentMonthIdx >= 2 ? ytdOccupancy : null) ??
