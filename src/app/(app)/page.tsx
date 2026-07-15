@@ -765,9 +765,8 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── Occupancy vs Target chart (shown when no month selected) ── */}
-      {hasData && !selMonth && (
-        <>
+      {/* ── Occupancy vs Target chart — always visible when data exists ── */}
+      {hasData && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
           <div className="flex items-center justify-between mb-1">
             <h2 className="font-semibold text-slate-800">Occupancy vs Target</h2>
@@ -777,7 +776,7 @@ export default function Dashboard() {
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 mb-4">Monthly occupancy rate · target {targetOcc != null ? `${targetOcc}%` : 'not set'}</p>
+          <p className="text-xs text-slate-400 mb-4">Monthly occupancy rate · baseline {targetOcc != null ? `${targetOcc.toFixed(1)}%` : 'not set'}</p>
           <ResponsiveContainer width="100%" height={260}>
             <ComposedChart data={occChartData} barCategoryGap="35%">
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -793,7 +792,7 @@ export default function Dashboard() {
                   stroke="#475569"
                   strokeWidth={2}
                   strokeDasharray="6 3"
-                  label={{ value: `Target ${targetOcc}%`, position: 'insideTopRight', fontSize: 11, fill: '#475569' }}
+                  label={{ value: `${targetOcc.toFixed(1)}% baseline`, position: 'insideTopRight', fontSize: 11, fill: '#475569' }}
                 />
               )}
               <Bar dataKey="Occupancy" radius={[4, 4, 0, 0]}>
@@ -813,7 +812,10 @@ export default function Dashboard() {
             </ComposedChart>
           </ResponsiveContainer>
         </div>
+      )}
 
+      {/* ── YTD tables — hidden when a month is drilled into ── */}
+      {hasData && !selMonth && (
         <div className="space-y-6 mb-8">
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
             <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Year-to-Date P&amp;L</h3>
@@ -824,7 +826,6 @@ export default function Dashboard() {
             <PlatformTable byPlatform={ytdByPlatform} totalRevenue={ytdGross} fmt={fmt} />
           </div>
         </div>
-        </>
       )}
 
       {/* ── Selected month detail — stacked ── */}
