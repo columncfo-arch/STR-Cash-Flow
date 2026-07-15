@@ -139,6 +139,15 @@ function PlatformTable({
 
 type PnLData = Pick<MonthlyStatement, 'grossRevenue' | 'platformFees' | 'fastPayFees' | 'taxRemitted' | 'refunds' | 'netRevenue' | 'ownerTaxes' | 'totalOperatingExpenses' | 'operatingIncome' | 'piti' | 'netIncome'>;
 
+// Green = on/above target · Amber = missing by ≤25 · Red = missing by >25
+// missMagnitude: absolute pct or pts below target (pass null → defaults to red)
+function perfColor(variance: number, missMagnitude: number | null, withBg: boolean): string {
+  if (variance >= 0) return withBg ? 'bg-emerald-50 text-emerald-700' : 'text-emerald-600';
+  const miss = missMagnitude ?? Infinity;
+  if (miss <= 25) return withBg ? 'bg-amber-50 text-amber-700' : 'text-amber-600';
+  return withBg ? 'bg-red-50 text-red-600' : 'text-red-500';
+}
+
 function PnLTable({ m, fmt }: { m: PnLData; fmt: (n: number) => string }) {
   // Operating expenses minus the owner-remitted taxes shown separately above the total
   const otherOpEx = m.totalOperatingExpenses - m.ownerTaxes;
@@ -481,7 +490,7 @@ export default function Dashboard() {
                 <p className="text-2xl font-bold text-slate-900">{fmt(ytdGross)}</p>
                 <p className="text-xs text-slate-400 mt-0.5 mb-2">of {ytdForecast != null ? fmt(ytdForecast) : '—'} YTD target</p>
                 {pacingVariance != null && (
-                  <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2 py-1 rounded-lg ${pacingVariance >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                  <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2 py-1 rounded-lg ${perfColor(pacingVariance, pacingVariancePct != null ? Math.abs(pacingVariancePct) : null, true)}`}>
                     {pacingVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(pacingVariance))}
                     {pacingVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(pacingVariancePct).toFixed(1)}%)</span>}
                   </span>
@@ -510,7 +519,7 @@ export default function Dashboard() {
                 </div>
                 <p className="text-2xl font-bold text-slate-900">{fmt(monthlyActual)}</p>
                 <p className="text-xs text-slate-400 mt-0.5 mb-2">of {fmt(monthlyTarget)} target</p>
-                <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2 py-1 rounded-lg ${monthlyVariance >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+                <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2 py-1 rounded-lg ${perfColor(monthlyVariance, monthlyVariancePct != null ? Math.abs(monthlyVariancePct) : null, true)}`}>
                   {monthlyVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(monthlyVariance))}
                   {monthlyVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(monthlyVariancePct).toFixed(1)}%)</span>}
                 </span>
@@ -549,7 +558,7 @@ export default function Dashboard() {
                     <div className="mt-2 flex items-center justify-between">
                       <p className="text-xs text-slate-400">Baseline {displayOccTarget.toFixed(1)}% <span className="text-slate-300">({occBaselineLabel})</span></p>
                       {occVariance != null && (
-                        <span className={`text-xs font-semibold ${occVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                        <span className={`text-xs font-semibold ${perfColor(occVariance, Math.abs(occVariance), false)}`}>
                           {occVariance >= 0 ? '▲' : '▼'} {Math.abs(occVariance).toFixed(1)}pts
                         </span>
                       )}
@@ -596,7 +605,7 @@ export default function Dashboard() {
                         {derivedAdrTarget != null && <span className="text-slate-300"> (@ {displayOccTarget?.toFixed(1)}% occ)</span>}
                       </p>
                       {adrVariance != null && (
-                        <span className={`text-xs font-semibold ${adrVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                        <span className={`text-xs font-semibold ${perfColor(adrVariance, adrVariancePct != null ? Math.abs(adrVariancePct) : null, false)}`}>
                           {adrVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(adrVariance))}{adrVariancePct != null ? ` (${Math.abs(adrVariancePct).toFixed(1)}%)` : ''}
                         </span>
                       )}
@@ -775,7 +784,7 @@ export default function Dashboard() {
           <div className="flex items-center justify-between mb-1">
             <h2 className="font-semibold text-slate-800">Occupancy vs Target</h2>
             {targetOcc != null && (
-              <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${occVariance != null && occVariance >= 0 ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>
+              <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${perfColor(occVariance ?? 0, occVariance != null ? Math.abs(occVariance) : null, true)}`}>
                 YTD {ytdOccupancy.toFixed(1)}% {occVariance != null ? `(${occVariance >= 0 ? '+' : ''}${occVariance.toFixed(1)}pts vs target)` : ''}
               </span>
             )}
