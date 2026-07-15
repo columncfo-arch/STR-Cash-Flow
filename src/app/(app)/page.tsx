@@ -668,7 +668,7 @@ export default function Dashboard() {
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
         <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
           <TrendingUp className="w-4 h-4 text-emerald-600" />
-          Monthly Revenue by Platform
+          Gross Revenue Pacing (Target and Actual)
         </h2>
         <p className="text-xs text-slate-400 mb-4">Click a month to drill into its P&amp;L</p>
         {hasData ? (
