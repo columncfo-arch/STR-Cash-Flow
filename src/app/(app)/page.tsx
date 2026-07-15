@@ -371,7 +371,7 @@ export default function Dashboard() {
 
   const pnlChartData = statement?.months.map((m, i) => {
     const isActual = i <= currentMonthIdx;
-    const grossForecast = !isActual ? (monthlyForecasts[i] ?? null) : null;
+    const grossForecast = monthlyForecasts[i] ?? null;
     const netForecast = grossForecast != null && ytdNetMargin != null
       ? Math.round(grossForecast * ytdNetMargin)
       : null;
