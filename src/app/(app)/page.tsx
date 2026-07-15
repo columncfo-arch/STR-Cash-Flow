@@ -887,6 +887,18 @@ export default function Dashboard() {
             </ComposedChart>
           </ResponsiveContainer>
         </div>
+
+        <div className="space-y-6 mb-8">
+          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+            <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Year-to-Date P&amp;L</h3>
+            <PnLTable m={ytdPnL} fmt={fmt} />
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+            <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Platform Breakdown</h3>
+            <PlatformTable byPlatform={ytdByPlatform} totalRevenue={ytdGross} fmt={fmt} />
+          </div>
+        </div>
       )}
     </div>
   );
