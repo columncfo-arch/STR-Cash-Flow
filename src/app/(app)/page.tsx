@@ -391,10 +391,32 @@ export default function Dashboard() {
 
   const hasData = ytdGross > 0;
 
-  // Occupancy and ADR targets for scoring
-  const targetOcc = settings?.targetOccupancyPct ?? null;
+  // Occupancy baseline: prior year avg → YTD (if 3+ months in) → manual setting → 70%
+  const prevYearOcc = prevStatement?.months.some(m => m.occupancyRate > 0)
+    ? prevStatement!.months.reduce((s, m) => s + m.occupancyRate, 0) / 12
+    : null;
+  const effectiveOccBaseline =
+    prevYearOcc ??
+    (currentMonthIdx >= 2 ? ytdOccupancy : null) ??
+    settings?.targetOccupancyPct ??
+    70;
+  const occBaselineLabel =
+    prevYearOcc != null ? `${year - 1} avg` :
+    currentMonthIdx >= 2 ? 'YTD avg' :
+    settings?.targetOccupancyPct != null ? 'manual' : '70% default';
+
+  // Revenue target controls: derive the ADR needed to hit it at the occupancy baseline
+  const derivedAdrTarget = manualTarget != null && effectiveOccBaseline > 0
+    ? Math.round(manualTarget / (365 * effectiveOccBaseline / 100))
+    : null;
+
+  // What to show on the cards
+  const displayOccTarget = manualTarget != null ? effectiveOccBaseline : (settings?.targetOccupancyPct ?? null);
+  const displayAdrTarget = derivedAdrTarget ?? settings?.targetAdr ?? null;
+
+  const targetOcc = displayOccTarget;
   const occVariance = targetOcc != null ? ytdOccupancy - targetOcc : null;
-  const targetAdrVal = settings?.targetAdr ?? null;
+  const targetAdrVal = displayAdrTarget;
   const adrVariance = targetAdrVal != null && ytdAdr != null ? ytdAdr - targetAdrVal : null;
   const adrVariancePct = adrVariance != null && targetAdrVal ? (adrVariance / targetAdrVal) * 100 : null;
 
@@ -492,102 +514,96 @@ export default function Dashboard() {
             );
           })()}
 
-          {/* Avg Occupancy */}
-          {hasData && (() => {
-            const targetOcc = settings?.targetOccupancyPct ?? null;
-            const occVariance = targetOcc != null ? ytdOccupancy - targetOcc : null;
-            return (
-              <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Occupancy</p>
-                  {editingOccTarget ? (
-                    <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingOccTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
-                  ) : (
-                    <button onClick={() => { setOccTargetInput(String(targetOcc ?? '')); setEditingOccTarget(true); }} className="text-slate-300 hover:text-slate-500" title="Set occupancy target"><Pencil className="w-3.5 h-3.5" /></button>
-                  )}
-                </div>
+          {/* YTD Occupancy */}
+          {hasData && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Occupancy</p>
                 {editingOccTarget ? (
-                  <div className="space-y-2">
-                    <p className="text-xs text-slate-500">Occupancy target (%)</p>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number" value={occTargetInput} onChange={e => setOccTargetInput(e.target.value)}
-                        onBlur={saveOccTarget}
-                        onKeyDown={e => e.key === 'Enter' && saveOccTarget()}
-                        className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="75" autoFocus
-                      />
-                      <span className="text-sm text-slate-400">%</span>
-                    </div>
-                  </div>
+                  <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingOccTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
                 ) : (
-                  <>
-                    <p className="text-2xl font-bold text-slate-900">{ytdOccupancy.toFixed(1)}%</p>
-                    {targetOcc != null ? (
-                      <div className="mt-2 flex items-center justify-between">
-                        <p className="text-xs text-slate-400">Target {targetOcc}%</p>
-                        {occVariance != null && (
-                          <span className={`text-xs font-semibold ${occVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                            {occVariance >= 0 ? '▲' : '▼'} {Math.abs(occVariance).toFixed(1)}pts
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-400 mt-3">Year to date</p>
-                    )}
-                  </>
+                  <button onClick={() => { setOccTargetInput(String(settings?.targetOccupancyPct ?? '')); setEditingOccTarget(true); }} className="text-slate-300 hover:text-slate-500" title="Override occupancy baseline"><Pencil className="w-3.5 h-3.5" /></button>
                 )}
               </div>
-            );
-          })()}
-
-          {/* ADR */}
-          {hasData && (() => {
-            const targetAdrVal = settings?.targetAdr ?? null;
-            const adrVariance = targetAdrVal != null && ytdAdr != null ? ytdAdr - targetAdrVal : null;
-            const adrVariancePct = adrVariance != null && targetAdrVal ? (adrVariance / targetAdrVal) * 100 : null;
-            return (
-              <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-                <div className="flex items-center justify-between mb-3">
-                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Daily Rate</p>
-                  {editingAdrTarget ? (
-                    <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingAdrTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
-                  ) : (
-                    <button onClick={() => { setAdrTargetInput(String(targetAdrVal ?? '')); setEditingAdrTarget(true); }} className="text-slate-300 hover:text-slate-500" title="Set ADR target"><Pencil className="w-3.5 h-3.5" /></button>
-                  )}
+              {editingOccTarget ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-500">Override occupancy baseline (%)</p>
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number" value={occTargetInput} onChange={e => setOccTargetInput(e.target.value)}
+                      onBlur={saveOccTarget}
+                      onKeyDown={e => e.key === 'Enter' && saveOccTarget()}
+                      className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="70" autoFocus
+                    />
+                    <span className="text-sm text-slate-400">%</span>
+                  </div>
                 </div>
-                {editingAdrTarget ? (
-                  <div className="space-y-2">
-                    <p className="text-xs text-slate-500">ADR target ($)</p>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm text-slate-400">$</span>
-                      <input
-                        type="number" value={adrTargetInput} onChange={e => setAdrTargetInput(e.target.value)}
-                        onBlur={saveAdrTarget}
-                        onKeyDown={e => e.key === 'Enter' && saveAdrTarget()}
-                        className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="225" autoFocus
-                      />
+              ) : (
+                <>
+                  <p className="text-2xl font-bold text-slate-900">{ytdOccupancy.toFixed(1)}%</p>
+                  {displayOccTarget != null ? (
+                    <div className="mt-2 flex items-center justify-between">
+                      <p className="text-xs text-slate-400">Baseline {displayOccTarget.toFixed(1)}% <span className="text-slate-300">({occBaselineLabel})</span></p>
+                      {occVariance != null && (
+                        <span className={`text-xs font-semibold ${occVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {occVariance >= 0 ? '▲' : '▼'} {Math.abs(occVariance).toFixed(1)}pts
+                        </span>
+                      )}
                     </div>
-                  </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 mt-3">Year to date</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+
+          {/* YTD Daily Rate */}
+          {hasData && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Daily Rate</p>
+                {derivedAdrTarget == null && (editingAdrTarget ? (
+                  <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingAdrTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
                 ) : (
-                  <>
-                    <p className="text-2xl font-bold text-emerald-700">{ytdAdr != null ? fmt(ytdAdr) : '—'}</p>
-                    {targetAdrVal != null ? (
-                      <div className="mt-2 flex items-center justify-between">
-                        <p className="text-xs text-slate-400">Target {fmt(targetAdrVal)}</p>
-                        {adrVariance != null && (
-                          <span className={`text-xs font-semibold ${adrVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                            {adrVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(adrVariance))}{adrVariancePct != null ? ` (${Math.abs(adrVariancePct).toFixed(1)}%)` : ''}
-                          </span>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-xs text-slate-400 mt-3">Per night YTD</p>
-                    )}
-                  </>
-                )}
+                  <button onClick={() => { setAdrTargetInput(String(settings?.targetAdr ?? '')); setEditingAdrTarget(true); }} className="text-slate-300 hover:text-slate-500" title="Set ADR target"><Pencil className="w-3.5 h-3.5" /></button>
+                ))}
               </div>
-            );
-          })()}
+              {editingAdrTarget && derivedAdrTarget == null ? (
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-500">ADR target ($)</p>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-slate-400">$</span>
+                    <input
+                      type="number" value={adrTargetInput} onChange={e => setAdrTargetInput(e.target.value)}
+                      onBlur={saveAdrTarget}
+                      onKeyDown={e => e.key === 'Enter' && saveAdrTarget()}
+                      className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="225" autoFocus
+                    />
+                  </div>
+                </div>
+              ) : (
+                <>
+                  <p className="text-2xl font-bold text-emerald-700">{ytdAdr != null ? fmt(ytdAdr) : '—'}</p>
+                  {displayAdrTarget != null ? (
+                    <div className="mt-2 flex items-center justify-between">
+                      <p className="text-xs text-slate-400">
+                        Need {fmt(displayAdrTarget)}
+                        {derivedAdrTarget != null && <span className="text-slate-300"> (@ {displayOccTarget?.toFixed(1)}% occ)</span>}
+                      </p>
+                      {adrVariance != null && (
+                        <span className={`text-xs font-semibold ${adrVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                          {adrVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(adrVariance))}{adrVariancePct != null ? ` (${Math.abs(adrVariancePct).toFixed(1)}%)` : ''}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-400 mt-3">Per night YTD</p>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 
