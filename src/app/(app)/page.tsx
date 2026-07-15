@@ -768,7 +768,7 @@ export default function Dashboard() {
               <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94a3b8' }} />
               <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} tickFormatter={v => `${v}%`} />
               <Tooltip
-                formatter={(value: number) => [`${value}%`, 'Occupancy']}
+                formatter={(value) => [`${value}%`, 'Occupancy']}
                 contentStyle={{ fontSize: 13, borderRadius: 8, border: '1px solid #e2e8f0' }}
               />
               {targetOcc != null && (
