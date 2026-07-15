@@ -326,8 +326,8 @@ export default function BookingsPage() {
         </div>
       )}
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <table className="w-full text-sm">
+      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-x-auto">
+        <table className="w-full text-sm min-w-[600px]">
           <thead>
             <tr className="border-b border-slate-100 bg-slate-50 text-slate-500 text-left">
               <th className="px-4 py-3 font-medium">Platform</th>
@@ -337,7 +337,7 @@ export default function BookingsPage() {
               <th className="px-4 py-3 font-medium text-right">Nights</th>
               <th className="px-4 py-3 font-medium text-right">Income</th>
               <th className="px-4 py-3 font-medium text-right">Nightly</th>
-              <th className="px-4 py-3 font-medium"></th>
+              <th className="sticky right-0 bg-slate-50 px-4 py-3 font-medium"></th>
             </tr>
           </thead>
           <tbody>
@@ -419,7 +419,7 @@ export default function BookingsPage() {
                       <td className="px-4 py-3 text-right text-slate-500 text-xs">
                         {b.nights > 0 && b.income > 0 ? fmt(b.income / b.nights) : '—'}
                       </td>
-                      <td className="px-4 py-3 text-right">
+                      <td className="sticky right-0 bg-white px-4 py-3 text-right border-l border-slate-100">
                         <div className="flex items-center justify-end gap-1">
                           {isEditing ? (
                             <button
