@@ -421,9 +421,16 @@ export default function OptimizationPage() {
   const trajNights = ytdActualNights * annFactor;
   const trajOccupancy = (trajNights / 365) * 100;
   const trajStays = ytdActualBookings * annFactor;
-  const ytdActualPlatformFees = completedMonths.reduce((s, m) => s + m.platformFees + m.fastPayFees + m.taxRemitted + m.refunds, 0);
+  // Split deductions to match Dashboard P&L structure
+  const ytdActualPlatformFeesOnly = completedMonths.reduce((s, m) => s + m.platformFees, 0);
+  const ytdActualTaxRemitted = completedMonths.reduce((s, m) => s + m.taxRemitted, 0);
+  const ytdActualFastPayFees = completedMonths.reduce((s, m) => s + m.fastPayFees, 0);
+  const ytdActualRefunds = completedMonths.reduce((s, m) => s + m.refunds, 0);
   const trajGrossRevenue = ytdActualGross * annFactor;
-  const trajPlatformFees = ytdActualPlatformFees * annFactor;
+  const trajPlatformFees = ytdActualPlatformFeesOnly * annFactor;
+  const trajTaxRemitted = ytdActualTaxRemitted * annFactor;
+  const trajFastPayFees = ytdActualFastPayFees * annFactor;
+  const trajRefunds = ytdActualRefunds * annFactor;
   const trajNetRevenue = ytdActualNetRevenue * annFactor;
   const trajCleaningCollected = ytdActualCleaningFeeIncome * annFactor;
   const trajCleaningCost = ytdActualCleaningCost * annFactor;
@@ -436,7 +443,8 @@ export default function OptimizationPage() {
   // Airbnb host-only model (Sept 2026 transition) charges 15.5%. VRBO is ~8%.
   // Using actual data is most accurate — it captures whichever model applies.
   // Fall back to 3% if no data yet (split-fee default for most existing hosts).
-  const effectivePlatformFeeRate = ytdActualGross > 0 ? ytdActualPlatformFees / ytdActualGross : 0.03;
+  // Only the host service fee rate (not taxes/fast pay/refunds) — matches Dashboard "Platform Fees" line
+  const effectivePlatformFeeRate = ytdActualGross > 0 ? ytdActualPlatformFeesOnly / ytdActualGross : 0.03;
 
   const mAdr = parseFloat(modelAdr) || 0;
   const mAvgStay = parseFloat(modelAvgStay) || 1;
@@ -536,7 +544,7 @@ export default function OptimizationPage() {
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
                   {ytdActualGross > 0
-                    ? 'Actual fees ÷ gross from your data'
+                    ? 'Host service fee ÷ gross (excl. taxes)'
                     : 'Default ~3% (Airbnb split-fee)'}
                 </p>
               </div>
@@ -630,14 +638,35 @@ export default function OptimizationPage() {
                   </tr>
                   <tr className="border-b border-slate-100">
                     <td className="px-5 py-3 pl-8">
-                      <div className="text-xs text-slate-500">− Platform Fees &amp; Taxes</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">{(effectivePlatformFeeRate * 100).toFixed(1)}% effective rate from your data</div>
+                      <div className="text-xs text-slate-500">− Platform Fees</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">{(effectivePlatformFeeRate * 100).toFixed(1)}% host service fee</div>
                     </td>
                     {scenarios.map((s, i) => (
                       <td key={i} className="px-5 py-3 text-right text-red-500 text-xs">({fmt2(s.platformFees)})</td>
                     ))}
                     {ytdMonths > 0 && <td className="px-5 py-3 text-right text-red-400 text-xs bg-indigo-50 border-l border-indigo-100">({fmt2(trajPlatformFees)})</td>}
                   </tr>
+                  {ytdMonths > 0 && ytdActualTaxRemitted > 0 && (
+                    <tr className="border-b border-slate-100">
+                      <td className="px-5 py-3 pl-8 text-xs text-slate-500">− Tax Retained by Platform</td>
+                      {scenarios.map((_, i) => <td key={i} className="px-5 py-3 text-right text-slate-300 text-xs">—</td>)}
+                      <td className="px-5 py-3 text-right text-red-400 text-xs bg-indigo-50 border-l border-indigo-100">({fmt2(trajTaxRemitted)})</td>
+                    </tr>
+                  )}
+                  {ytdMonths > 0 && ytdActualFastPayFees > 0 && (
+                    <tr className="border-b border-slate-100">
+                      <td className="px-5 py-3 pl-8 text-xs text-slate-500">− Fast Pay Fees</td>
+                      {scenarios.map((_, i) => <td key={i} className="px-5 py-3 text-right text-slate-300 text-xs">—</td>)}
+                      <td className="px-5 py-3 text-right text-red-400 text-xs bg-indigo-50 border-l border-indigo-100">({fmt2(trajFastPayFees)})</td>
+                    </tr>
+                  )}
+                  {ytdMonths > 0 && ytdActualRefunds > 0 && (
+                    <tr className="border-b border-slate-100">
+                      <td className="px-5 py-3 pl-8 text-xs text-slate-500">− Refunds</td>
+                      {scenarios.map((_, i) => <td key={i} className="px-5 py-3 text-right text-slate-300 text-xs">—</td>)}
+                      <td className="px-5 py-3 text-right text-red-400 text-xs bg-indigo-50 border-l border-indigo-100">({fmt2(trajRefunds)})</td>
+                    </tr>
+                  )}
                   <tr className="border-b border-slate-200 bg-slate-50">
                     <td className="px-5 py-3 font-semibold text-slate-700">Net Revenue</td>
                     {scenarios.map((s, i) => (
