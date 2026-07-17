@@ -416,7 +416,9 @@ export default function OptimizationPage() {
   const trajNights = ytdActualNights * annFactor;
   const trajOccupancy = (trajNights / 365) * 100;
   const trajStays = ytdActualBookings * annFactor;
+  const ytdActualPlatformFees = completedMonths.reduce((s, m) => s + m.platformFees + m.fastPayFees + m.taxRemitted + m.refunds, 0);
   const trajGrossRevenue = ytdActualGross * annFactor;
+  const trajPlatformFees = ytdActualPlatformFees * annFactor;
   const trajNetRevenue = ytdActualNetRevenue * annFactor;
   const trajCleaningCollected = ytdActualCleaningFeeIncome * annFactor;
   const trajCleaningCost = ytdActualCleaningCost * annFactor;
@@ -596,17 +598,26 @@ export default function OptimizationPage() {
                     ))}
                     {ytdMonths > 0 && <td className="px-5 py-3 text-right text-indigo-700 bg-indigo-50 border-l border-indigo-100">{trajStays.toFixed(1)} stays</td>}
                   </tr>
-                  <tr className="border-b border-slate-200 bg-slate-50">
+                  <tr className="border-b border-slate-100 bg-slate-50">
                     <td className="px-5 py-3 font-semibold text-slate-700">Gross Rental Revenue</td>
                     {scenarios.map((s, i) => (
                       <td key={i} className="px-5 py-3 text-right font-semibold text-slate-800">{fmt2(s.grossRevenue)}</td>
                     ))}
-                    {ytdMonths > 0 && (
-                      <td className="px-5 py-3 text-right bg-indigo-50 border-l border-indigo-100">
-                        <div className="font-semibold text-indigo-700">{fmt2(trajNetRevenue)}</div>
-                        <div className="text-[10px] text-indigo-400">net (gross {fmt2(trajGrossRevenue)})</div>
-                      </td>
-                    )}
+                    {ytdMonths > 0 && <td className="px-5 py-3 text-right font-semibold text-indigo-700 bg-indigo-50 border-l border-indigo-100">{fmt2(trajGrossRevenue)}</td>}
+                  </tr>
+                  <tr className="border-b border-slate-100">
+                    <td className="px-5 py-3 text-slate-500 pl-8 text-xs">− Platform Fees &amp; Taxes</td>
+                    {scenarios.map((_, i) => (
+                      <td key={i} className="px-5 py-3 text-right text-slate-300 text-xs">—</td>
+                    ))}
+                    {ytdMonths > 0 && <td className="px-5 py-3 text-right text-red-400 text-xs bg-indigo-50 border-l border-indigo-100">({fmt2(trajPlatformFees)})</td>}
+                  </tr>
+                  <tr className="border-b border-slate-200 bg-slate-50">
+                    <td className="px-5 py-3 font-semibold text-slate-700">Net Revenue</td>
+                    {scenarios.map((s, i) => (
+                      <td key={i} className="px-5 py-3 text-right font-semibold text-slate-800">{fmt2(s.grossRevenue)}</td>
+                    ))}
+                    {ytdMonths > 0 && <td className="px-5 py-3 text-right font-semibold text-indigo-700 bg-indigo-50 border-l border-indigo-100">{fmt2(trajNetRevenue)}</td>}
                   </tr>
                   {mCleaningFee > 0 && (
                     <tr className="border-b border-slate-100">
