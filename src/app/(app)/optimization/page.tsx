@@ -411,14 +411,17 @@ export default function OptimizationPage() {
   const ytdActualCleaningCost = completedMonths.reduce((s, m) => s + m.expensesByCategory.cleaning, 0);
   const ytdActualOtherOpEx = completedMonths.reduce((s, m) => s + m.totalOperatingExpenses, 0) - ytdActualCleaningCost;
   const ytdActualCleaningFeeIncome = cleaningFeePerStay * ytdActualBookings;
+  // Use netRevenue (after platform fees, taxes remitted, refunds) so "Your Pace ×12" aligns with Dashboard net income
+  const ytdActualNetRevenue = completedMonths.reduce((s, m) => s + m.netRevenue, 0);
   const trajNights = ytdActualNights * annFactor;
   const trajOccupancy = (trajNights / 365) * 100;
   const trajStays = ytdActualBookings * annFactor;
   const trajGrossRevenue = ytdActualGross * annFactor;
+  const trajNetRevenue = ytdActualNetRevenue * annFactor;
   const trajCleaningCollected = ytdActualCleaningFeeIncome * annFactor;
   const trajCleaningCost = ytdActualCleaningCost * annFactor;
   const trajOpEx = ytdActualOtherOpEx * annFactor;
-  const trajNetCash = trajGrossRevenue + trajCleaningCollected - trajCleaningCost - trajOpEx - annualPITI;
+  const trajNetCash = trajNetRevenue + trajCleaningCollected - trajCleaningCost - trajOpEx - annualPITI;
 
   // ── Sensitivity scenarios ─────────────────────────────────────────────────────
 
@@ -461,7 +464,7 @@ export default function OptimizationPage() {
 
       {hasData && (
         <>
-          <SectionHeader title="Profitability Sensitivity" />
+          <SectionHeader title="Scenario Planning" />
 
           <p className="text-xs text-slate-400 mb-5">
             Model what it takes to hit each profit target — nights, occupancy, and revenue required given your cost structure.
@@ -543,7 +546,7 @@ export default function OptimizationPage() {
           {scenarios.length > 0 && mAdr > 0 ? (
             <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden mb-8">
               <div className="px-6 py-3 bg-slate-800 border-b border-slate-700">
-                <h3 className="text-sm font-bold text-white">STR Profitability Sensitivity Table</h3>
+                <h3 className="text-sm font-bold text-white">Scenario Planning</h3>
               </div>
               <table className="w-full text-sm">
                 <thead>
@@ -598,7 +601,12 @@ export default function OptimizationPage() {
                     {scenarios.map((s, i) => (
                       <td key={i} className="px-5 py-3 text-right font-semibold text-slate-800">{fmt2(s.grossRevenue)}</td>
                     ))}
-                    {ytdMonths > 0 && <td className="px-5 py-3 text-right font-semibold text-indigo-700 bg-indigo-50 border-l border-indigo-100">{fmt2(trajGrossRevenue)}</td>}
+                    {ytdMonths > 0 && (
+                      <td className="px-5 py-3 text-right bg-indigo-50 border-l border-indigo-100">
+                        <div className="font-semibold text-indigo-700">{fmt2(trajNetRevenue)}</div>
+                        <div className="text-[10px] text-indigo-400">net (gross {fmt2(trajGrossRevenue)})</div>
+                      </td>
+                    )}
                   </tr>
                   {mCleaningFee > 0 && (
                     <tr className="border-b border-slate-100">
