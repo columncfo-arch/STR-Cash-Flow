@@ -19,23 +19,28 @@ function mean(arr: number[]) { return arr.length ? arr.reduce((s, v) => s + v, 0
 
 interface ScenarioResult {
   target: number; stays: number; nights: number; occupancy: number;
-  grossRevenue: number; cleaningCollected: number; cleaningPaidOut: number;
+  grossRevenue: number; platformFees: number; netRevenue: number;
+  cleaningCollected: number; cleaningPaidOut: number;
   annualPITI: number; annualOpEx: number; netCashFlow: number;
 }
 
 function computeScenario(
   target: number, adr: number, avgStay: number,
   cleaningFee: number, cleaningCost: number, annualPITI: number, annualOpEx: number,
+  platformFeeRate: number,
 ): ScenarioResult | null {
   const netCleaningPerStay = cleaningFee - cleaningCost;
-  const totalPerStay = adr * avgStay + netCleaningPerStay;
+  // Solve: target = gross*(1-feeRate) + cleaningNet - opEx - PITI
+  const netAdrPerNight = adr * (1 - platformFeeRate);
+  const totalPerStay = netAdrPerNight * avgStay + netCleaningPerStay;
   if (totalPerStay <= 0) return null;
-  // Solve: target = grossRevenue + cleaningNet - annualOpEx - annualPITI
   const stays = (target + annualPITI + annualOpEx) / totalPerStay;
   const nights = stays * avgStay;
+  const grossRevenue = adr * nights;
+  const platformFees = grossRevenue * platformFeeRate;
   return {
     target, stays, nights, occupancy: (nights / 365) * 100,
-    grossRevenue: adr * nights,
+    grossRevenue, platformFees, netRevenue: grossRevenue - platformFees,
     cleaningCollected: cleaningFee * stays,
     cleaningPaidOut: cleaningCost * stays,
     annualPITI, annualOpEx, netCashFlow: target,
@@ -427,13 +432,15 @@ export default function OptimizationPage() {
 
   // ── Sensitivity scenarios ─────────────────────────────────────────────────────
 
+  const effectivePlatformFeeRate = ytdActualGross > 0 ? ytdActualPlatformFees / ytdActualGross : 0;
+
   const mAdr = parseFloat(modelAdr) || 0;
   const mAvgStay = parseFloat(modelAvgStay) || 1;
   const mCleaningFee = parseFloat(modelCleaningFee) || 0;
   const mCleaningCost = parseFloat(modelCleaningCost) || 0;
   const mOpEx = parseFloat(modelOpEx) || 0;
   const scenarios: ScenarioResult[] = scenarioTargets
-    .map(t => computeScenario(parseFloat(t) || 0, mAdr, mAvgStay, mCleaningFee, mCleaningCost, annualPITI, mOpEx))
+    .map(t => computeScenario(parseFloat(t) || 0, mAdr, mAvgStay, mCleaningFee, mCleaningCost, annualPITI, mOpEx, effectivePlatformFeeRate))
     .filter((s): s is ScenarioResult => s !== null);
 
   const hasData = activeMonths.length > 0;
@@ -516,6 +523,13 @@ export default function OptimizationPage() {
                   onBlur={saveModel} placeholder="e.g. 9000" min="0"
                   className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2" />
                 <p className="text-xs text-slate-400 mt-0.5">Utilities, maintenance, etc. (excl. cleaning)</p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Platform Fee Rate</label>
+                <div className="text-sm border border-slate-100 bg-slate-50 rounded-lg px-3 py-2 text-slate-500">
+                  {effectivePlatformFeeRate > 0 ? `${(effectivePlatformFeeRate * 100).toFixed(1)}%` : '—'}
+                </div>
+                <p className="text-xs text-slate-400 mt-0.5">From actual data (fees ÷ gross)</p>
               </div>
             </div>
 
@@ -607,15 +621,15 @@ export default function OptimizationPage() {
                   </tr>
                   <tr className="border-b border-slate-100">
                     <td className="px-5 py-3 text-slate-500 pl-8 text-xs">− Platform Fees &amp; Taxes</td>
-                    {scenarios.map((_, i) => (
-                      <td key={i} className="px-5 py-3 text-right text-slate-300 text-xs">—</td>
+                    {scenarios.map((s, i) => (
+                      <td key={i} className="px-5 py-3 text-right text-red-500 text-xs">({fmt2(s.platformFees)})</td>
                     ))}
                     {ytdMonths > 0 && <td className="px-5 py-3 text-right text-red-400 text-xs bg-indigo-50 border-l border-indigo-100">({fmt2(trajPlatformFees)})</td>}
                   </tr>
                   <tr className="border-b border-slate-200 bg-slate-50">
                     <td className="px-5 py-3 font-semibold text-slate-700">Net Revenue</td>
                     {scenarios.map((s, i) => (
-                      <td key={i} className="px-5 py-3 text-right font-semibold text-slate-800">{fmt2(s.grossRevenue)}</td>
+                      <td key={i} className="px-5 py-3 text-right font-semibold text-slate-800">{fmt2(s.netRevenue)}</td>
                     ))}
                     {ytdMonths > 0 && <td className="px-5 py-3 text-right font-semibold text-indigo-700 bg-indigo-50 border-l border-indigo-100">{fmt2(trajNetRevenue)}</td>}
                   </tr>
