@@ -432,9 +432,11 @@ export default function OptimizationPage() {
 
   // ── Sensitivity scenarios ─────────────────────────────────────────────────────
 
-  // Standard platform fee rates: Airbnb 15.5%, VRBO 8% (5% commission + 3% processing)
-  // Fall back to 15% default if no actual data yet
-  const effectivePlatformFeeRate = ytdActualGross > 0 ? ytdActualPlatformFees / ytdActualGross : 0.15;
+  // Effective rate from actual data. Airbnb split-fee model (current default) charges hosts ~3%;
+  // Airbnb host-only model (Sept 2026 transition) charges 15.5%. VRBO is ~8%.
+  // Using actual data is most accurate — it captures whichever model applies.
+  // Fall back to 3% if no data yet (split-fee default for most existing hosts).
+  const effectivePlatformFeeRate = ytdActualGross > 0 ? ytdActualPlatformFees / ytdActualGross : 0.03;
 
   const mAdr = parseFloat(modelAdr) || 0;
   const mAvgStay = parseFloat(modelAvgStay) || 1;
@@ -533,7 +535,9 @@ export default function OptimizationPage() {
                   {ytdActualGross === 0 && <span className="text-slate-400 ml-1">(default)</span>}
                 </div>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {ytdActualGross > 0 ? 'From actual data (fees ÷ gross)' : 'Airbnb 15.5% · VRBO 8%'}
+                  {ytdActualGross > 0
+                    ? 'Actual fees ÷ gross from your data'
+                    : 'Default ~3% (Airbnb split-fee)'}
                 </p>
               </div>
             </div>
@@ -627,7 +631,7 @@ export default function OptimizationPage() {
                   <tr className="border-b border-slate-100">
                     <td className="px-5 py-3 pl-8">
                       <div className="text-xs text-slate-500">− Platform Fees &amp; Taxes</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">Airbnb 15.5% · VRBO 8%</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">{(effectivePlatformFeeRate * 100).toFixed(1)}% effective rate from your data</div>
                     </td>
                     {scenarios.map((s, i) => (
                       <td key={i} className="px-5 py-3 text-right text-red-500 text-xs">({fmt2(s.platformFees)})</td>
