@@ -432,7 +432,9 @@ export default function OptimizationPage() {
 
   // ── Sensitivity scenarios ─────────────────────────────────────────────────────
 
-  const effectivePlatformFeeRate = ytdActualGross > 0 ? ytdActualPlatformFees / ytdActualGross : 0;
+  // Standard platform fee rates: Airbnb 15.5%, VRBO 8% (5% commission + 3% processing)
+  // Fall back to 15% default if no actual data yet
+  const effectivePlatformFeeRate = ytdActualGross > 0 ? ytdActualPlatformFees / ytdActualGross : 0.15;
 
   const mAdr = parseFloat(modelAdr) || 0;
   const mAvgStay = parseFloat(modelAvgStay) || 1;
@@ -527,9 +529,12 @@ export default function OptimizationPage() {
               <div>
                 <label className="text-xs text-slate-500 block mb-1">Platform Fee Rate</label>
                 <div className="text-sm border border-slate-100 bg-slate-50 rounded-lg px-3 py-2 text-slate-500">
-                  {effectivePlatformFeeRate > 0 ? `${(effectivePlatformFeeRate * 100).toFixed(1)}%` : '—'}
+                  {`${(effectivePlatformFeeRate * 100).toFixed(1)}%`}
+                  {ytdActualGross === 0 && <span className="text-slate-400 ml-1">(default)</span>}
                 </div>
-                <p className="text-xs text-slate-400 mt-0.5">From actual data (fees ÷ gross)</p>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  {ytdActualGross > 0 ? 'From actual data (fees ÷ gross)' : 'Airbnb 15.5% · VRBO 8%'}
+                </p>
               </div>
             </div>
 
@@ -620,7 +625,10 @@ export default function OptimizationPage() {
                     {ytdMonths > 0 && <td className="px-5 py-3 text-right font-semibold text-indigo-700 bg-indigo-50 border-l border-indigo-100">{fmt2(trajGrossRevenue)}</td>}
                   </tr>
                   <tr className="border-b border-slate-100">
-                    <td className="px-5 py-3 text-slate-500 pl-8 text-xs">− Platform Fees &amp; Taxes</td>
+                    <td className="px-5 py-3 pl-8">
+                      <div className="text-xs text-slate-500">− Platform Fees &amp; Taxes</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">Airbnb 15.5% · VRBO 8%</div>
+                    </td>
                     {scenarios.map((s, i) => (
                       <td key={i} className="px-5 py-3 text-right text-red-500 text-xs">({fmt2(s.platformFees)})</td>
                     ))}
