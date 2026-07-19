@@ -148,7 +148,8 @@ export interface ForecastYear {
   year: number;
   type: 'actual' | 'partial' | 'forecast';
   grossRevenue: number;
-  operatingExpenses: number;
+  platformFees: number;      // platform service fees + fast pay + tax remitted (separate from operatingExpenses)
+  operatingExpenses: number; // cleaning + manual expenses + owner-remitted taxes (excludes platform fees)
   piti: number;
   netIncome: number;
   growthPct: number | null;
@@ -158,8 +159,10 @@ export interface ForecastYear {
   isManualEntry: boolean;
   blended: boolean;          // current year: true = actuals + remainder forecast
   ytdGross?: number;         // breakdown: actual portion
+  ytdPlatformFees?: number;
   ytdOpEx?: number;
   forecastGross?: number;    // breakdown: projected remainder
+  forecastPlatformFees?: number;
   forecastOpEx?: number;
 }
 

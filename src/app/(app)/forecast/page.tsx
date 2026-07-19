@@ -770,6 +770,7 @@ export default function ForecastPage() {
               <th className="px-4 py-3 font-medium text-right">Net Cash Flow</th>
               <th className="px-4 py-3 font-medium text-right">Cumulative</th>
               <th className="px-4 py-3 font-medium text-right">Gross Revenue</th>
+              <th className="px-4 py-3 font-medium text-right">Platform Fees</th>
               <th className="px-4 py-3 font-medium text-right">Op. Expenses</th>
               <th className="px-4 py-3 font-medium text-right">PITI</th>
               <th className="px-4 py-3 font-medium text-right">Growth</th>
@@ -794,6 +795,7 @@ export default function ForecastPage() {
                         onChange={v => setOverrideDraft(d => ({ ...d, revenue: v }))}
                         onBlur={() => scheduleRowSave(row.year)} onFocus={cancelRowSave} />
                     </td>
+                    <td className="px-4 py-3 text-right text-slate-400 text-xs">{fmt(row.platformFees)}</td>
                     <td className="px-4 py-3">
                       <EditCell value={overrideDraft.expenses} placeholder={String(row.operatingExpenses)}
                         onChange={v => setOverrideDraft(d => ({ ...d, expenses: v }))}
@@ -847,6 +849,14 @@ export default function ForecastPage() {
                     {row.blended && !row.isManualRevenue && row.ytdGross !== undefined && row.forecastGross !== undefined && (
                       <div className="text-[10px] text-slate-400 font-normal">
                         {fmt(row.ytdGross)} act + {fmt(row.forecastGross)} proj
+                      </div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right text-slate-500">
+                    {row.platformFees > 0 ? `(${fmt(row.platformFees)})` : <span className="text-slate-300">—</span>}
+                    {row.blended && row.ytdPlatformFees !== undefined && row.forecastPlatformFees !== undefined && (
+                      <div className="text-[10px] text-slate-400 font-normal">
+                        {fmt(row.ytdPlatformFees)} act + {fmt(row.forecastPlatformFees)} proj
                       </div>
                     )}
                   </td>
@@ -947,7 +957,7 @@ export default function ForecastPage() {
                 onChange={e => setAddYearDraft(d => ({ ...d, expenses: e.target.value }))}
                 placeholder="0" min="0"
                 className="w-48 text-sm border border-slate-200 rounded-lg px-3 py-2" />
-              <p className="text-xs text-slate-400 mt-1">All costs except PITI: platform fees, cleaning, utilities, etc.</p>
+              <p className="text-xs text-slate-400 mt-1">All costs except PITI: cleaning, utilities, maintenance, etc.</p>
             </div>
           ) : (
             <div className="mb-4">
