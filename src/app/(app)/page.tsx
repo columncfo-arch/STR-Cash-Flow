@@ -471,6 +471,7 @@ export default function Dashboard() {
   const occChartData = statement?.months.map((m, i) => ({
     name: MONTHS[i],
     Occupancy: i <= currentMonthIdx ? parseFloat(m.occupancyRate.toFixed(1)) : null,
+    ADR: i <= currentMonthIdx && m.totalNights > 0 ? Math.round(m.grossRevenue / m.totalNights) : null,
   })) ?? [];
 
   const hasData = ytdGross > 0;
@@ -506,7 +507,14 @@ export default function Dashboard() {
   const occVariance = targetOcc != null ? ytdOccupancy - targetOcc : null;
   const currentMonthOccupancy = statement?.months[currentMonthIdx]?.occupancyRate ?? null;
   const curMonthOccVariance = targetOcc != null && currentMonthOccupancy != null ? currentMonthOccupancy - targetOcc : null;
+  const curMonthStmtNights = statement?.months[currentMonthIdx]?.totalNights ?? 0;
+  const currentMonthAdr = curMonthStmtNights > 0
+    ? Math.round((statement?.months[currentMonthIdx]?.grossRevenue ?? 0) / curMonthStmtNights)
+    : null;
   const targetAdrVal = displayAdrTarget;
+  const curMonthAdrVariance = targetAdrVal != null && currentMonthAdr != null ? currentMonthAdr - targetAdrVal : null;
+  const curMonthAdrVariancePct = targetAdrVal != null && targetAdrVal !== 0 && curMonthAdrVariance != null
+    ? (curMonthAdrVariance / targetAdrVal) * 100 : null;
   const adrVariance = targetAdrVal != null && ytdAdr != null ? ytdAdr - targetAdrVal : null;
   const adrVariancePct = adrVariance != null && targetAdrVal ? (adrVariance / targetAdrVal) * 100 : null;
 
@@ -843,9 +851,9 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Occupancy + ADR tiles */}
+      {/* Pricing & Occupancy tiles */}
       {hasData && !selMonth && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Occupancy</p>
@@ -951,32 +959,57 @@ export default function Dashboard() {
               </>
             )}
           </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+            <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">{MONTHS_LONG[currentMonthIdx]} Daily Rate</p>
+            {currentMonthAdr != null ? (
+              <>
+                <p className="text-2xl font-bold text-emerald-700">{fmt(currentMonthAdr)}</p>
+                {curMonthAdrVariance != null ? (
+                  <div className="mt-2 flex items-center justify-between">
+                    <p className="text-xs text-slate-400">Target {fmt(targetAdrVal!)}</p>
+                    <span className={`text-xs font-semibold ${perfColor(curMonthAdrVariance, curMonthAdrVariancePct != null ? Math.abs(curMonthAdrVariancePct) : null, false)}`}>
+                      {curMonthAdrVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(curMonthAdrVariance))}{curMonthAdrVariancePct != null ? ` (${Math.abs(curMonthAdrVariancePct).toFixed(1)}%)` : ''}
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 mt-3">Per night this month</p>
+                )}
+              </>
+            ) : (
+              <p className="text-2xl font-bold text-slate-400">—</p>
+            )}
+          </div>
         </div>
       )}
 
-      {/* ── Occupancy vs Target chart — always visible when data exists ── */}
+      {/* ── Pricing & Occupancy chart ── */}
       {hasData && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
           <div className="flex items-center justify-between mb-1">
-            <h2 className="font-semibold text-slate-800">Occupancy vs Target</h2>
+            <h2 className="font-semibold text-slate-800">Pricing &amp; Occupancy</h2>
             {targetOcc != null && (
               <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${perfColor(occVariance ?? 0, occVariance != null ? Math.abs(occVariance) : null, true)}`}>
                 YTD {ytdOccupancy.toFixed(1)}% {occVariance != null ? `(${occVariance >= 0 ? '+' : ''}${occVariance.toFixed(1)}pts vs target)` : ''}
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 mb-4">Monthly occupancy rate · baseline {targetOcc != null ? `${targetOcc.toFixed(1)}%` : 'not set'}</p>
-          <ResponsiveContainer width="100%" height={260}>
+          <p className="text-xs text-slate-400 mb-4">Monthly occupancy (bars) · ADR per night (line) · baseline {targetOcc != null ? `${targetOcc.toFixed(1)}%` : 'not set'}</p>
+          <ResponsiveContainer width="100%" height={280}>
             <ComposedChart data={occChartData} barCategoryGap="35%">
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94a3b8' }} />
-              <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} tickFormatter={v => `${v}%`} />
+              <YAxis yAxisId="occ" domain={[0, 100]} tick={{ fontSize: 12 }} tickFormatter={v => `${v}%`} />
+              <YAxis yAxisId="adr" orientation="right" tick={{ fontSize: 12 }} tickFormatter={v => `$${v}`} width={55} />
               <Tooltip
-                formatter={(value) => [`${value}%`, 'Occupancy']}
+                formatter={(value, name) =>
+                  name === 'ADR' ? [`$${value}`, 'ADR / night'] : [`${value}%`, 'Occupancy']
+                }
                 contentStyle={{ fontSize: 13, borderRadius: 8, border: '1px solid #e2e8f0' }}
               />
               {targetOcc != null && (
                 <ReferenceLine
+                  yAxisId="occ"
                   y={targetOcc}
                   stroke="#475569"
                   strokeWidth={2}
@@ -984,20 +1017,21 @@ export default function Dashboard() {
                   label={{ value: `${targetOcc.toFixed(1)}% baseline`, position: 'insideTopRight', fontSize: 11, fill: '#475569' }}
                 />
               )}
-              <Bar dataKey="Occupancy" radius={[4, 4, 0, 0]}>
+              <Bar yAxisId="occ" dataKey="Occupancy" radius={[4, 4, 0, 0]}>
                 {occChartData.map((entry, i) => {
                   let fill = '#e2e8f0';
                   if (entry.Occupancy != null) {
                     if (targetOcc == null || entry.Occupancy >= targetOcc) {
-                      fill = '#10b981'; // green — on/above target
+                      fill = '#10b981';
                     } else {
                       const miss = targetOcc - entry.Occupancy;
-                      fill = miss <= 25 ? '#f59e0b' : '#f43f5e'; // amber ≤25pts, red >25pts
+                      fill = miss <= 25 ? '#f59e0b' : '#f43f5e';
                     }
                   }
                   return <Cell key={i} fill={fill} />;
                 })}
               </Bar>
+              <Line yAxisId="adr" dataKey="ADR" type="monotone" stroke="#6366f1" strokeWidth={2} dot={{ r: 3, fill: '#6366f1' }} activeDot={{ r: 5 }} connectNulls={false} />
             </ComposedChart>
           </ResponsiveContainer>
         </div>
