@@ -234,18 +234,12 @@ export default function Dashboard() {
   const curMonthStmt = statement?.months[currentMonthIdx] ?? null;
   const curActualBookings = curMonthStmt?.bookings.filter(b => b.checkIn <= todayStr) ?? [];
   const curActualGross = curActualBookings.reduce((s, b) => s + b.income, 0);
-  const curActualPlatformFees = curActualBookings.reduce(
-    (s, b) => s + (b.platformFee ?? 0) + (b.fastPayFee ?? 0) + (b.taxRemitted ?? 0) + (b.taxWithheld ?? 0), 0);
-  const curActualOwnerTaxes = curActualBookings.reduce((s, b) => s + (b.lodgingTaxOwnerRemits ?? 0), 0);
   const curActualNights = curActualBookings.reduce((s, b) => s + b.nights, 0);
-  // Use full-month recorded expenses (not future-dated) but swap owner taxes to actual bookings only
-  const curActualOpEx = curMonthStmt
-    ? curMonthStmt.totalOperatingExpenses - curMonthStmt.ownerTaxes + curActualOwnerTaxes
-    : 0;
-  const curActualNetIncome = curActualGross - curActualPlatformFees - curActualOpEx - (settings?.monthlyPITI ?? 0);
 
+  // Gross: filter to check-ins on or before today (revenue can be tracked to the day)
   const ytdGross = completedMonths.reduce((s, m) => s + m.grossRevenue, 0) + curActualGross;
-  const ytdNetIncome = completedMonths.reduce((s, m) => s + m.netIncome, 0) + curActualNetIncome;
+  // Net income: completed months only — mixing partial-month revenue with full-month expenses/PITI is misleading
+  const ytdNetIncome = completedMonths.reduce((s, m) => s + m.netIncome, 0);
   const ytdNights = completedMonths.reduce((s, m) => s + m.totalNights, 0) + curActualNights;
   const daysInCurMonth = new Date(year, currentMonthIdx + 1, 0).getDate();
   const curMonthPartialOccupancy = curActualNights / daysInCurMonth;
@@ -409,8 +403,10 @@ export default function Dashboard() {
   // CM ratio = (net + PITI) / gross → isolates variable cost rate from fixed costs.
   // Prefer YTD actuals (best signal); fall back to prior year annual if no current data.
   const monthlyPITI = settings?.monthlyPITI ?? 0;
-  const ytdPITITotal = monthlyPITI * (currentMonthIdx + 1);
-  const ytdCmRatio = ytdGross > 0 ? (ytdNetIncome + ytdPITITotal) / ytdGross : null;
+  // CM ratio uses completed months for both sides so gross and net cover the same period
+  const completedGross = completedMonths.reduce((s, m) => s + m.grossRevenue, 0);
+  const ytdPITITotal = monthlyPITI * completedMonths.length;
+  const ytdCmRatio = completedGross > 0 ? (ytdNetIncome + ytdPITITotal) / completedGross : null;
 
   const prevAnnualGross = prevStatement ? prevStatement.months.reduce((s, m) => s + m.grossRevenue, 0) : 0;
   const prevAnnualNet = prevStatement ? prevStatement.months.reduce((s, m) => s + m.netIncome, 0) : 0;
@@ -423,16 +419,17 @@ export default function Dashboard() {
     return Math.round(monthlyForecasts[i]! * cmRatio - monthlyPITI);
   });
 
-  // Blended full-year estimate: actual YTD + projected remaining months
-  // This ensures: earned + projRemainingNet = annualNetForecast (always reconciles)
-  const projRemainingGross = monthlyForecasts.slice(currentMonthIdx + 1).reduce<number>((s, v) => s + (v ?? 0), 0);
+  // Annual projection: Jan–Jul actual + Aug–Dec forecast (current month is in "remaining")
+  // This ensures earned + projRemainingNet = annualNetForecast always reconciles
+  const projRemainingGross = monthlyForecasts.slice(currentMonthIdx).reduce<number>((s, v) => s + (v ?? 0), 0);
   const projRemainingNet = cmRatio != null
-    ? Math.round(projRemainingGross * cmRatio - monthlyPITI * (11 - currentMonthIdx))
+    ? Math.round(projRemainingGross * cmRatio - monthlyPITI * (12 - currentMonthIdx))
     : null;
   const annualNetForecast = projRemainingNet != null ? ytdNetIncome + projRemainingNet : null;
 
   const currentMonthNetIncome = statement?.months[currentMonthIdx]?.netIncome ?? 0;
-  const ytdGrossForecastTotal = monthlyForecasts.slice(0, currentMonthIdx + 1).reduce<number>((s, v) => s + (v ?? 0), 0);
+  // NI pacing: compare completed months actual vs completed months forecast (same time horizon)
+  const ytdGrossForecastTotal = monthlyForecasts.slice(0, currentMonthIdx).reduce<number>((s, v) => s + (v ?? 0), 0);
   const ytdNetForecast = cmRatio != null
     ? Math.round(ytdGrossForecastTotal * cmRatio - ytdPITITotal)
     : null;
