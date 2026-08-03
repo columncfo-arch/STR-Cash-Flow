@@ -225,12 +225,34 @@ export default function Dashboard() {
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: settings?.currency ?? 'USD', maximumFractionDigits: 0 }).format(n);
 
-  // YTD stats
+  // YTD stats — tile/pacing metrics filter current month to check-ins on or before today;
+  // ytdMonths (full current month) is kept for the P&L and platform tables below.
+  const todayStr = `${year}-${String(currentMonthIdx + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  const completedMonths = statement?.months.slice(0, currentMonthIdx) ?? [];
   const ytdMonths = statement?.months.slice(0, currentMonthIdx + 1) ?? [];
-  const ytdGross = ytdMonths.reduce((s, m) => s + m.grossRevenue, 0);
-  const ytdNetIncome = ytdMonths.reduce((s, m) => s + m.netIncome, 0);
-  const ytdNights = ytdMonths.reduce((s, m) => s + m.totalNights, 0);
-  const ytdOccupancy = ytdMonths.length > 0 ? ytdMonths.reduce((s, m) => s + m.occupancyRate, 0) / ytdMonths.length : 0;
+
+  const curMonthStmt = statement?.months[currentMonthIdx] ?? null;
+  const curActualBookings = curMonthStmt?.bookings.filter(b => b.checkIn <= todayStr) ?? [];
+  const curActualGross = curActualBookings.reduce((s, b) => s + b.income, 0);
+  const curActualPlatformFees = curActualBookings.reduce(
+    (s, b) => s + (b.platformFee ?? 0) + (b.fastPayFee ?? 0) + (b.taxRemitted ?? 0) + (b.taxWithheld ?? 0), 0);
+  const curActualOwnerTaxes = curActualBookings.reduce((s, b) => s + (b.lodgingTaxOwnerRemits ?? 0), 0);
+  const curActualNights = curActualBookings.reduce((s, b) => s + b.nights, 0);
+  // Use full-month recorded expenses (not future-dated) but swap owner taxes to actual bookings only
+  const curActualOpEx = curMonthStmt
+    ? curMonthStmt.totalOperatingExpenses - curMonthStmt.ownerTaxes + curActualOwnerTaxes
+    : 0;
+  const curActualNetIncome = curActualGross - curActualPlatformFees - curActualOpEx - (settings?.monthlyPITI ?? 0);
+
+  const ytdGross = completedMonths.reduce((s, m) => s + m.grossRevenue, 0) + curActualGross;
+  const ytdNetIncome = completedMonths.reduce((s, m) => s + m.netIncome, 0) + curActualNetIncome;
+  const ytdNights = completedMonths.reduce((s, m) => s + m.totalNights, 0) + curActualNights;
+  const daysInCurMonth = new Date(year, currentMonthIdx + 1, 0).getDate();
+  const curMonthPartialOccupancy = curActualNights / daysInCurMonth;
+  const occupancyMonthCount = completedMonths.length + (curMonthStmt ? 1 : 0);
+  const ytdOccupancy = occupancyMonthCount > 0
+    ? (completedMonths.reduce((s, m) => s + m.occupancyRate, 0) + curMonthPartialOccupancy) / occupancyMonthCount
+    : 0;
   const ytdAdr = ytdNights > 0 ? ytdGross / ytdNights : null;
   const ytdPnL: PnLData = {
     grossRevenue: ytdGross,
