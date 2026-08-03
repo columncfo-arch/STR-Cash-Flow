@@ -15,6 +15,7 @@ const PLATFORM_OPTIONS: { value: Platform; label: string }[] = [
 
 interface EditState {
   id: string;
+  platform: Platform;
   checkIn: string;
   income: string;
   guestName: string;
@@ -90,6 +91,7 @@ export default function BookingsPage() {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        platform: current.platform,
         checkIn: current.checkIn,
         income: parseFloat(current.income) || 0,
         guestName: current.guestName || undefined,
@@ -356,7 +358,21 @@ export default function BookingsPage() {
                   <>
                     <tr key={b.id} className={`border-b ${isEditing ? 'border-slate-200 bg-slate-50' : 'border-slate-50 hover:bg-slate-50'}`}>
                       <td className="px-4 py-3">
-                        <PlatformBadge platform={b.platform} />
+                        {isEditing ? (
+                          <select
+                            value={editState.platform}
+                            onChange={e => setEditState(s => s ? { ...s, platform: e.target.value as Platform } : s)}
+                            onBlur={() => scheduleEditSave(b.id)}
+                            onFocus={cancelEditSave}
+                            className="text-sm border border-emerald-300 rounded px-2 py-1 bg-white"
+                          >
+                            {PLATFORM_OPTIONS.map(o => (
+                              <option key={o.value} value={o.value}>{o.label}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <PlatformBadge platform={b.platform} />
+                        )}
                       </td>
                       <td className="px-4 py-3 text-slate-700 max-w-[160px]">
                         {isEditing ? (
@@ -437,6 +453,7 @@ export default function BookingsPage() {
                                   cancelEditSave();
                                   setEditState({
                                     id: b.id,
+                                    platform: b.platform,
                                     checkIn: b.checkIn,
                                     income: String(b.income),
                                     guestName: b.guestName ?? b.bookerName ?? '',
