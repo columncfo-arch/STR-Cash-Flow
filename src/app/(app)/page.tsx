@@ -471,8 +471,8 @@ export default function Dashboard() {
   const occChartData = statement?.months.map((m, i) => ({
     name: MONTHS[i],
     Occupancy: i <= currentMonthIdx ? parseFloat(m.occupancyRate.toFixed(1)) : null,
-    // Confirmed future bookings expressed as occupancy — only shown when nights are already on the books
-    ProjectedOccupancy: i > currentMonthIdx && m.totalNights > 0 ? parseFloat(m.occupancyRate.toFixed(1)) : null,
+    // Confirmed future bookings expressed as occupancy — all remaining months shown, 0% if nothing booked yet
+    ProjectedOccupancy: i > currentMonthIdx ? parseFloat(m.occupancyRate.toFixed(1)) : null,
     ADR: i <= currentMonthIdx && m.totalNights > 0 ? Math.round(m.grossRevenue / m.totalNights) : null,
   })) ?? [];
 
