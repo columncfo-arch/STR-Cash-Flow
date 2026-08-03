@@ -471,6 +471,8 @@ export default function Dashboard() {
   const occChartData = statement?.months.map((m, i) => ({
     name: MONTHS[i],
     Occupancy: i <= currentMonthIdx ? parseFloat(m.occupancyRate.toFixed(1)) : null,
+    // Confirmed future bookings expressed as occupancy — only shown when nights are already on the books
+    ProjectedOccupancy: i > currentMonthIdx && m.totalNights > 0 ? parseFloat(m.occupancyRate.toFixed(1)) : null,
     ADR: i <= currentMonthIdx && m.totalNights > 0 ? Math.round(m.grossRevenue / m.totalNights) : null,
   })) ?? [];
 
@@ -994,7 +996,7 @@ export default function Dashboard() {
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 mb-4">Monthly occupancy (bars) · ADR per night (line) · baseline {targetOcc != null ? `${targetOcc.toFixed(1)}%` : 'not set'}</p>
+          <p className="text-xs text-slate-400 mb-4">Monthly occupancy (bars) · faded = confirmed bookings only · ADR per night (line) · baseline {targetOcc != null ? `${targetOcc.toFixed(1)}%` : 'not set'}</p>
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart data={occChartData} barCategoryGap="35%">
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1003,7 +1005,9 @@ export default function Dashboard() {
               <YAxis yAxisId="adr" orientation="right" tick={{ fontSize: 12 }} tickFormatter={v => `$${v}`} width={55} />
               <Tooltip
                 formatter={(value, name) =>
-                  name === 'ADR' ? [`$${value}`, 'ADR / night'] : [`${value}%`, 'Occupancy']
+                  name === 'ADR' ? [`$${value}`, 'ADR / night']
+                  : name === 'ProjectedOccupancy' ? [`${value}%`, 'Occupancy (booked)']
+                  : [`${value}%`, 'Occupancy']
                 }
                 contentStyle={{ fontSize: 13, borderRadius: 8, border: '1px solid #e2e8f0' }}
               />
@@ -1025,6 +1029,20 @@ export default function Dashboard() {
                       fill = '#10b981';
                     } else {
                       const miss = targetOcc - entry.Occupancy;
+                      fill = miss <= 25 ? '#f59e0b' : '#f43f5e';
+                    }
+                  }
+                  return <Cell key={i} fill={fill} />;
+                })}
+              </Bar>
+              <Bar yAxisId="occ" dataKey="ProjectedOccupancy" radius={[4, 4, 0, 0]} opacity={0.35}>
+                {occChartData.map((entry, i) => {
+                  let fill = '#94a3b8';
+                  if (entry.ProjectedOccupancy != null) {
+                    if (targetOcc == null || entry.ProjectedOccupancy >= targetOcc) {
+                      fill = '#10b981';
+                    } else {
+                      const miss = targetOcc - entry.ProjectedOccupancy;
                       fill = miss <= 25 ? '#f59e0b' : '#f43f5e';
                     }
                   }
