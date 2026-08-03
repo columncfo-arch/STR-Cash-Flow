@@ -474,6 +474,20 @@ export default function Dashboard() {
   const monthlyNetVariancePct = monthlyNetForecast != null && monthlyNetForecast !== 0
     ? (monthlyNetVariance! / Math.abs(monthlyNetForecast)) * 100 : null;
 
+  // Monthly cash flow forecast strip — current month + up to 4 ahead
+  const cashFlowStrip = statement
+    ? Array.from({ length: Math.min(5, 12 - currentMonthIdx) }, (_, j) => {
+        const i = currentMonthIdx + j;
+        const m = statement.months[i];
+        const confirmedGross = m.grossRevenue;
+        const forecast = monthlyForecasts[i] ?? 0;
+        const netForecast = monthlyNetForecasts[i];
+        const gapToFill = Math.max(0, forecast - confirmedGross);
+        const coveragePct = forecast > 0 ? Math.min(100, Math.round((confirmedGross / forecast) * 100)) : confirmedGross > 0 ? 100 : 0;
+        return { monthIdx: i, confirmedGross, forecast, netForecast, gapToFill, coveragePct };
+      })
+    : [];
+
   const pnlChartData = statement?.months.map((m, i) => {
     const isActual = i <= currentMonthIdx;
     return {
@@ -606,6 +620,48 @@ export default function Dashboard() {
                 </span>
               ))}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Monthly cash flow forecast strip */}
+      {hasData && !selMonth && cashFlowStrip.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-xs uppercase tracking-wide font-semibold text-slate-400 mb-3">Monthly Cash Flow Forecast</h2>
+          <div className={`grid gap-3 ${cashFlowStrip.length <= 3 ? 'grid-cols-3' : cashFlowStrip.length === 4 ? 'grid-cols-4' : 'grid-cols-5'}`}>
+            {cashFlowStrip.map(({ monthIdx, confirmedGross, forecast, netForecast, gapToFill, coveragePct }) => {
+              const isCurrentMonth = monthIdx === currentMonthIdx;
+              const hasGap = netForecast != null && netForecast < 0;
+              const isPositive = netForecast != null && netForecast >= 0;
+              const barColor = coveragePct >= 80 ? 'bg-emerald-400' : coveragePct >= 50 ? 'bg-amber-400' : 'bg-red-400';
+              return (
+                <div key={monthIdx} className={`bg-white rounded-xl border p-4 shadow-sm ${hasGap ? 'border-red-200' : 'border-slate-200'}`}>
+                  <p className="text-xs uppercase tracking-wide font-semibold text-slate-400 mb-1">
+                    {MONTHS_LONG[monthIdx]}{isCurrentMonth ? <span className="ml-1 text-slate-300">(current)</span> : null}
+                  </p>
+                  {netForecast != null ? (
+                    <p className={`text-xl font-bold ${hasGap ? 'text-red-600' : 'text-emerald-700'}`}>
+                      {netForecast >= 0 ? '+' : ''}{fmt(netForecast)}
+                    </p>
+                  ) : (
+                    <p className="text-xl font-bold text-slate-300">—</p>
+                  )}
+                  <p className="text-xs text-slate-400 mt-0.5 mb-2">projected net</p>
+                  {forecast > 0 && (
+                    <>
+                      <div className="w-full bg-slate-100 rounded-full h-1.5 mb-1.5">
+                        <div className={`h-1.5 rounded-full ${barColor}`} style={{ width: `${coveragePct}%` }} />
+                      </div>
+                      <p className="text-xs text-slate-500">
+                        {fmt(confirmedGross)} confirmed
+                        {gapToFill > 0 && <span className="text-slate-400"> · {fmt(gapToFill)} to fill</span>}
+                        {gapToFill === 0 && isPositive && <span className="text-emerald-600"> · covered</span>}
+                      </p>
+                    </>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
