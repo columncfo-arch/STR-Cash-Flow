@@ -584,42 +584,10 @@ export default function Dashboard() {
         <p className="text-slate-500 text-sm mt-1">{year} overview</p>
       </div>
 
-      {/* Year Health banner */}
-      {yearHealth && hasData && !selMonth && (
-        <div className={`rounded-xl border p-4 mb-6 ${
-          yearHealth.level === 'exceeding' ? 'bg-emerald-50 border-emerald-200' :
-          yearHealth.level === 'on-track' ? 'bg-slate-50 border-slate-200' :
-          'bg-red-50 border-red-200'
-        }`}>
-          <div className="flex items-start md:items-center gap-4 flex-col md:flex-row">
-            <div className="shrink-0">
-              <p className="text-xs uppercase tracking-wide font-semibold text-slate-400 mb-0.5">Year Health</p>
-              <p className={`text-xl font-bold ${
-                yearHealth.level === 'exceeding' ? 'text-emerald-700' :
-                yearHealth.level === 'on-track' ? 'text-slate-700' :
-                'text-red-700'
-              }`}>{yearHealth.verdict}</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {healthSignals.map(sig => (
-                <span key={sig.label} className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium border bg-white ${
-                  sig.score === 1 ? 'text-emerald-700 border-emerald-300' :
-                  sig.score === 0 ? 'text-amber-700 border-amber-300' :
-                  'text-red-600 border-red-300'
-                }`}>
-                  {sig.score === 1 ? '▲' : sig.score === -1 ? '▼' : '~'} {sig.label}
-                  <span className="font-normal opacity-75 ml-0.5">· {sig.detail}</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Current month cash flow tile */}
       {hasData && !selMonth && monthlyNetForecast != null && (
         <div className={`bg-white rounded-xl border p-4 shadow-sm mb-6 ${monthlyNetForecast < 0 ? 'border-red-200' : 'border-slate-200'}`}>
-          <p className="text-xs uppercase tracking-wide font-semibold text-slate-500 mb-1">{MONTHS_LONG[currentMonthIdx]} Cash Flow</p>
+          <p className="text-xs uppercase tracking-wide font-semibold text-slate-500 mb-1">{MONTHS_LONG[currentMonthIdx]} Forecast Cash Flow</p>
           <div className="flex items-end gap-4">
             <div>
               <p className={`text-2xl font-bold ${monthlyNetForecast < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
@@ -1163,7 +1131,41 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* ── YTD tables — hidden when a month is drilled into ── */}
+      {/* ── Year Health + YTD tables — hidden when a month is drilled into ── */}
+      {hasData && !selMonth && (
+        <>
+        {yearHealth && (
+          <div className={`rounded-xl border p-4 mb-6 ${
+            yearHealth.level === 'exceeding' ? 'bg-emerald-50 border-emerald-200' :
+            yearHealth.level === 'on-track' ? 'bg-slate-50 border-slate-200' :
+            'bg-red-50 border-red-200'
+          }`}>
+            <div className="flex items-start md:items-center gap-4 flex-col md:flex-row">
+              <div className="shrink-0">
+                <p className="text-xs uppercase tracking-wide font-semibold text-slate-400 mb-0.5">Year Health</p>
+                <p className={`text-xl font-bold ${
+                  yearHealth.level === 'exceeding' ? 'text-emerald-700' :
+                  yearHealth.level === 'on-track' ? 'text-slate-700' :
+                  'text-red-700'
+                }`}>{yearHealth.verdict}</p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {healthSignals.map(sig => (
+                  <span key={sig.label} className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium border bg-white ${
+                    sig.score === 1 ? 'text-emerald-700 border-emerald-300' :
+                    sig.score === 0 ? 'text-amber-700 border-amber-300' :
+                    'text-red-600 border-red-300'
+                  }`}>
+                    {sig.score === 1 ? '▲' : sig.score === -1 ? '▼' : '~'} {sig.label}
+                    <span className="font-normal opacity-75 ml-0.5">· {sig.detail}</span>
+                  </span>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+        </>
+      )}
       {hasData && !selMonth && (
         <div className="space-y-6 mb-8">
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
