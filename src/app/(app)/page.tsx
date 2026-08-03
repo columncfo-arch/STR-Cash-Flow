@@ -383,13 +383,18 @@ export default function Dashboard() {
     };
   }) ?? [];
 
-  const ytdNetMargin = ytdGross > 0 ? ytdNetIncome / ytdGross : null;
+  // Net forecast mirrors the gross model: prior year monthly net income × growth factor
+  const prevNetByMonth = prevStatement?.months.map(m => m.netIncome) ?? null;
+  const monthlyNetForecasts: (number | null)[] = Array.from({ length: 12 }, (_, i) => {
+    if (!prevNetByMonth) return null;
+    return Math.round(prevNetByMonth[i] * (1 + growthFactor));
+  });
 
   const currentMonthNetIncome = statement?.months[currentMonthIdx]?.netIncome ?? 0;
-  const ytdNetForecast = ytdForecast != null && ytdNetMargin != null
-    ? Math.round(ytdForecast * ytdNetMargin) : null;
-  const monthlyNetForecast = monthlyForecasts[currentMonthIdx] != null && ytdNetMargin != null
-    ? Math.round(monthlyForecasts[currentMonthIdx]! * ytdNetMargin) : null;
+  const ytdNetForecast = prevNetByMonth
+    ? monthlyNetForecasts.slice(0, currentMonthIdx + 1).reduce<number>((s, v) => s + (v ?? 0), 0)
+    : null;
+  const monthlyNetForecast = monthlyNetForecasts[currentMonthIdx];
   const netPacingVariance = ytdNetForecast != null ? ytdNetIncome - ytdNetForecast : null;
   const netPacingVariancePct = ytdNetForecast != null && ytdNetForecast !== 0
     ? (netPacingVariance! / Math.abs(ytdNetForecast)) * 100 : null;
@@ -399,14 +404,10 @@ export default function Dashboard() {
 
   const pnlChartData = statement?.months.map((m, i) => {
     const isActual = i <= currentMonthIdx;
-    const grossForecast = monthlyForecasts[i] ?? null;
-    const netForecast = grossForecast != null && ytdNetMargin != null
-      ? Math.round(grossForecast * ytdNetMargin)
-      : null;
     return {
       name: MONTHS[i],
       'Net Income': isActual ? m.netIncome : null,
-      'Net Forecast': netForecast,
+      'Net Forecast': monthlyNetForecasts[i],
     };
   }) ?? [];
 
