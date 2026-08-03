@@ -258,17 +258,18 @@ export default function Dashboard() {
       : [];
     return total + eligible.reduce((s, b) => s + b.income, 0);
   }, 0) ?? 0;
+  // P&L table uses completed months only — the only period where revenue and expenses are both fully settled
   const ytdPnL: PnLData = {
-    grossRevenue: ytdGross,
-    platformFees: ytdMonths.reduce((s, m) => s + m.platformFees, 0),
-    fastPayFees: ytdMonths.reduce((s, m) => s + m.fastPayFees, 0),
-    taxRemitted: ytdMonths.reduce((s, m) => s + m.taxRemitted, 0),
-    refunds: ytdMonths.reduce((s, m) => s + m.refunds, 0),
-    netRevenue: ytdMonths.reduce((s, m) => s + m.netRevenue, 0),
-    ownerTaxes: ytdMonths.reduce((s, m) => s + m.ownerTaxes, 0),
-    totalOperatingExpenses: ytdMonths.reduce((s, m) => s + m.totalOperatingExpenses, 0),
-    operatingIncome: ytdMonths.reduce((s, m) => s + m.operatingIncome, 0),
-    piti: ytdMonths.reduce((s, m) => s + m.piti, 0),
+    grossRevenue: completedMonths.reduce((s, m) => s + m.grossRevenue, 0),
+    platformFees: completedMonths.reduce((s, m) => s + m.platformFees, 0),
+    fastPayFees: completedMonths.reduce((s, m) => s + m.fastPayFees, 0),
+    taxRemitted: completedMonths.reduce((s, m) => s + m.taxRemitted, 0),
+    refunds: completedMonths.reduce((s, m) => s + m.refunds, 0),
+    netRevenue: completedMonths.reduce((s, m) => s + m.netRevenue, 0),
+    ownerTaxes: completedMonths.reduce((s, m) => s + m.ownerTaxes, 0),
+    totalOperatingExpenses: completedMonths.reduce((s, m) => s + m.totalOperatingExpenses, 0),
+    operatingIncome: completedMonths.reduce((s, m) => s + m.operatingIncome, 0),
+    piti: completedMonths.reduce((s, m) => s + m.piti, 0),
     netIncome: ytdNetIncome,
   };
 
@@ -1006,7 +1007,7 @@ export default function Dashboard() {
       {hasData && !selMonth && (
         <div className="space-y-6 mb-8">
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-            <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Year-to-Date P&amp;L</h3>
+            <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Year-to-Date P&amp;L (Jan–{MONTHS[currentMonthIdx - 1] ?? MONTHS[0]})</h3>
             <PnLTable m={ytdPnL} fmt={fmt} />
           </div>
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
