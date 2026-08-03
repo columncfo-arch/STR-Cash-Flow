@@ -524,14 +524,7 @@ export default function Dashboard() {
   const occVariance = targetOcc != null ? ytdOccupancy - targetOcc : null;
   const currentMonthOccupancy = statement?.months[currentMonthIdx]?.occupancyRate ?? null;
   const curMonthOccVariance = targetOcc != null && currentMonthOccupancy != null ? currentMonthOccupancy - targetOcc : null;
-  const curMonthStmtNights = statement?.months[currentMonthIdx]?.totalNights ?? 0;
-  const currentMonthAdr = curMonthStmtNights > 0
-    ? Math.round((statement?.months[currentMonthIdx]?.grossRevenue ?? 0) / curMonthStmtNights)
-    : null;
   const targetAdrVal = displayAdrTarget;
-  const curMonthAdrVariance = targetAdrVal != null && currentMonthAdr != null ? currentMonthAdr - targetAdrVal : null;
-  const curMonthAdrVariancePct = targetAdrVal != null && targetAdrVal !== 0 && curMonthAdrVariance != null
-    ? (curMonthAdrVariance / targetAdrVal) * 100 : null;
   const adrVariance = targetAdrVal != null && ytdAdr != null ? ytdAdr - targetAdrVal : null;
   const adrVariancePct = adrVariance != null && targetAdrVal ? (adrVariance / targetAdrVal) * 100 : null;
 
@@ -869,7 +862,7 @@ export default function Dashboard() {
 
       {/* Pricing & Occupancy tiles */}
       {hasData && !selMonth && (
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Occupancy</p>
@@ -973,27 +966,6 @@ export default function Dashboard() {
                   <p className="text-xs text-slate-400 mt-3">Per night YTD</p>
                 )}
               </>
-            )}
-          </div>
-
-          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-            <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">{MONTHS_LONG[currentMonthIdx]} Daily Rate</p>
-            {currentMonthAdr != null ? (
-              <>
-                <p className="text-2xl font-bold text-emerald-700">{fmt(currentMonthAdr)}</p>
-                {curMonthAdrVariance != null ? (
-                  <div className="mt-2 flex items-center justify-between">
-                    <p className="text-xs text-slate-400">Target {fmt(targetAdrVal!)}</p>
-                    <span className={`text-xs font-semibold ${perfColor(curMonthAdrVariance, curMonthAdrVariancePct != null ? Math.abs(curMonthAdrVariancePct) : null, false)}`}>
-                      {curMonthAdrVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(curMonthAdrVariance))}{curMonthAdrVariancePct != null ? ` (${Math.abs(curMonthAdrVariancePct).toFixed(1)}%)` : ''}
-                    </span>
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-400 mt-3">Per night this month</p>
-                )}
-              </>
-            ) : (
-              <p className="text-2xl font-bold text-slate-400">—</p>
             )}
           </div>
 
