@@ -376,8 +376,13 @@ export default function Dashboard() {
   const annualForecast = hasTarget
     ? (manualTarget ?? monthlyForecasts.reduce<number>((s, v) => s + (v ?? 0), 0))
     : null;
+  // Prorate current month's forecast by days elapsed so ytdForecast matches the ytdGross horizon
+  const daysElapsed = now.getDate();
+  const curMonthForecastProrated = monthlyForecasts[currentMonthIdx] != null
+    ? Math.round(monthlyForecasts[currentMonthIdx]! * daysElapsed / daysInCurMonth)
+    : 0;
   const ytdForecast = hasTarget
-    ? monthlyForecasts.slice(0, currentMonthIdx + 1).reduce<number>((s, v) => s + (v ?? 0), 0)
+    ? monthlyForecasts.slice(0, currentMonthIdx).reduce<number>((s, v) => s + (v ?? 0), 0) + curMonthForecastProrated
     : null;
   const pacingVariance = ytdForecast != null ? ytdGross - ytdForecast : null;
   const pacingVariancePct = ytdForecast && ytdForecast > 0 ? (pacingVariance! / ytdForecast) * 100 : null;
