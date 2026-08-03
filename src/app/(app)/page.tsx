@@ -383,18 +383,37 @@ export default function Dashboard() {
     };
   }) ?? [];
 
-  // Net forecast mirrors the gross model: prior year monthly net income × growth factor
-  const prevNetByMonth = prevStatement?.months.map(m => m.netIncome) ?? null;
+  // Net income forecast uses a contribution-margin ratio so fixed PITI is handled correctly.
+  // CM ratio = (net + PITI) / gross → isolates variable cost rate from fixed costs.
+  // Prefer YTD actuals (best signal); fall back to prior year annual if no current data.
+  const monthlyPITI = settings?.monthlyPITI ?? 0;
+  const ytdPITITotal = monthlyPITI * (currentMonthIdx + 1);
+  const ytdCmRatio = ytdGross > 0 ? (ytdNetIncome + ytdPITITotal) / ytdGross : null;
+
+  const prevAnnualGross = prevStatement ? prevStatement.months.reduce((s, m) => s + m.grossRevenue, 0) : 0;
+  const prevAnnualNet = prevStatement ? prevStatement.months.reduce((s, m) => s + m.netIncome, 0) : 0;
+  const prevCmRatio = prevAnnualGross > 0 ? (prevAnnualNet + monthlyPITI * 12) / prevAnnualGross : null;
+
+  const cmRatio = ytdCmRatio ?? prevCmRatio;
+
   const monthlyNetForecasts: (number | null)[] = Array.from({ length: 12 }, (_, i) => {
-    if (!prevNetByMonth) return null;
-    return Math.round(prevNetByMonth[i] * (1 + growthFactor));
+    if (cmRatio == null || monthlyForecasts[i] == null) return null;
+    return Math.round(monthlyForecasts[i]! * cmRatio - monthlyPITI);
   });
 
-  const currentMonthNetIncome = statement?.months[currentMonthIdx]?.netIncome ?? 0;
-  const ytdNetForecast = prevNetByMonth
-    ? monthlyNetForecasts.slice(0, currentMonthIdx + 1).reduce<number>((s, v) => s + (v ?? 0), 0)
+  const annualGrossForecastTotal = monthlyForecasts.reduce<number>((s, v) => s + (v ?? 0), 0);
+  const annualNetForecast = cmRatio != null
+    ? Math.round(annualGrossForecastTotal * cmRatio - monthlyPITI * 12)
     : null;
-  const monthlyNetForecast = monthlyNetForecasts[currentMonthIdx];
+
+  const currentMonthNetIncome = statement?.months[currentMonthIdx]?.netIncome ?? 0;
+  const ytdGrossForecastTotal = monthlyForecasts.slice(0, currentMonthIdx + 1).reduce<number>((s, v) => s + (v ?? 0), 0);
+  const ytdNetForecast = cmRatio != null
+    ? Math.round(ytdGrossForecastTotal * cmRatio - ytdPITITotal)
+    : null;
+  const monthlyNetForecast = cmRatio != null && monthlyForecasts[currentMonthIdx] != null
+    ? Math.round(monthlyForecasts[currentMonthIdx]! * cmRatio - monthlyPITI)
+    : null;
   const netPacingVariance = ytdNetForecast != null ? ytdNetIncome - ytdNetForecast : null;
   const netPacingVariancePct = ytdNetForecast != null && ytdNetForecast !== 0
     ? (netPacingVariance! / Math.abs(ytdNetForecast)) * 100 : null;
@@ -465,11 +484,10 @@ export default function Dashboard() {
         <p className="text-slate-500 text-sm mt-1">{year} overview</p>
       </div>
 
-      {/* Pacing + operational KPIs */}
-      {!selMonth && (hasTarget || hasData) && (
-        <div className={`grid gap-4 mb-6 ${hasTarget && annualForecast != null ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-2'}`}>
-          {/* This Year + This Month — only when target is configured */}
-          {hasTarget && annualForecast != null && <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+      {/* Revenue pacing tiles */}
+      {!selMonth && hasTarget && annualForecast != null && (
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Revenue Pacing</p>
               {!editingTarget ? (
@@ -515,10 +533,10 @@ export default function Dashboard() {
                 )}
               </>
             )}
-          </div>}
+          </div>
 
           {/* This Month */}
-          {hasTarget && annualForecast != null && monthlyForecasts[currentMonthIdx] != null && (() => {
+          {monthlyForecasts[currentMonthIdx] != null && (() => {
             const monthlyActual = statement?.months[currentMonthIdx].grossRevenue ?? 0;
             const monthlyTarget = monthlyForecasts[currentMonthIdx]!;
             const monthlyVariance = monthlyActual - monthlyTarget;
@@ -544,97 +562,6 @@ export default function Dashboard() {
               </div>
             );
           })()}
-
-          {/* YTD Occupancy */}
-          {hasData && (
-            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Occupancy</p>
-                {editingOccTarget ? (
-                  <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingOccTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
-                ) : (
-                  <button onClick={() => { setOccTargetInput(String(settings?.targetOccupancyPct ?? '')); setEditingOccTarget(true); }} className="text-slate-300 hover:text-slate-500" title="Override occupancy baseline"><Pencil className="w-3.5 h-3.5" /></button>
-                )}
-              </div>
-              {editingOccTarget ? (
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-500">Override occupancy baseline (%)</p>
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="number" value={occTargetInput} onChange={e => setOccTargetInput(e.target.value)}
-                      onBlur={saveOccTarget}
-                      onKeyDown={e => e.key === 'Enter' && saveOccTarget()}
-                      className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="70" autoFocus
-                    />
-                    <span className="text-sm text-slate-400">%</span>
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <p className="text-2xl font-bold text-slate-900">{ytdOccupancy.toFixed(1)}%</p>
-                  {displayOccTarget != null ? (
-                    <div className="mt-2 flex items-center justify-between">
-                      <p className="text-xs text-slate-400">Baseline {displayOccTarget.toFixed(1)}% <span className="text-slate-300">({occBaselineLabel})</span></p>
-                      {occVariance != null && (
-                        <span className={`text-xs font-semibold ${perfColor(occVariance, Math.abs(occVariance), false)}`}>
-                          {occVariance >= 0 ? '▲' : '▼'} {Math.abs(occVariance).toFixed(1)}pts
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-400 mt-3">Year to date</p>
-                  )}
-                </>
-              )}
-            </div>
-          )}
-
-          {/* YTD Daily Rate */}
-          {hasData && (
-            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Daily Rate</p>
-                {derivedAdrTarget == null && (editingAdrTarget ? (
-                  <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingAdrTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
-                ) : (
-                  <button onClick={() => { setAdrTargetInput(String(settings?.targetAdr ?? '')); setEditingAdrTarget(true); }} className="text-slate-300 hover:text-slate-500" title="Set ADR target"><Pencil className="w-3.5 h-3.5" /></button>
-                ))}
-              </div>
-              {editingAdrTarget && derivedAdrTarget == null ? (
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-500">ADR target ($)</p>
-                  <div className="flex items-center gap-2">
-                    <span className="text-sm text-slate-400">$</span>
-                    <input
-                      type="number" value={adrTargetInput} onChange={e => setAdrTargetInput(e.target.value)}
-                      onBlur={saveAdrTarget}
-                      onKeyDown={e => e.key === 'Enter' && saveAdrTarget()}
-                      className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="225" autoFocus
-                    />
-                  </div>
-                </div>
-              ) : (
-                <>
-                  <p className="text-2xl font-bold text-emerald-700">{ytdAdr != null ? fmt(ytdAdr) : '—'}</p>
-                  {displayAdrTarget != null ? (
-                    <div className="mt-2 flex items-center justify-between">
-                      <p className="text-xs text-slate-400">
-                        Need {fmt(displayAdrTarget)}
-                        {derivedAdrTarget != null && <span className="text-slate-300"> (@ {displayOccTarget?.toFixed(1)}% occ)</span>}
-                      </p>
-                      {adrVariance != null && (
-                        <span className={`text-xs font-semibold ${perfColor(adrVariance, adrVariancePct != null ? Math.abs(adrVariancePct) : null, false)}`}>
-                          {adrVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(adrVariance))}{adrVariancePct != null ? ` (${Math.abs(adrVariancePct).toFixed(1)}%)` : ''}
-                        </span>
-                      )}
-                    </div>
-                  ) : (
-                    <p className="text-xs text-slate-400 mt-3">Per night YTD</p>
-                  )}
-                </>
-              )}
-            </div>
-          )}
         </div>
       )}
 
@@ -679,6 +606,27 @@ export default function Dashboard() {
               Total: {fmt(seasonalityInputs.reduce((s, v) => s + (parseFloat(v) || 0), 0))}
             </span>
           </div>
+        </div>
+      )}
+
+      {/* Target Gross Revenue tile */}
+      {hasData && !selMonth && annualForecast != null && (
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm mb-6">
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Annual Gross Revenue Target</p>
+            <button
+              onClick={() => { setTargetInput(String(manualTarget ?? Math.round(annualForecast))); setEditingTarget(true); }}
+              className="text-slate-300 hover:text-slate-500 transition-colors"
+              title="Edit annual target"
+            >
+              <Pencil className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <p className="text-3xl font-bold text-slate-900">{fmt(annualForecast)}</p>
+          <p className="text-xs text-slate-400 mt-1">
+            {manualTarget ? 'Manually set · ' : `Prior year + ${growthPct > 0 ? '+' : ''}${growthPct}% growth · `}
+            {fmt(Math.max(0, annualForecast - ytdGross))} remaining
+          </p>
         </div>
       )}
 
@@ -763,8 +711,8 @@ export default function Dashboard() {
       </div>
 
       {/* Net Income pacing tiles */}
-      {hasData && !selMonth && (ytdNetForecast != null || monthlyNetForecast != null) && (
-        <div className="grid grid-cols-2 gap-4 mb-6">
+      {hasData && !selMonth && (ytdNetForecast != null || monthlyNetForecast != null || annualNetForecast != null) && (
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
           {ytdNetForecast != null && (
             <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
               <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">YTD Net Income Pacing</p>
@@ -789,6 +737,13 @@ export default function Dashboard() {
                   {monthlyNetVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(monthlyNetVariancePct).toFixed(1)}%)</span>}
                 </span>
               )}
+            </div>
+          )}
+          {annualNetForecast != null && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">Annual Net Income Target</p>
+              <p className={`text-2xl font-bold ${annualNetForecast >= 0 ? 'text-slate-900' : 'text-red-600'}`}>{fmt(annualNetForecast)}</p>
+              <p className="text-xs text-slate-400 mt-0.5">{fmt(ytdNetIncome)} earned · {fmt(annualNetForecast - ytdNetIncome)} remaining</p>
             </div>
           )}
         </div>
@@ -824,6 +779,96 @@ export default function Dashboard() {
               />
             </ComposedChart>
           </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* Occupancy + ADR tiles */}
+      {hasData && !selMonth && (
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Occupancy</p>
+              {editingOccTarget ? (
+                <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingOccTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
+              ) : (
+                <button onClick={() => { setOccTargetInput(String(settings?.targetOccupancyPct ?? '')); setEditingOccTarget(true); }} className="text-slate-300 hover:text-slate-500" title="Override occupancy baseline"><Pencil className="w-3.5 h-3.5" /></button>
+              )}
+            </div>
+            {editingOccTarget ? (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500">Override occupancy baseline (%)</p>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="number" value={occTargetInput} onChange={e => setOccTargetInput(e.target.value)}
+                    onBlur={saveOccTarget}
+                    onKeyDown={e => e.key === 'Enter' && saveOccTarget()}
+                    className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="70" autoFocus
+                  />
+                  <span className="text-sm text-slate-400">%</span>
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="text-2xl font-bold text-slate-900">{ytdOccupancy.toFixed(1)}%</p>
+                {displayOccTarget != null ? (
+                  <div className="mt-2 flex items-center justify-between">
+                    <p className="text-xs text-slate-400">Baseline {displayOccTarget.toFixed(1)}% <span className="text-slate-300">({occBaselineLabel})</span></p>
+                    {occVariance != null && (
+                      <span className={`text-xs font-semibold ${perfColor(occVariance, Math.abs(occVariance), false)}`}>
+                        {occVariance >= 0 ? '▲' : '▼'} {Math.abs(occVariance).toFixed(1)}pts
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 mt-3">Year to date</p>
+                )}
+              </>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Daily Rate</p>
+              {derivedAdrTarget == null && (editingAdrTarget ? (
+                <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingAdrTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
+              ) : (
+                <button onClick={() => { setAdrTargetInput(String(settings?.targetAdr ?? '')); setEditingAdrTarget(true); }} className="text-slate-300 hover:text-slate-500" title="Set ADR target"><Pencil className="w-3.5 h-3.5" /></button>
+              ))}
+            </div>
+            {editingAdrTarget && derivedAdrTarget == null ? (
+              <div className="space-y-2">
+                <p className="text-xs text-slate-500">ADR target ($)</p>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-slate-400">$</span>
+                  <input
+                    type="number" value={adrTargetInput} onChange={e => setAdrTargetInput(e.target.value)}
+                    onBlur={saveAdrTarget}
+                    onKeyDown={e => e.key === 'Enter' && saveAdrTarget()}
+                    className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="225" autoFocus
+                  />
+                </div>
+              </div>
+            ) : (
+              <>
+                <p className="text-2xl font-bold text-emerald-700">{ytdAdr != null ? fmt(ytdAdr) : '—'}</p>
+                {displayAdrTarget != null ? (
+                  <div className="mt-2 flex items-center justify-between">
+                    <p className="text-xs text-slate-400">
+                      Need {fmt(displayAdrTarget)}
+                      {derivedAdrTarget != null && <span className="text-slate-300"> (@ {displayOccTarget?.toFixed(1)}% occ)</span>}
+                    </p>
+                    {adrVariance != null && (
+                      <span className={`text-xs font-semibold ${perfColor(adrVariance, adrVariancePct != null ? Math.abs(adrVariancePct) : null, false)}`}>
+                        {adrVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(adrVariance))}{adrVariancePct != null ? ` (${Math.abs(adrVariancePct).toFixed(1)}%)` : ''}
+                      </span>
+                    )}
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 mt-3">Per night YTD</p>
+                )}
+              </>
+            )}
+          </div>
         </div>
       )}
 
