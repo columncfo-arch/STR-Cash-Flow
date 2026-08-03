@@ -400,6 +400,8 @@ export default function Dashboard() {
   const annualForecast = hasTarget
     ? (manualTarget ?? monthlyForecasts.reduce<number>((s, v) => s + (v ?? 0), 0))
     : null;
+  const stillToBook = annualForecast != null ? Math.max(0, annualForecast - ytdGross - futureConfirmedGross) : null;
+  const breakEvenAdr = openNights > 0 && stillToBook != null && stillToBook > 0 ? Math.ceil(stillToBook / openNights) : null;
   // Prorate current month's forecast by days elapsed so ytdForecast matches the ytdGross horizon
   const daysElapsed = now.getDate();
   const curMonthForecastProrated = monthlyForecasts[currentMonthIdx] != null
@@ -672,13 +674,11 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Target Gross Revenue + Remaining gap + Break-even ADR tiles */}
+      {/* Target Gross Revenue + Remaining gap tiles */}
       {hasData && !selMonth && annualForecast != null && (() => {
         const remainingToTarget = Math.max(0, annualForecast - ytdGross);
-        const stillToBook = Math.max(0, remainingToTarget - futureConfirmedGross);
-        const breakEvenAdr = openNights > 0 && stillToBook > 0 ? Math.ceil(stillToBook / openNights) : null;
         return (
-          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+          <div className="grid grid-cols-2 gap-4 mb-6">
             <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Annual Gross Revenue Target</p>
@@ -703,27 +703,8 @@ export default function Dashboard() {
               </p>
               <p className="text-xs text-slate-400 mt-1">
                 {fmt(futureConfirmedGross)} on books
-                {stillToBook > 0 ? ` · ${fmt(stillToBook)} to fill` : ' · target covered'}
+                {stillToBook != null && stillToBook > 0 ? ` · ${fmt(stillToBook)} to fill` : ' · target covered'}
               </p>
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1">Break-Even Rate</p>
-              {breakEvenAdr != null ? (
-                <>
-                  <p className="text-3xl font-bold text-slate-900">{fmt(breakEvenAdr)}<span className="text-base font-normal text-slate-400"> / night</span></p>
-                  <p className="text-xs text-slate-400 mt-1">on {openNights} open nights closes the gap</p>
-                </>
-              ) : stillToBook === 0 ? (
-                <>
-                  <p className="text-3xl font-bold text-emerald-600">Covered</p>
-                  <p className="text-xs text-slate-400 mt-1">Bookings on hand exceed target</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-3xl font-bold text-slate-400">—</p>
-                  <p className="text-xs text-slate-400 mt-1">No open nights remaining</p>
-                </>
-              )}
             </div>
           </div>
         );
@@ -888,7 +869,7 @@ export default function Dashboard() {
 
       {/* Pricing & Occupancy tiles */}
       {hasData && !selMonth && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
           <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Occupancy</p>
@@ -1010,6 +991,23 @@ export default function Dashboard() {
                 ) : (
                   <p className="text-xs text-slate-400 mt-3">Per night this month</p>
                 )}
+              </>
+            ) : (
+              <p className="text-2xl font-bold text-slate-400">—</p>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+            <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">Break-Even Rate</p>
+            {breakEvenAdr != null ? (
+              <>
+                <p className="text-2xl font-bold text-slate-900">{fmt(breakEvenAdr)}<span className="text-sm font-normal text-slate-400"> / night</span></p>
+                <p className="text-xs text-slate-400 mt-3">{openNights} open nights to hit target</p>
+              </>
+            ) : stillToBook === 0 ? (
+              <>
+                <p className="text-2xl font-bold text-emerald-600">Covered</p>
+                <p className="text-xs text-slate-400 mt-3">Bookings exceed target</p>
               </>
             ) : (
               <p className="text-2xl font-bold text-slate-400">—</p>
