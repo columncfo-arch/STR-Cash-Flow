@@ -248,6 +248,16 @@ export default function Dashboard() {
     ? (completedMonths.reduce((s, m) => s + m.occupancyRate, 0) + curMonthPartialOccupancy) / occupancyMonthCount
     : 0;
   const ytdAdr = ytdNights > 0 ? ytdGross / ytdNights : null;
+
+  // Confirmed future bookings in the current year (checkIn > today)
+  const futureConfirmedGross = statement?.months.reduce((total, m, i) => {
+    const eligible = i === currentMonthIdx
+      ? m.bookings.filter(b => b.checkIn > todayStr)
+      : i > currentMonthIdx
+      ? m.bookings
+      : [];
+    return total + eligible.reduce((s, b) => s + b.income, 0);
+  }, 0) ?? 0;
   const ytdPnL: PnLData = {
     grossRevenue: ytdGross,
     platformFees: ytdMonths.reduce((s, m) => s + m.platformFees, 0),
@@ -636,26 +646,42 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Target Gross Revenue tile */}
-      {hasData && !selMonth && annualForecast != null && (
-        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm mb-6">
-          <div className="flex items-center justify-between mb-1">
-            <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Annual Gross Revenue Target</p>
-            <button
-              onClick={() => { setTargetInput(String(manualTarget ?? Math.round(annualForecast))); setEditingTarget(true); }}
-              className="text-slate-300 hover:text-slate-500 transition-colors"
-              title="Edit annual target"
-            >
-              <Pencil className="w-3.5 h-3.5" />
-            </button>
+      {/* Target Gross Revenue + Remaining gap tiles */}
+      {hasData && !selMonth && annualForecast != null && (() => {
+        const remainingToTarget = Math.max(0, annualForecast - ytdGross);
+        const stillToBook = Math.max(0, remainingToTarget - futureConfirmedGross);
+        return (
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Annual Gross Revenue Target</p>
+                <button
+                  onClick={() => { setTargetInput(String(manualTarget ?? Math.round(annualForecast))); setEditingTarget(true); }}
+                  className="text-slate-300 hover:text-slate-500 transition-colors"
+                  title="Edit annual target"
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <p className="text-3xl font-bold text-slate-900">{fmt(annualForecast)}</p>
+              <p className="text-xs text-slate-400 mt-1">
+                {manualTarget ? 'Manually set · ' : `Prior year + ${growthPct > 0 ? '+' : ''}${growthPct}% growth · `}
+                {fmt(ytdGross)} earned
+              </p>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1">Revenue Still Needed</p>
+              <p className={`text-3xl font-bold ${remainingToTarget === 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+                {remainingToTarget === 0 ? 'On Track' : fmt(remainingToTarget)}
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                {fmt(futureConfirmedGross)} on books
+                {stillToBook > 0 ? ` · ${fmt(stillToBook)} to fill` : ' · target covered'}
+              </p>
+            </div>
           </div>
-          <p className="text-3xl font-bold text-slate-900">{fmt(annualForecast)}</p>
-          <p className="text-xs text-slate-400 mt-1">
-            {manualTarget ? 'Manually set · ' : `Prior year + ${growthPct > 0 ? '+' : ''}${growthPct}% growth · `}
-            {fmt(Math.max(0, annualForecast - ytdGross))} remaining
-          </p>
-        </div>
-      )}
+        );
+      })()}
 
       {/* Chart */}
       <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
