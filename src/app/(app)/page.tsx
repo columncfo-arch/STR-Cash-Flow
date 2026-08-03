@@ -585,32 +585,46 @@ export default function Dashboard() {
       </div>
 
       {/* Current month cash flow tile */}
-      {hasData && !selMonth && monthlyNetForecast != null && (
+      {hasData && !selMonth && monthlyNetForecast != null && cmRatio != null && (
         <div className={`bg-white rounded-xl border p-4 shadow-sm mb-6 ${monthlyNetForecast < 0 ? 'border-red-200' : 'border-slate-200'}`}>
           <p className="text-xs uppercase tracking-wide font-semibold text-slate-500 mb-1">{MONTHS_LONG[currentMonthIdx]} Forecast Cash Flow</p>
-          <div className="flex items-end gap-4">
-            <div>
+          <div className="flex items-start gap-6">
+            <div className="shrink-0">
               <p className={`text-2xl font-bold ${monthlyNetForecast < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
                 {monthlyNetForecast >= 0 ? '+' : ''}{fmt(monthlyNetForecast)}
               </p>
-              <p className="text-xs text-slate-400 mt-0.5">projected net · PITI included</p>
+              <p className="text-xs text-slate-400 mt-0.5">projected net</p>
             </div>
-            {curMonthForecastGross > 0 && (
-              <div className="flex-1 min-w-0">
-                <div className="w-full bg-slate-100 rounded-full h-1.5 mb-1.5">
-                  <div
-                    className={`h-1.5 rounded-full ${curMonthCoveragePct >= 80 ? 'bg-emerald-400' : curMonthCoveragePct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                    style={{ width: `${curMonthCoveragePct}%` }}
-                  />
-                </div>
-                <p className="text-xs text-slate-500">
-                  {fmt(curMonthConfirmedGross)} on books
-                  {curMonthCashGapToFill > 0
-                    ? <span className="text-slate-400"> · {fmt(curMonthCashGapToFill)} to fill</span>
-                    : <span className="text-emerald-600"> · revenue covered</span>}
-                </p>
+            <div className="flex-1 min-w-0 space-y-1 pt-0.5">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Forecast revenue</span>
+                <span className="text-slate-700 font-medium">{fmt(curMonthForecastGross)}</span>
               </div>
-            )}
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Est. fees &amp; expenses</span>
+                <span className="text-red-500">−{fmt(Math.round(curMonthForecastGross * (1 - cmRatio)))}</span>
+              </div>
+              <div className="flex justify-between text-xs border-t border-slate-100 pt-1">
+                <span className="text-slate-500">PITI</span>
+                <span className="text-red-500">−{fmt(monthlyPITI)}</span>
+              </div>
+              {curMonthForecastGross > 0 && (
+                <div className="pt-1">
+                  <div className="w-full bg-slate-100 rounded-full h-1 mb-1">
+                    <div
+                      className={`h-1 rounded-full ${curMonthCoveragePct >= 80 ? 'bg-emerald-400' : curMonthCoveragePct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                      style={{ width: `${curMonthCoveragePct}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    {fmt(curMonthConfirmedGross)} on books
+                    {curMonthCashGapToFill > 0
+                      ? <span> · {fmt(curMonthCashGapToFill)} to fill</span>
+                      : <span className="text-emerald-600"> · covered</span>}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
