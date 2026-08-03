@@ -544,7 +544,9 @@ export default function Dashboard() {
     const score: HealthScore = pacingVariancePct > 5 ? 1 : pacingVariancePct >= -10 ? 0 : -1;
     healthSignals.push({ label: 'Revenue', score, detail: `${pacingVariancePct >= 0 ? '+' : ''}${pacingVariancePct.toFixed(1)}% vs target` });
   }
-  if (netPacingVariancePct != null) {
+  // Only score NI pacing when the base is large enough to be meaningful — a $20 forecast
+  // base produces absurd percentages that mislead the health verdict.
+  if (netPacingVariancePct != null && ytdNetForecast != null && Math.abs(ytdNetForecast) >= 500) {
     const score: HealthScore = netPacingVariancePct > 5 ? 1 : netPacingVariancePct >= -15 ? 0 : -1;
     healthSignals.push({ label: 'Net Income', score, detail: `${netPacingVariancePct >= 0 ? '+' : ''}${netPacingVariancePct.toFixed(1)}% vs projection` });
   }
@@ -561,13 +563,16 @@ export default function Dashboard() {
     const score: HealthScore = occVariance >= 0 ? 1 : occVariance >= -10 ? 0 : -1;
     healthSignals.push({ label: 'Occupancy', score, detail: `${occVariance >= 0 ? '+' : ''}${occVariance.toFixed(1)}pts vs target` });
   }
+  // Annual NI projection: if the full-year outcome is negative, cap the verdict at "On Track"
+  // regardless of how well individual signals are pacing — a projected loss is a loss.
+  const annualNiIsNegative = annualNetForecast != null && annualNetForecast < 0;
 
   type HealthVerdict = { verdict: string; level: 'exceeding' | 'on-track' | 'at-risk' };
   const yearHealth: HealthVerdict | null = (() => {
     if (healthSignals.length < 2) return null;
     const total = healthSignals.reduce((s, sig) => s + sig.score, 0);
     const norm = total / healthSignals.length;
-    if (norm > 0.6) return { verdict: 'Exceeding', level: 'exceeding' };
+    if (norm > 0.6 && !annualNiIsNegative) return { verdict: 'Exceeding', level: 'exceeding' };
     if (norm > -0.4) return { verdict: 'On Track', level: 'on-track' };
     return { verdict: 'At Risk', level: 'at-risk' };
   })();
