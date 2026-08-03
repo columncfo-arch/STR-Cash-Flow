@@ -393,9 +393,7 @@ export default function Dashboard() {
       : null;
     return {
       name: MONTHS[i],
-      'Gross Revenue': isActual ? m.grossRevenue : null,
       'Net Income': isActual ? m.netIncome : null,
-      'Gross Forecast': grossForecast,
       'Net Forecast': netForecast,
     };
   }) ?? [];
@@ -754,8 +752,8 @@ export default function Dashboard() {
       {/* P&L Chart */}
       {hasData && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
-          <h2 className="font-semibold text-slate-800 mb-1">Gross Revenue &amp; Net Income</h2>
-          <p className="text-xs text-slate-400 mb-4">Actuals vs. forecast for remaining months</p>
+          <h2 className="font-semibold text-slate-800 mb-1">Net Income</h2>
+          <p className="text-xs text-slate-400 mb-4">Monthly net income · actuals and projected</p>
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart data={pnlChartData} barGap={4} barCategoryGap="30%">
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -770,16 +768,7 @@ export default function Dashboard() {
                 />
               )} />
               <Legend />
-              <Bar dataKey="Gross Revenue" fill="#10b981" radius={[3, 3, 0, 0]} />
               <Bar dataKey="Net Income" fill="#6366f1" radius={[3, 3, 0, 0]} />
-              <Line
-                dataKey="Gross Forecast"
-                stroke="#10b981"
-                strokeWidth={2}
-                strokeDasharray="6 3"
-                dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }}
-                connectNulls
-              />
               <Line
                 dataKey="Net Forecast"
                 stroke="#6366f1"
