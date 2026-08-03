@@ -16,6 +16,8 @@ const PLATFORM_COLORS: Record<string, string> = {
   airbnb: '#f43f5e',
   booking: '#3b82f6',
   vrbo: '#6366f1',
+  direct: '#0d9488',
+  other: '#9ca3af',
 };
 
 type TooltipEntry = { payload: Record<string, number | null> };
@@ -32,7 +34,7 @@ function ChartTooltip({
   const d = payload[0].payload;
   const gross = d._gross as number | null;
   const target = d['Monthly Target'] as number | null;
-  const bookedRevenue = ((d.Airbnb ?? 0) as number) + ((d['Booking.com'] ?? 0) as number) + ((d.VRBO ?? 0) as number);
+  const bookedRevenue = ((d.Airbnb ?? 0) as number) + ((d['Booking.com'] ?? 0) as number) + ((d.VRBO ?? 0) as number) + ((d.Direct ?? 0) as number) + ((d.Other ?? 0) as number);
   const hasActual = gross != null;
   const hasPreBooked = !hasActual && bookedRevenue > 0;
   if (!hasActual && !hasPreBooked && target == null) return null;
@@ -364,6 +366,9 @@ export default function Dashboard() {
   const pacingVariance = ytdForecast != null ? ytdGross - ytdForecast : null;
   const pacingVariancePct = ytdForecast && ytdForecast > 0 ? (pacingVariance! / ytdForecast) * 100 : null;
 
+  const hasDirectIncome = statement?.months.some(m => m.byPlatform.direct.income > 0) ?? false;
+  const hasOtherIncome = statement?.months.some(m => m.byPlatform.other.income > 0) ?? false;
+
   const chartData = statement?.months.map((m, i) => {
     const isActual = i <= currentMonthIdx;
     return {
@@ -371,6 +376,8 @@ export default function Dashboard() {
       Airbnb: m.byPlatform.airbnb.income,
       'Booking.com': m.byPlatform.booking.income,
       VRBO: m.byPlatform.vrbo.income,
+      ...(hasDirectIncome ? { Direct: m.byPlatform.direct.income } : {}),
+      ...(hasOtherIncome ? { Other: m.byPlatform.other.income } : {}),
       'Monthly Target': monthlyForecasts[i],
       _gross: isActual ? m.grossRevenue : null,
     };
@@ -706,7 +713,15 @@ export default function Dashboard() {
                   />
                 )} />
                 <Legend />
-                {(['Airbnb', 'Booking.com', 'VRBO'] as const).map(p => (
+                {(
+                  [
+                    'Airbnb',
+                    'Booking.com',
+                    'VRBO',
+                    ...(hasDirectIncome ? ['Direct'] : []),
+                    ...(hasOtherIncome ? ['Other'] : []),
+                  ] as string[]
+                ).map(p => (
                   <Bar key={p} dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com', '')]}>
                     {chartData.map((_, i) => (
                       <Cell
