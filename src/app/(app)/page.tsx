@@ -443,7 +443,9 @@ export default function Dashboard() {
   const prevAnnualNet = prevStatement ? prevStatement.months.reduce((s, m) => s + m.netIncome, 0) : 0;
   const prevCmRatio = prevAnnualGross > 0 ? (prevAnnualNet + monthlyPITI * 12) / prevAnnualGross : null;
 
-  const cmRatio = ytdCmRatio ?? prevCmRatio;
+  // Prior year covers 12 months with full seasonal balance; prefer it over the partial-year
+  // YTD ratio which is skewed toward low-revenue off-season months.
+  const cmRatio = prevCmRatio ?? ytdCmRatio;
 
   const monthlyNetForecasts: (number | null)[] = Array.from({ length: 12 }, (_, i) => {
     if (cmRatio == null || monthlyForecasts[i] == null) return null;
