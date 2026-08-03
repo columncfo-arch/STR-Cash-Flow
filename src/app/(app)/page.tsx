@@ -528,6 +528,42 @@ export default function Dashboard() {
   const adrVariance = targetAdrVal != null && ytdAdr != null ? ytdAdr - targetAdrVal : null;
   const adrVariancePct = adrVariance != null && targetAdrVal ? (adrVariance / targetAdrVal) * 100 : null;
 
+  // Year Health: composite score from the key pacing and coverage signals
+  type HealthScore = 1 | 0 | -1;
+  const healthSignals: { label: string; score: HealthScore; detail: string }[] = [];
+
+  if (pacingVariancePct != null) {
+    const score: HealthScore = pacingVariancePct > 5 ? 1 : pacingVariancePct >= -10 ? 0 : -1;
+    healthSignals.push({ label: 'Revenue', score, detail: `${pacingVariancePct >= 0 ? '+' : ''}${pacingVariancePct.toFixed(1)}% vs target` });
+  }
+  if (netPacingVariancePct != null) {
+    const score: HealthScore = netPacingVariancePct > 5 ? 1 : netPacingVariancePct >= -15 ? 0 : -1;
+    healthSignals.push({ label: 'Net Income', score, detail: `${netPacingVariancePct >= 0 ? '+' : ''}${netPacingVariancePct.toFixed(1)}% vs projection` });
+  }
+  if (annualForecast != null) {
+    if (breakEvenAdr == null) {
+      healthSignals.push({ label: 'Target Path', score: 1, detail: 'Bookings cover target' });
+    } else if (ytdAdr != null && ytdAdr > 0) {
+      const stretchRatio = breakEvenAdr / ytdAdr;
+      const score: HealthScore = stretchRatio <= 1.1 ? 1 : stretchRatio <= 1.4 ? 0 : -1;
+      healthSignals.push({ label: 'Target Path', score, detail: `$${breakEvenAdr}/night · ${openNights} open nights` });
+    }
+  }
+  if (occVariance != null) {
+    const score: HealthScore = occVariance >= 0 ? 1 : occVariance >= -10 ? 0 : -1;
+    healthSignals.push({ label: 'Occupancy', score, detail: `${occVariance >= 0 ? '+' : ''}${occVariance.toFixed(1)}pts vs target` });
+  }
+
+  type HealthVerdict = { verdict: string; level: 'exceeding' | 'on-track' | 'at-risk' };
+  const yearHealth: HealthVerdict | null = (() => {
+    if (healthSignals.length < 2) return null;
+    const total = healthSignals.reduce((s, sig) => s + sig.score, 0);
+    const norm = total / healthSignals.length;
+    if (norm > 0.6) return { verdict: 'Exceeding', level: 'exceeding' };
+    if (norm > -0.4) return { verdict: 'On Track', level: 'on-track' };
+    return { verdict: 'At Risk', level: 'at-risk' };
+  })();
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function handleChartClick(data: any) {
     const idx: number | null | undefined = data?.activeTooltipIndex;
@@ -541,6 +577,38 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold text-slate-900">{settings?.propertyName ?? 'Dashboard'}</h1>
         <p className="text-slate-500 text-sm mt-1">{year} overview</p>
       </div>
+
+      {/* Year Health banner */}
+      {yearHealth && hasData && !selMonth && (
+        <div className={`rounded-xl border p-4 mb-6 ${
+          yearHealth.level === 'exceeding' ? 'bg-emerald-50 border-emerald-200' :
+          yearHealth.level === 'on-track' ? 'bg-slate-50 border-slate-200' :
+          'bg-red-50 border-red-200'
+        }`}>
+          <div className="flex items-start md:items-center gap-4 flex-col md:flex-row">
+            <div className="shrink-0">
+              <p className="text-xs uppercase tracking-wide font-semibold text-slate-400 mb-0.5">Year Health</p>
+              <p className={`text-xl font-bold ${
+                yearHealth.level === 'exceeding' ? 'text-emerald-700' :
+                yearHealth.level === 'on-track' ? 'text-slate-700' :
+                'text-red-700'
+              }`}>{yearHealth.verdict}</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {healthSignals.map(sig => (
+                <span key={sig.label} className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium border bg-white ${
+                  sig.score === 1 ? 'text-emerald-700 border-emerald-300' :
+                  sig.score === 0 ? 'text-amber-700 border-amber-300' :
+                  'text-red-600 border-red-300'
+                }`}>
+                  {sig.score === 1 ? '▲' : sig.score === -1 ? '▼' : '~'} {sig.label}
+                  <span className="font-normal opacity-75 ml-0.5">· {sig.detail}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Revenue pacing tiles */}
       {!selMonth && hasTarget && annualForecast != null && (
