@@ -503,6 +503,8 @@ export default function Dashboard() {
 
   const targetOcc = displayOccTarget;
   const occVariance = targetOcc != null ? ytdOccupancy - targetOcc : null;
+  const currentMonthOccupancy = statement?.months[currentMonthIdx]?.occupancyRate ?? null;
+  const curMonthOccVariance = targetOcc != null && currentMonthOccupancy != null ? currentMonthOccupancy - targetOcc : null;
   const targetAdrVal = displayAdrTarget;
   const adrVariance = targetAdrVal != null && ytdAdr != null ? ytdAdr - targetAdrVal : null;
   const adrVariancePct = adrVariance != null && targetAdrVal ? (adrVariance / targetAdrVal) * 100 : null;
@@ -842,7 +844,7 @@ export default function Dashboard() {
 
       {/* Occupancy + ADR tiles */}
       {hasData && !selMonth && (
-        <div className="grid grid-cols-2 gap-4 mb-6">
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
           <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Occupancy</p>
@@ -881,6 +883,27 @@ export default function Dashboard() {
                   <p className="text-xs text-slate-400 mt-3">Year to date</p>
                 )}
               </>
+            )}
+          </div>
+
+          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+            <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">{MONTHS_LONG[currentMonthIdx]} Occupancy</p>
+            {currentMonthOccupancy != null ? (
+              <>
+                <p className="text-2xl font-bold text-slate-900">{currentMonthOccupancy.toFixed(1)}%</p>
+                {curMonthOccVariance != null ? (
+                  <div className="mt-2 flex items-center justify-between">
+                    <p className="text-xs text-slate-400">Target {targetOcc!.toFixed(1)}%</p>
+                    <span className={`text-xs font-semibold ${perfColor(curMonthOccVariance, Math.abs(curMonthOccVariance), false)}`}>
+                      {curMonthOccVariance >= 0 ? '▲' : '▼'} {Math.abs(curMonthOccVariance).toFixed(1)}pts
+                    </span>
+                  </div>
+                ) : (
+                  <p className="text-xs text-slate-400 mt-3">This month</p>
+                )}
+              </>
+            ) : (
+              <p className="text-2xl font-bold text-slate-400">—</p>
             )}
           </div>
 
