@@ -385,6 +385,18 @@ export default function Dashboard() {
 
   const ytdNetMargin = ytdGross > 0 ? ytdNetIncome / ytdGross : null;
 
+  const currentMonthNetIncome = statement?.months[currentMonthIdx]?.netIncome ?? 0;
+  const ytdNetForecast = ytdForecast != null && ytdNetMargin != null
+    ? Math.round(ytdForecast * ytdNetMargin) : null;
+  const monthlyNetForecast = monthlyForecasts[currentMonthIdx] != null && ytdNetMargin != null
+    ? Math.round(monthlyForecasts[currentMonthIdx]! * ytdNetMargin) : null;
+  const netPacingVariance = ytdNetForecast != null ? ytdNetIncome - ytdNetForecast : null;
+  const netPacingVariancePct = ytdNetForecast != null && ytdNetForecast !== 0
+    ? (netPacingVariance! / Math.abs(ytdNetForecast)) * 100 : null;
+  const monthlyNetVariance = monthlyNetForecast != null ? currentMonthNetIncome - monthlyNetForecast : null;
+  const monthlyNetVariancePct = monthlyNetForecast != null && monthlyNetForecast !== 0
+    ? (monthlyNetVariance! / Math.abs(monthlyNetForecast)) * 100 : null;
+
   const pnlChartData = statement?.months.map((m, i) => {
     const isActual = i <= currentMonthIdx;
     const grossForecast = monthlyForecasts[i] ?? null;
@@ -748,6 +760,38 @@ export default function Dashboard() {
           </div>
         )}
       </div>
+
+      {/* Net Income pacing tiles */}
+      {hasData && !selMonth && (ytdNetForecast != null || monthlyNetForecast != null) && (
+        <div className="grid grid-cols-2 gap-4 mb-6">
+          {ytdNetForecast != null && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">YTD Net Income Pacing</p>
+              <p className={`text-2xl font-bold ${ytdNetIncome >= 0 ? 'text-slate-900' : 'text-red-600'}`}>{fmt(ytdNetIncome)}</p>
+              <p className="text-xs text-slate-400 mt-0.5 mb-2">of {fmt(ytdNetForecast)} YTD projected</p>
+              {netPacingVariance != null && (
+                <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2 py-1 rounded-lg ${perfColor(netPacingVariance, netPacingVariancePct != null ? Math.abs(netPacingVariancePct) : null, true)}`}>
+                  {netPacingVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(netPacingVariance))}
+                  {netPacingVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(netPacingVariancePct).toFixed(1)}%)</span>}
+                </span>
+              )}
+            </div>
+          )}
+          {monthlyNetForecast != null && (
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">{MONTHS_LONG[currentMonthIdx]} Net Income</p>
+              <p className={`text-2xl font-bold ${currentMonthNetIncome >= 0 ? 'text-slate-900' : 'text-red-600'}`}>{fmt(currentMonthNetIncome)}</p>
+              <p className="text-xs text-slate-400 mt-0.5 mb-2">of {fmt(monthlyNetForecast)} projected</p>
+              {monthlyNetVariance != null && (
+                <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2 py-1 rounded-lg ${perfColor(monthlyNetVariance, monthlyNetVariancePct != null ? Math.abs(monthlyNetVariancePct) : null, true)}`}>
+                  {monthlyNetVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(monthlyNetVariance))}
+                  {monthlyNetVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(monthlyNetVariancePct).toFixed(1)}%)</span>}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* P&L Chart */}
       {hasData && (
