@@ -401,10 +401,13 @@ export default function Dashboard() {
     return Math.round(monthlyForecasts[i]! * cmRatio - monthlyPITI);
   });
 
-  const annualGrossForecastTotal = monthlyForecasts.reduce<number>((s, v) => s + (v ?? 0), 0);
-  const annualNetForecast = cmRatio != null
-    ? Math.round(annualGrossForecastTotal * cmRatio - monthlyPITI * 12)
+  // Blended full-year estimate: actual YTD + projected remaining months
+  // This ensures: earned + projRemainingNet = annualNetForecast (always reconciles)
+  const projRemainingGross = monthlyForecasts.slice(currentMonthIdx + 1).reduce<number>((s, v) => s + (v ?? 0), 0);
+  const projRemainingNet = cmRatio != null
+    ? Math.round(projRemainingGross * cmRatio - monthlyPITI * (11 - currentMonthIdx))
     : null;
+  const annualNetForecast = projRemainingNet != null ? ytdNetIncome + projRemainingNet : null;
 
   const currentMonthNetIncome = statement?.months[currentMonthIdx]?.netIncome ?? 0;
   const ytdGrossForecastTotal = monthlyForecasts.slice(0, currentMonthIdx + 1).reduce<number>((s, v) => s + (v ?? 0), 0);
@@ -741,9 +744,14 @@ export default function Dashboard() {
           )}
           {annualNetForecast != null && (
             <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">Annual Net Income Target</p>
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">Annual Net Income Projection</p>
               <p className={`text-2xl font-bold ${annualNetForecast >= 0 ? 'text-slate-900' : 'text-red-600'}`}>{fmt(annualNetForecast)}</p>
-              <p className="text-xs text-slate-400 mt-0.5">{fmt(ytdNetIncome)} earned · {fmt(annualNetForecast - ytdNetIncome)} remaining</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                {fmt(ytdNetIncome)} earned ·{' '}
+                {projRemainingNet != null
+                  ? `${fmt(projRemainingNet)} proj. remaining`
+                  : '—'}
+              </p>
             </div>
           )}
         </div>
