@@ -586,29 +586,29 @@ export default function Dashboard() {
         <p className="text-slate-500 text-sm mt-1">{year} overview</p>
       </div>
 
-      {/* Current month cash flow tile */}
-      {hasData && !selMonth && monthlyNetForecast != null && cmRatio != null && (
-        <div className={`bg-white rounded-xl border p-4 shadow-sm mb-6 ${monthlyNetForecast < 0 ? 'border-red-200' : 'border-slate-200'}`}>
+      {/* Current month cash flow tile — uses actual booked revenue and entered expenses */}
+      {hasData && !selMonth && curMonthStmt != null && (
+        <div className={`bg-white rounded-xl border p-4 shadow-sm mb-6 ${curMonthStmt.netIncome < 0 ? 'border-red-200' : 'border-slate-200'}`}>
           <p className="text-xs uppercase tracking-wide font-semibold text-slate-500 mb-1">{MONTHS_LONG[currentMonthIdx]} Forecast Cash Flow</p>
           <div className="flex items-start gap-6">
             <div className="shrink-0">
-              <p className={`text-2xl font-bold ${monthlyNetForecast < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
-                {monthlyNetForecast >= 0 ? '+' : ''}{fmt(monthlyNetForecast)}
+              <p className={`text-2xl font-bold ${curMonthStmt.netIncome < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                {curMonthStmt.netIncome >= 0 ? '+' : ''}{fmt(curMonthStmt.netIncome)}
               </p>
-              <p className="text-xs text-slate-400 mt-0.5">projected net</p>
+              <p className="text-xs text-slate-400 mt-0.5">net to date</p>
             </div>
             <div className="flex-1 min-w-0 space-y-1 pt-0.5">
               <div className="flex justify-between text-xs">
-                <span className="text-slate-500">Forecast revenue</span>
-                <span className="text-slate-700 font-medium">{fmt(curMonthForecastGross)}</span>
+                <span className="text-slate-500">Net revenue (booked − fees)</span>
+                <span className="text-slate-700 font-medium">{fmt(curMonthStmt.netRevenue)}</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-slate-500">Est. fees &amp; expenses</span>
-                <span className="text-red-500">−{fmt(Math.round(curMonthForecastGross * (1 - cmRatio)))}</span>
+                <span className="text-slate-500">Operating expenses</span>
+                <span className="text-red-500">−{fmt(curMonthStmt.totalOperatingExpenses)}</span>
               </div>
               <div className="flex justify-between text-xs border-t border-slate-100 pt-1">
                 <span className="text-slate-500">PITI</span>
-                <span className="text-red-500">−{fmt(monthlyPITI)}</span>
+                <span className="text-red-500">−{fmt(curMonthStmt.piti)}</span>
               </div>
               {curMonthForecastGross > 0 && (
                 <div className="pt-1">
