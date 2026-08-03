@@ -191,6 +191,9 @@ function MonthPnL({ m, fmt }: { m: MonthlyStatement; fmt: (n: number) => string 
   return <PnLTable m={m} fmt={fmt} />;
 }
 
+type HealthScore = 1 | 0 | -1;
+type HealthVerdict = { verdict: string; level: 'exceeding' | 'on-track' | 'at-risk' };
+
 export default function Dashboard() {
   const [statement, setStatement] = useState<AnnualStatement | null>(null);
   const [prevStatement, setPrevStatement] = useState<AnnualStatement | null>(null);
@@ -400,12 +403,13 @@ export default function Dashboard() {
   const annualForecast = hasTarget
     ? (manualTarget ?? monthlyForecasts.reduce<number>((s, v) => s + (v ?? 0), 0))
     : null;
+  const curMonthForecast = monthlyForecasts[currentMonthIdx];
   const stillToBook = annualForecast != null ? Math.max(0, annualForecast - ytdGross - futureConfirmedGross) : null;
   const breakEvenAdr = openNights > 0 && stillToBook != null && stillToBook > 0 ? Math.ceil(stillToBook / openNights) : null;
   // Prorate current month's forecast by days elapsed so ytdForecast matches the ytdGross horizon
   const daysElapsed = now.getDate();
-  const curMonthForecastProrated = monthlyForecasts[currentMonthIdx] != null
-    ? Math.round(monthlyForecasts[currentMonthIdx]! * daysElapsed / daysInCurMonth)
+  const curMonthForecastProrated = curMonthForecast != null
+    ? Math.round(curMonthForecast * daysElapsed / daysInCurMonth)
     : 0;
   const ytdForecast = hasTarget
     ? monthlyForecasts.slice(0, currentMonthIdx).reduce<number>((s, v) => s + (v ?? 0), 0) + curMonthForecastProrated
@@ -466,8 +470,8 @@ export default function Dashboard() {
   const ytdNetForecast = cmRatio != null
     ? Math.round(ytdGrossForecastTotal * cmRatio - ytdPITITotal)
     : null;
-  const monthlyNetForecast = cmRatio != null && monthlyForecasts[currentMonthIdx] != null
-    ? Math.round(monthlyForecasts[currentMonthIdx]! * cmRatio - monthlyPITI)
+  const monthlyNetForecast = cmRatio != null && curMonthForecast != null
+    ? Math.round(curMonthForecast * cmRatio - monthlyPITI)
     : null;
   const netPacingVariance = ytdNetForecast != null ? ytdNetIncome - ytdNetForecast : null;
   const netPacingVariancePct = ytdNetForecast != null && ytdNetForecast !== 0
@@ -478,7 +482,7 @@ export default function Dashboard() {
 
   // Current-month cash flow tile
   const curMonthConfirmedGross = curMonthStmt?.grossRevenue ?? 0;
-  const curMonthForecastGross = monthlyForecasts[currentMonthIdx] ?? 0;
+  const curMonthForecastGross = curMonthForecast ?? 0;
   const curMonthCashGapToFill = Math.max(0, curMonthForecastGross - curMonthConfirmedGross);
   const curMonthCoveragePct = curMonthForecastGross > 0 ? Math.min(100, Math.round((curMonthConfirmedGross / curMonthForecastGross) * 100)) : 0;
 
@@ -532,12 +536,10 @@ export default function Dashboard() {
   const occVariance = targetOcc != null ? ytdOccupancy - targetOcc : null;
   const currentMonthOccupancy = statement?.months[currentMonthIdx]?.occupancyRate ?? null;
   const curMonthOccVariance = targetOcc != null && currentMonthOccupancy != null ? currentMonthOccupancy - targetOcc : null;
-  const targetAdrVal = displayAdrTarget;
-  const adrVariance = targetAdrVal != null && ytdAdr != null ? ytdAdr - targetAdrVal : null;
-  const adrVariancePct = adrVariance != null && targetAdrVal ? (adrVariance / targetAdrVal) * 100 : null;
+  const adrVariance = displayAdrTarget != null && ytdAdr != null ? ytdAdr - displayAdrTarget : null;
+  const adrVariancePct = adrVariance != null && displayAdrTarget ? (adrVariance / displayAdrTarget) * 100 : null;
 
   // Year Health: composite score from the key pacing and coverage signals
-  type HealthScore = 1 | 0 | -1;
   const healthSignals: { label: string; score: HealthScore; detail: string }[] = [];
 
   if (pacingVariancePct != null) {
@@ -567,15 +569,13 @@ export default function Dashboard() {
   // regardless of how well individual signals are pacing — a projected loss is a loss.
   const annualNiIsNegative = annualNetForecast != null && annualNetForecast < 0;
 
-  type HealthVerdict = { verdict: string; level: 'exceeding' | 'on-track' | 'at-risk' };
-  const yearHealth: HealthVerdict | null = (() => {
-    if (healthSignals.length < 2) return null;
-    const total = healthSignals.reduce((s, sig) => s + sig.score, 0);
-    const norm = total / healthSignals.length;
-    if (norm > 0.6 && !annualNiIsNegative) return { verdict: 'Exceeding', level: 'exceeding' };
-    if (norm > -0.4) return { verdict: 'On Track', level: 'on-track' };
-    return { verdict: 'At Risk', level: 'at-risk' };
-  })();
+  const healthTotal = healthSignals.reduce((s, sig) => s + sig.score, 0);
+  const healthNorm = healthSignals.length > 0 ? healthTotal / healthSignals.length : 0;
+  const yearHealth: HealthVerdict | null =
+    healthSignals.length < 2 ? null
+    : healthNorm > 0.6 && !annualNiIsNegative ? { verdict: 'Exceeding', level: 'exceeding' }
+    : healthNorm > -0.4 ? { verdict: 'On Track', level: 'on-track' }
+    : { verdict: 'At Risk', level: 'at-risk' };
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function handleChartClick(data: any) {
@@ -1155,49 +1155,47 @@ export default function Dashboard() {
       {/* ── Year Health + YTD tables — hidden when a month is drilled into ── */}
       {hasData && !selMonth && (
         <>
-        {yearHealth && (
-          <div className={`rounded-xl border p-4 mb-6 ${
-            yearHealth.level === 'exceeding' ? 'bg-emerald-50 border-emerald-200' :
-            yearHealth.level === 'on-track' ? 'bg-slate-50 border-slate-200' :
-            'bg-red-50 border-red-200'
-          }`}>
-            <div className="flex items-start md:items-center gap-4 flex-col md:flex-row">
-              <div className="shrink-0">
-                <p className="text-xs uppercase tracking-wide font-semibold text-slate-400 mb-0.5">Year Health</p>
-                <p className={`text-xl font-bold ${
-                  yearHealth.level === 'exceeding' ? 'text-emerald-700' :
-                  yearHealth.level === 'on-track' ? 'text-slate-700' :
-                  'text-red-700'
-                }`}>{yearHealth.verdict}</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {healthSignals.map(sig => (
-                  <span key={sig.label} className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium border bg-white ${
-                    sig.score === 1 ? 'text-emerald-700 border-emerald-300' :
-                    sig.score === 0 ? 'text-amber-700 border-amber-300' :
-                    'text-red-600 border-red-300'
-                  }`}>
-                    {sig.score === 1 ? '▲' : sig.score === -1 ? '▼' : '~'} {sig.label}
-                    <span className="font-normal opacity-75 ml-0.5">· {sig.detail}</span>
-                  </span>
-                ))}
+          {yearHealth && (
+            <div className={`rounded-xl border p-4 mb-6 ${
+              yearHealth.level === 'exceeding' ? 'bg-emerald-50 border-emerald-200' :
+              yearHealth.level === 'on-track' ? 'bg-slate-50 border-slate-200' :
+              'bg-red-50 border-red-200'
+            }`}>
+              <div className="flex items-start md:items-center gap-4 flex-col md:flex-row">
+                <div className="shrink-0">
+                  <p className="text-xs uppercase tracking-wide font-semibold text-slate-400 mb-0.5">Year Health</p>
+                  <p className={`text-xl font-bold ${
+                    yearHealth.level === 'exceeding' ? 'text-emerald-700' :
+                    yearHealth.level === 'on-track' ? 'text-slate-700' :
+                    'text-red-700'
+                  }`}>{yearHealth.verdict}</p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {healthSignals.map(sig => (
+                    <span key={sig.label} className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium border bg-white ${
+                      sig.score === 1 ? 'text-emerald-700 border-emerald-300' :
+                      sig.score === 0 ? 'text-amber-700 border-amber-300' :
+                      'text-red-600 border-red-300'
+                    }`}>
+                      {sig.score === 1 ? '▲' : sig.score === -1 ? '▼' : '~'} {sig.label}
+                      <span className="font-normal opacity-75 ml-0.5">· {sig.detail}</span>
+                    </span>
+                  ))}
+                </div>
               </div>
             </div>
+          )}
+          <div className="space-y-6 mb-8">
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+              <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Year-to-Date P&amp;L (Jan–{MONTHS[currentMonthIdx - 1] ?? MONTHS[0]})</h3>
+              <PnLTable m={ytdPnL} fmt={fmt} />
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
+              <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Platform Breakdown</h3>
+              <PlatformTable byPlatform={ytdByPlatform} totalRevenue={ytdGross} fmt={fmt} />
+            </div>
           </div>
-        )}
         </>
-      )}
-      {hasData && !selMonth && (
-        <div className="space-y-6 mb-8">
-          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-            <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Year-to-Date P&amp;L (Jan–{MONTHS[currentMonthIdx - 1] ?? MONTHS[0]})</h3>
-            <PnLTable m={ytdPnL} fmt={fmt} />
-          </div>
-          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-            <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Platform Breakdown</h3>
-            <PlatformTable byPlatform={ytdByPlatform} totalRevenue={ytdGross} fmt={fmt} />
-          </div>
-        </div>
       )}
 
       {/* ── Selected month detail — stacked ── */}
