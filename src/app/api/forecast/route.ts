@@ -189,8 +189,12 @@ export async function GET() {
         const priorYearForForecast = lastFullYear ?? (currentYear - 1);
         for (let m = currentMonthIdx + 1; m <= 11; m++) {
           const prior = computeMonthActuals(allBookings, allExpenses, priorYearForForecast, m, settings.cleaningFeePerBooking ?? 0);
-          fcastGross += Math.round(prior.grossRevenue * growthFactor);
-          fcastPlatformFees += Math.round(prior.platformFees * growthFactor);
+          const projGross = Math.round(prior.grossRevenue * growthFactor);
+          fcastGross += projGross;
+          // If a forward-looking fee rate override is set, apply it to projected gross
+          fcastPlatformFees += settings.platformFeeRate != null
+            ? Math.round(projGross * settings.platformFeeRate)
+            : Math.round(prior.platformFees * growthFactor);
           fcastOpEx += Math.round(prior.operatingExpenses * growthFactor);
         }
 
@@ -208,7 +212,10 @@ export async function GET() {
         const basePlatformFees = prevPlatformFees ?? actualsByYear.get(lastFullYear ?? currentYear - 1)?.platformFees ?? 0;
         const baseOpEx = prevOpEx ?? actualsByYear.get(lastFullYear ?? currentYear - 1)?.operatingExpenses ?? 0;
         grossRevenue = override.revenue ?? Math.round(baseGross * growthFactor);
-        platformFees = Math.round(basePlatformFees * growthFactor);
+        // If a forward-looking fee rate override is set, apply it to projected gross
+        platformFees = settings.platformFeeRate != null
+          ? Math.round(grossRevenue * settings.platformFeeRate)
+          : Math.round(basePlatformFees * growthFactor);
         operatingExpenses = override.expenses ?? Math.round(baseOpEx * growthFactor);
         isManualRevenue = override.revenue !== undefined;
         isManualExpenses = override.expenses !== undefined;

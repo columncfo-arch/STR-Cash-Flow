@@ -134,6 +134,7 @@ export default function OptimizationPage() {
   const [modelCleaningFee, setModelCleaningFee] = useState('');
   const [modelCleaningCost, setModelCleaningCost] = useState('');
   const [modelOpEx, setModelOpEx] = useState('');
+  const [modelPlatformFeeRate, setModelPlatformFeeRate] = useState('');
   const [scenarioTargets, setScenarioTargets] = useState<[string, string, string]>(['0', '5000', '10000']);
   const [modelInitialized, setModelInitialized] = useState(false);
 
@@ -168,6 +169,7 @@ export default function OptimizationPage() {
       if (s.sensitivityCleaningFee != null) setModelCleaningFee(String(s.sensitivityCleaningFee));
       if (s.sensitivityCleaningCost != null) setModelCleaningCost(String(s.sensitivityCleaningCost));
       if (s.sensitivityOpEx != null) setModelOpEx(String(s.sensitivityOpEx));
+      if (s.platformFeeRate != null) setModelPlatformFeeRate(String((s.platformFeeRate * 100).toFixed(1)));
       if (s.sensitivityTarget1 != null || s.sensitivityTarget2 != null || s.sensitivityTarget3 != null) {
         setScenarioTargets([
           String(s.sensitivityTarget1 ?? 0),
@@ -204,12 +206,14 @@ export default function OptimizationPage() {
   }, [settings, statement, modelInitialized]);
 
   function saveModel() {
+    const parsedRate = parseFloat(modelPlatformFeeRate);
     saveSection('model', {
       sensitivityAdr: parseFloat(modelAdr) || undefined,
       sensitivityAvgStay: parseFloat(modelAvgStay) || undefined,
       sensitivityCleaningFee: parseFloat(modelCleaningFee) || 0,
       sensitivityCleaningCost: parseFloat(modelCleaningCost) || 0,
       sensitivityOpEx: parseFloat(modelOpEx) || 0,
+      platformFeeRate: !isNaN(parsedRate) && parsedRate > 0 ? parsedRate / 100 : undefined,
       sensitivityTarget1: parseFloat(scenarioTargets[0]) || 0,
       sensitivityTarget2: parseFloat(scenarioTargets[1]) || 5000,
       sensitivityTarget3: parseFloat(scenarioTargets[2]) || 10000,
@@ -440,11 +444,14 @@ export default function OptimizationPage() {
   // ── Sensitivity scenarios ─────────────────────────────────────────────────────
 
   // Effective rate from actual data. Airbnb split-fee model (current default) charges hosts ~3%;
-  // Airbnb host-only model (Sept 2026 transition) charges 15.5%. VRBO is ~8%.
+  // Airbnb host-only model (July 2026 transition) charges 15%. VRBO is ~8%.
   // Using actual data is most accurate — it captures whichever model applies.
   // Fall back to 3% if no data yet (split-fee default for most existing hosts).
   // Only the host service fee rate (not taxes/fast pay/refunds) — matches Dashboard "Platform Fees" line
   const effectivePlatformFeeRate = ytdActualGross > 0 ? ytdActualPlatformFeesOnly / ytdActualGross : 0.03;
+
+  // User can override the forward-looking rate (e.g. to 15% after Airbnb's July 2026 host-only switch)
+  const activePlatformFeeRate = settings?.platformFeeRate ?? effectivePlatformFeeRate;
 
   const mAdr = parseFloat(modelAdr) || 0;
   const mAvgStay = parseFloat(modelAvgStay) || 1;
@@ -452,7 +459,7 @@ export default function OptimizationPage() {
   const mCleaningCost = parseFloat(modelCleaningCost) || 0;
   const mOpEx = parseFloat(modelOpEx) || 0;
   const scenarios: ScenarioResult[] = scenarioTargets
-    .map(t => computeScenario(parseFloat(t) || 0, mAdr, mAvgStay, mCleaningFee, mCleaningCost, annualPITI, mOpEx, effectivePlatformFeeRate))
+    .map(t => computeScenario(parseFloat(t) || 0, mAdr, mAvgStay, mCleaningFee, mCleaningCost, annualPITI, mOpEx, activePlatformFeeRate))
     .filter((s): s is ScenarioResult => s !== null);
 
   const hasData = activeMonths.length > 0;
@@ -537,15 +544,21 @@ export default function OptimizationPage() {
                 <p className="text-xs text-slate-400 mt-0.5">Utilities, maintenance, etc. (excl. cleaning)</p>
               </div>
               <div>
-                <label className="text-xs text-slate-500 block mb-1">Platform Fee Rate</label>
-                <div className="text-sm border border-slate-100 bg-slate-50 rounded-lg px-3 py-2 text-slate-500">
-                  {`${(effectivePlatformFeeRate * 100).toFixed(1)}%`}
-                  {ytdActualGross === 0 && <span className="text-slate-400 ml-1">(default)</span>}
-                </div>
+                <label className="text-xs text-slate-500 block mb-1">Platform Fee Rate (%)</label>
+                <input
+                  type="number" min="0" max="30" step="0.1"
+                  value={modelPlatformFeeRate}
+                  onChange={e => setModelPlatformFeeRate(e.target.value)}
+                  onBlur={saveModel}
+                  placeholder={`${(effectivePlatformFeeRate * 100).toFixed(1)}`}
+                  className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2"
+                />
                 <p className="text-xs text-slate-400 mt-0.5">
-                  {ytdActualGross > 0
-                    ? 'Host service fee ÷ gross (excl. taxes)'
-                    : 'Default ~3% (Airbnb split-fee)'}
+                  {modelPlatformFeeRate
+                    ? `Override: ${modelPlatformFeeRate}% (YTD actual: ${(effectivePlatformFeeRate * 100).toFixed(1)}%)`
+                    : ytdActualGross > 0
+                      ? `YTD actual: ${(effectivePlatformFeeRate * 100).toFixed(1)}%`
+                      : 'Default ~3% (Airbnb split-fee)'}
                 </p>
               </div>
             </div>
@@ -639,7 +652,7 @@ export default function OptimizationPage() {
                   <tr className="border-b border-slate-100">
                     <td className="px-5 py-3 pl-8">
                       <div className="text-xs text-slate-500">− Platform Fees</div>
-                      <div className="text-[10px] text-slate-400 mt-0.5">{(effectivePlatformFeeRate * 100).toFixed(1)}% host service fee</div>
+                      <div className="text-[10px] text-slate-400 mt-0.5">{(activePlatformFeeRate * 100).toFixed(1)}% host service fee</div>
                     </td>
                     {scenarios.map((s, i) => (
                       <td key={i} className="px-5 py-3 text-right text-red-500 text-xs">({fmt2(s.platformFees)})</td>

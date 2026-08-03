@@ -122,6 +122,7 @@ export interface Settings {
   sensitivityTarget1?: number;
   sensitivityTarget2?: number;
   sensitivityTarget3?: number;
+  platformFeeRate?: number;      // forward-looking platform fee rate override (e.g. 0.15 for Airbnb host-only model)
   totalCapitalDeployed?: number;
   renovationCosts?: number;
   mortgageRate?: number;          // current interest rate %
