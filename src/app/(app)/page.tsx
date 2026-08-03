@@ -258,6 +258,19 @@ export default function Dashboard() {
       : [];
     return total + eligible.reduce((s, b) => s + b.income, 0);
   }, 0) ?? 0;
+
+  // Confirmed future nights (for open-nights calculation)
+  const futureConfirmedNights = statement?.months.reduce((total, m, i) => {
+    if (i === currentMonthIdx) {
+      return total + m.bookings.filter(b => b.checkIn > todayStr).reduce((s, b) => s + b.nights, 0);
+    }
+    return i > currentMonthIdx ? total + m.totalNights : total;
+  }, 0) ?? 0;
+
+  // Days remaining in the year from today (inclusive)
+  const yearEnd = new Date(year, 11, 31);
+  const daysRemainingInYear = Math.round((yearEnd.getTime() - now.getTime()) / 86400000) + 1;
+  const openNights = Math.max(0, daysRemainingInYear - futureConfirmedNights);
   // P&L table uses completed months only — the only period where revenue and expenses are both fully settled
   const ytdPnL: PnLData = {
     grossRevenue: completedMonths.reduce((s, m) => s + m.grossRevenue, 0),
@@ -659,12 +672,13 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Target Gross Revenue + Remaining gap tiles */}
+      {/* Target Gross Revenue + Remaining gap + Break-even ADR tiles */}
       {hasData && !selMonth && annualForecast != null && (() => {
         const remainingToTarget = Math.max(0, annualForecast - ytdGross);
         const stillToBook = Math.max(0, remainingToTarget - futureConfirmedGross);
+        const breakEvenAdr = openNights > 0 && stillToBook > 0 ? Math.ceil(stillToBook / openNights) : null;
         return (
-          <div className="grid grid-cols-2 gap-4 mb-6">
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
             <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
               <div className="flex items-center justify-between mb-1">
                 <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Annual Gross Revenue Target</p>
@@ -691,6 +705,25 @@ export default function Dashboard() {
                 {fmt(futureConfirmedGross)} on books
                 {stillToBook > 0 ? ` · ${fmt(stillToBook)} to fill` : ' · target covered'}
               </p>
+            </div>
+            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
+              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-1">Break-Even Rate</p>
+              {breakEvenAdr != null ? (
+                <>
+                  <p className="text-3xl font-bold text-slate-900">{fmt(breakEvenAdr)}<span className="text-base font-normal text-slate-400"> / night</span></p>
+                  <p className="text-xs text-slate-400 mt-1">on {openNights} open nights closes the gap</p>
+                </>
+              ) : stillToBook === 0 ? (
+                <>
+                  <p className="text-3xl font-bold text-emerald-600">Covered</p>
+                  <p className="text-xs text-slate-400 mt-1">Bookings on hand exceed target</p>
+                </>
+              ) : (
+                <>
+                  <p className="text-3xl font-bold text-slate-400">—</p>
+                  <p className="text-xs text-slate-400 mt-1">No open nights remaining</p>
+                </>
+              )}
             </div>
           </div>
         );
