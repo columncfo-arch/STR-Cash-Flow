@@ -66,6 +66,12 @@ export default function BookingsPage() {
       maximumFractionDigits: 0,
     }).format(n);
 
+  const fmtDate = (dateStr: string | undefined) => {
+    if (!dateStr) return '—';
+    const d = new Date(dateStr + 'T12:00:00');
+    return isNaN(d.getTime()) ? '—' : format(d, 'MMM d, yyyy');
+  };
+
   async function load() {
     try {
       const res = await fetch(`/api/bookings?year=${filterYear}`);
@@ -174,7 +180,7 @@ export default function BookingsPage() {
       .filter(b => b.email || b.phone)
       .map(b => {
         const name = b.guestName ?? b.bookerName ?? '';
-        const checkIn = format(new Date(b.checkIn + 'T12:00:00'), 'yyyy-MM-dd');
+        const checkIn = fmtDate(b.checkIn);
         const platform = b.platform;
         return [name, b.email ?? '', b.phone ?? '', checkIn, platform]
           .map(v => `"${String(v).replace(/"/g, '""')}"`)
@@ -433,11 +439,11 @@ export default function BookingsPage() {
                             className="border border-emerald-300 rounded px-2 py-1 text-sm"
                           />
                         ) : (
-                          format(new Date(b.checkIn + 'T12:00:00'), 'MMM d, yyyy')
+                          fmtDate(b.checkIn)
                         )}
                       </td>
                       <td className="px-4 py-3 text-slate-600">
-                        {format(new Date(b.checkOut + 'T12:00:00'), 'MMM d, yyyy')}
+                        {fmtDate(b.checkOut)}
                       </td>
                       <td className="px-4 py-3 text-right text-slate-600">{b.nights}</td>
                       <td className="px-4 py-3 text-right">
