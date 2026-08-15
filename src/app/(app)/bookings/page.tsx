@@ -67,15 +67,27 @@ export default function BookingsPage() {
     }).format(n);
 
   async function load() {
-    const res = await fetch(`/api/bookings?year=${filterYear}`);
-    const data = await res.json();
-    if (!res.ok) {
-      setLoadError(res.status === 401 ? 'Not signed in. Please refresh the page.' : 'Failed to load bookings. Please try again.');
-      setBookings([]);
-      return;
+    try {
+      const res = await fetch(`/api/bookings?year=${filterYear}`);
+      let data: unknown;
+      try {
+        data = await res.json();
+      } catch {
+        setLoadError(`Server returned an unexpected response (HTTP ${res.status}). Check the browser console.`);
+        setBookings([]);
+        return;
+      }
+      if (!res.ok) {
+        setLoadError(res.status === 401 ? 'Not signed in. Please refresh the page.' : `Failed to load bookings (${res.status}). Please try again.`);
+        setBookings([]);
+        return;
+      }
+      setLoadError(null);
+      setBookings(Array.isArray(data) ? data : []);
+    } catch (err) {
+      setLoadError('Network error loading bookings. Please try again.');
+      console.error('Bookings load error:', err);
     }
-    setLoadError(null);
-    setBookings(Array.isArray(data) ? data : []);
   }
 
   useEffect(() => {
