@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { Booking, Platform, Settings } from '@/types';
+import { Booking, DirectLead, Platform, Settings } from '@/types';
 import PlatformBadge from '@/components/PlatformBadge';
 import { format } from 'date-fns';
 import { Users, ChevronDown, ChevronRight, Pencil, X, Search, Download, ExternalLink } from 'lucide-react';
@@ -17,6 +17,7 @@ interface GuestRecord {
   totalRevenue: number;
   firstStay: string;
   lastStay: string;
+  leadOnly?: boolean;
 }
 
 function guestKey(b: Booking): string {
@@ -28,8 +29,9 @@ function displayName(b: Booking): string {
   return b.guestName ?? b.bookerName ?? b.confirmationCode ?? 'Unknown Guest';
 }
 
-function buildGuestRoster(bookings: Booking[]): GuestRecord[] {
+function buildGuestRoster(bookings: Booking[], leads: DirectLead[]): GuestRecord[] {
   const map = new Map<string, GuestRecord>();
+
   for (const b of bookings) {
     const key = guestKey(b);
     const name = displayName(b);
@@ -57,6 +59,38 @@ function buildGuestRoster(bookings: Booking[]): GuestRecord[] {
       if (b.checkIn > existing.lastStay) existing.lastStay = b.checkIn;
     }
   }
+
+  // Build an email → key index so leads can enrich existing guests
+  const emailIndex = new Map<string, string>();
+  for (const g of map.values()) {
+    if (g.email) emailIndex.set(g.email.toLowerCase(), g.key);
+  }
+
+  for (const lead of leads) {
+    const emailLower = lead.email.toLowerCase();
+    const existingKey = emailIndex.get(emailLower);
+    if (existingKey) {
+      const g = map.get(existingKey)!;
+      if (!g.phone && lead.phone) g.phone = lead.phone;
+    } else {
+      const name = `${lead.firstName} ${lead.lastName}`.trim();
+      const key = `lead-${lead.id}`;
+      const dateStr = lead.createdAt.slice(0, 10);
+      map.set(key, {
+        key, name,
+        email: lead.email,
+        phone: lead.phone ?? '',
+        platforms: [],
+        bookings: [],
+        totalNights: 0,
+        totalRevenue: 0,
+        firstStay: dateStr,
+        lastStay: dateStr,
+        leadOnly: true,
+      });
+    }
+  }
+
   return [...map.values()].sort((a, b) => b.lastStay.localeCompare(a.lastStay));
 }
 
@@ -64,6 +98,7 @@ interface ContactEditState { key: string; email: string; phone: string; notes: s
 
 export default function GuestRosterPage() {
   const [allBookings, setAllBookings] = useState<Booking[]>([]);
+  const [allLeads, setAllLeads] = useState<DirectLead[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [editContact, setEditContact] = useState<ContactEditState | null>(null);
@@ -77,17 +112,19 @@ export default function GuestRosterPage() {
     new Intl.NumberFormat('en-US', { style: 'currency', currency: settings?.currency ?? 'USD', maximumFractionDigits: 0 }).format(n);
 
   async function load() {
-    const [b, s] = await Promise.all([
+    const [b, l, s] = await Promise.all([
       fetch('/api/bookings?year=all').then(r => r.json()),
+      fetch('/api/direct-booking').then(r => r.json()),
       fetch('/api/settings').then(r => r.json()),
     ]);
     setAllBookings(Array.isArray(b) ? b : []);
+    setAllLeads(Array.isArray(l) ? l : []);
     setSettings(s);
   }
 
   useEffect(() => { load(); }, []);
 
-  const roster = useMemo(() => buildGuestRoster(allBookings), [allBookings]);
+  const roster = useMemo(() => buildGuestRoster(allBookings, allLeads), [allBookings, allLeads]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -259,6 +296,7 @@ export default function GuestRosterPage() {
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         {guest.platforms.map(p => <PlatformBadge key={p} platform={p} />)}
                         {isRepeat && <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-medium">Repeat</span>}
+                        {guest.leadOnly && <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-medium">WiFi sign-up</span>}
                       </div>
                     </td>
                     <td className="px-4 py-3">
