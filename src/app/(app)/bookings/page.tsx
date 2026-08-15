@@ -486,14 +486,24 @@ export default function BookingsPage() {
                       <td className="sticky right-0 bg-white px-4 py-3 text-right border-l border-slate-100">
                         <div className="flex items-center justify-end gap-1">
                           {isEditing ? (
-                            <button
-                              onMouseDown={e => e.preventDefault()}
-                              onClick={() => { cancelEditSave(); setEditState(null); }}
-                              className="p-1.5 rounded hover:bg-slate-100 text-slate-400"
-                              title="Discard changes"
-                            >
-                              <X className="w-3.5 h-3.5" />
-                            </button>
+                            <>
+                              <button
+                                onMouseDown={e => e.preventDefault()}
+                                onClick={() => { cancelEditSave(); saveEdit(b.id); }}
+                                className="p-1.5 rounded hover:bg-emerald-50 text-emerald-600"
+                                title="Save changes"
+                              >
+                                <Check className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onMouseDown={e => e.preventDefault()}
+                                onClick={() => { cancelEditSave(); setEditState(null); }}
+                                className="p-1.5 rounded hover:bg-slate-100 text-slate-400"
+                                title="Discard changes"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </>
                           ) : (
                             <>
                               <button
@@ -503,7 +513,7 @@ export default function BookingsPage() {
                                     id: b.id,
                                     platform: b.platform,
                                     checkIn: b.checkIn,
-                                    checkOut: b.checkOut ?? '',
+                                    checkOut: /^\d{4}-\d{2}-\d{2}$/.test(b.checkOut ?? '') ? b.checkOut! : '',
                                     income: String(b.income),
                                     guestName: b.guestName ?? b.bookerName ?? '',
                                     email: b.email ?? '',
