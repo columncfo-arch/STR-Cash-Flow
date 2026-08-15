@@ -3,6 +3,8 @@ import { loadBookings, addBooking, deleteBookings } from '@/lib/storage';
 import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
 import { Booking } from '@/types';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: Request) {
   try {
     const userId = await requireAuth();

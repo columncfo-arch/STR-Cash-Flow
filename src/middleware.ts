@@ -18,7 +18,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/direct-booking(.*)',
   '/api/calendar(.*)',
   '/api/notify-signup(.*)',
-  '/__clerk/(.*)',
+  '/__clerk(.*)',
 ]);
 
 export const middleware = clerkMiddleware(async (auth, request) => {
