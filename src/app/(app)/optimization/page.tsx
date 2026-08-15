@@ -446,9 +446,9 @@ export default function OptimizationPage() {
   // Effective rate from actual data. Airbnb split-fee model (current default) charges hosts ~3%;
   // Airbnb host-only model (July 2026 transition) charges 15%. VRBO is ~8%.
   // Using actual data is most accurate — it captures whichever model applies.
-  // Fall back to 3% if no data yet (split-fee default for most existing hosts).
+  // Fall back to 15% if no data yet (Airbnb host-only default; note split-fee imports only record the ~3% host portion).
   // Only the host service fee rate (not taxes/fast pay/refunds) — matches Dashboard "Platform Fees" line
-  const effectivePlatformFeeRate = ytdActualGross > 0 ? ytdActualPlatformFeesOnly / ytdActualGross : 0.03;
+  const effectivePlatformFeeRate = ytdActualGross > 0 ? ytdActualPlatformFeesOnly / ytdActualGross : 0.15;
 
   // User can override the forward-looking rate (e.g. to 15% after Airbnb's July 2026 host-only switch)
   const activePlatformFeeRate = settings?.platformFeeRate ?? effectivePlatformFeeRate;
@@ -555,10 +555,10 @@ export default function OptimizationPage() {
                 />
                 <p className="text-xs text-slate-400 mt-0.5">
                   {modelPlatformFeeRate
-                    ? `Override: ${modelPlatformFeeRate}% (YTD actual: ${(effectivePlatformFeeRate * 100).toFixed(1)}%)`
+                    ? `Using ${modelPlatformFeeRate}% (YTD imported data: ${(effectivePlatformFeeRate * 100).toFixed(1)}%)`
                     : ytdActualGross > 0
-                      ? `YTD actual: ${(effectivePlatformFeeRate * 100).toFixed(1)}%`
-                      : 'Default ~3% (Airbnb split-fee)'}
+                      ? `YTD imported data: ${(effectivePlatformFeeRate * 100).toFixed(1)}% — enter your actual rate above (Airbnb host-only: 15%)`
+                      : 'Enter your rate — Airbnb host-only: 15%, split-fee: ~3%'}
                 </p>
               </div>
             </div>
