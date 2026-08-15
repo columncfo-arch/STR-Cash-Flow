@@ -48,6 +48,7 @@ const emptyNew = (): NewBooking => ({
 
 export default function BookingsPage() {
   const [bookings, setBookings] = useState<Booking[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
   const editStateRef = useRef(editState);
@@ -68,6 +69,12 @@ export default function BookingsPage() {
   async function load() {
     const res = await fetch(`/api/bookings?year=${filterYear}`);
     const data = await res.json();
+    if (!res.ok) {
+      setLoadError(res.status === 401 ? 'Not signed in. Please refresh the page.' : 'Failed to load bookings. Please try again.');
+      setBookings([]);
+      return;
+    }
+    setLoadError(null);
     setBookings(Array.isArray(data) ? data : []);
   }
 
@@ -223,6 +230,13 @@ export default function BookingsPage() {
           </button>
         </div>
       </div>
+
+      {loadError && (
+        <div className="flex items-center gap-3 bg-red-50 border border-red-200 text-red-700 rounded-xl px-4 py-3 mb-6 text-sm">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+          {loadError}
+        </div>
+      )}
 
       {/* Add booking form */}
       {showAdd && (

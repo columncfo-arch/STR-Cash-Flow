@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { updateBooking, deleteBooking } from '@/lib/storage';
-import { requireAuth, unauthorized } from '@/lib/auth';
+import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -11,8 +11,10 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
     if (!updated) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     return NextResponse.json(updated);
-  } catch {
-    return unauthorized();
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized();
+    console.error('Booking PUT error:', err);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
 
@@ -24,7 +26,9 @@ export async function DELETE(_req: Request, { params }: { params: Promise<{ id: 
 
     if (!found) return NextResponse.json({ error: 'Booking not found' }, { status: 404 });
     return NextResponse.json({ ok: true });
-  } catch {
-    return unauthorized();
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized();
+    console.error('Booking DELETE error:', err);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

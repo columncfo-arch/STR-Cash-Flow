@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loadBookings, addBooking, deleteBookings } from '@/lib/storage';
-import { requireAuth, unauthorized } from '@/lib/auth';
+import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
 import { Booking } from '@/types';
 
 export async function GET(req: Request) {
@@ -20,8 +20,10 @@ export async function GET(req: Request) {
 
     bookings.sort((a, b) => a.checkIn.localeCompare(b.checkIn));
     return NextResponse.json(bookings);
-  } catch {
-    return unauthorized();
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized();
+    console.error('Bookings GET error:', err);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
 
@@ -39,8 +41,10 @@ export async function DELETE(req: Request) {
         : 0;
 
     return NextResponse.json({ deleted });
-  } catch {
-    return unauthorized();
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized();
+    console.error('Bookings DELETE error:', err);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
 
@@ -54,7 +58,9 @@ export async function POST(req: Request) {
 
     await addBooking(userId, body);
     return NextResponse.json(body, { status: 201 });
-  } catch {
-    return unauthorized();
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized();
+    console.error('Bookings POST error:', err);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
