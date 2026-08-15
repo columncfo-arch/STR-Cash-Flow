@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loadExpenses, addExpense } from '@/lib/storage';
-import { requireAuth, unauthorized } from '@/lib/auth';
+import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
 import { Expense } from '@/types';
 
 export async function GET(req: Request) {
@@ -20,8 +20,10 @@ export async function GET(req: Request) {
 
     expenses.sort((a, b) => a.date.localeCompare(b.date));
     return NextResponse.json(expenses);
-  } catch {
-    return unauthorized();
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized();
+    console.error('Expenses GET error:', err);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }
 
@@ -39,7 +41,9 @@ export async function POST(req: Request) {
 
     await addExpense(userId, expense);
     return NextResponse.json(expense, { status: 201 });
-  } catch {
-    return unauthorized();
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized();
+    console.error('Expenses POST error:', err);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

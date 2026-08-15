@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { addLead, loadLeads } from '@/lib/storage';
-import { requireAuth, unauthorized } from '@/lib/auth';
+import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
 import { DirectLead } from '@/types';
 
 export async function POST(req: Request) {
@@ -49,7 +49,9 @@ export async function GET() {
     const leads = await loadLeads(userId);
     const sorted = [...leads].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return NextResponse.json(sorted);
-  } catch {
-    return unauthorized();
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized();
+    console.error('Direct booking GET error:', err);
+    return NextResponse.json({ error: 'Server error' }, { status: 500 });
   }
 }

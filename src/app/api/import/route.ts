@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loadBookings, replaceAllBookings } from '@/lib/storage';
-import { requireAuth, unauthorized } from '@/lib/auth';
+import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
 import { Booking, Platform } from '@/types';
 import * as XLSX from 'xlsx';
 
@@ -625,7 +625,8 @@ export async function POST(req: Request) {
 
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (err) {
-    if (err instanceof Error && err.message === 'Unauthorized') return unauthorized();
+    if (err instanceof AuthError) return unauthorized();
+    console.error('Import POST error:', err);
     return NextResponse.json({ error: err instanceof Error ? err.message : 'Import failed' }, { status: 500 });
   }
 }
