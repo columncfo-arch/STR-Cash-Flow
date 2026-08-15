@@ -20,7 +20,7 @@ const isPublicRoute = createRouteMatcher([
   '/api/notify-signup(.*)',
 ]);
 
-export const proxy = clerkMiddleware(async (auth, request) => {
+export const middleware = clerkMiddleware(async (auth, request) => {
   const host = request.headers.get('host') ?? '';
   const { pathname } = request.nextUrl;
 
