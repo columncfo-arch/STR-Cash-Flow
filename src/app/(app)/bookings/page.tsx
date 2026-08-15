@@ -55,7 +55,7 @@ export default function BookingsPage() {
   editStateRef.current = editState;
   const [showAdd, setShowAdd] = useState(false);
   const [newBooking, setNewBooking] = useState<NewBooking>(emptyNew());
-  const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
+  const [filterYear, setFilterYear] = useState('all');
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipBlurRef = useRef(false);
 
