@@ -17,6 +17,7 @@ interface EditState {
   id: string;
   platform: Platform;
   checkIn: string;
+  checkOut: string;
   income: string;
   guestName: string;
   email: string;
@@ -118,6 +119,10 @@ export default function BookingsPage() {
       body: JSON.stringify({
         platform: current.platform,
         checkIn: current.checkIn,
+        checkOut: current.checkOut,
+        nights: current.checkOut && current.checkIn
+          ? Math.max(Math.round((new Date(current.checkOut).getTime() - new Date(current.checkIn).getTime()) / 86400000), 1)
+          : undefined,
         income: parseFloat(current.income) || 0,
         guestName: current.guestName || undefined,
         email: current.email || undefined,
@@ -443,7 +448,18 @@ export default function BookingsPage() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-slate-600">
-                        {fmtDate(b.checkOut)}
+                        {isEditing ? (
+                          <input
+                            type="date"
+                            value={editState.checkOut}
+                            onChange={e => setEditState(s => s ? { ...s, checkOut: e.target.value } : s)}
+                            onBlur={() => scheduleEditSave(b.id)}
+                            onFocus={cancelEditSave}
+                            className="border border-emerald-300 rounded px-2 py-1 text-sm"
+                          />
+                        ) : (
+                          fmtDate(b.checkOut)
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right text-slate-600">{b.nights}</td>
                       <td className="px-4 py-3 text-right">
@@ -487,6 +503,7 @@ export default function BookingsPage() {
                                     id: b.id,
                                     platform: b.platform,
                                     checkIn: b.checkIn,
+                                    checkOut: b.checkOut ?? '',
                                     income: String(b.income),
                                     guestName: b.guestName ?? b.bookerName ?? '',
                                     email: b.email ?? '',
