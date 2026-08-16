@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
-import { loadBookings, loadSettings, updateBooking } from '@/lib/storage';
+import { addLead, loadBookings, loadSettings, updateBooking } from '@/lib/storage';
+import { DirectLead } from '@/types';
 
 // Public endpoint — no auth. Guests call this from the /welcome page.
 // The host embeds ?u=<userId> in their welcome page URL so we know whose data to load.
@@ -40,6 +41,18 @@ export async function POST(req: Request) {
         updatedAt: new Date().toISOString(),
       });
     }
+
+    const lead: DirectLead = {
+      id: `lead_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      firstName: firstName?.trim() || '',
+      lastName: (lastName ?? '').trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone?.trim() || undefined,
+      tcpaConsent: tcpaConsent ?? false,
+      source: 'welcome',
+      createdAt: new Date().toISOString(),
+    };
+    await addLead(userId, lead);
 
     return NextResponse.json({
       matched: !!activeSell,
