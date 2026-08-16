@@ -209,7 +209,7 @@ export default function BookingsPage() {
   const contactCount = bookings.filter(b => b.email || b.phone).length;
 
   return (
-    <div className="max-w-5xl mx-auto">
+    <div className="max-w-5xl mx-auto overflow-x-hidden">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Bookings</h1>
