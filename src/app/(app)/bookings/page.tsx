@@ -210,7 +210,7 @@ export default function BookingsPage() {
 
   return (
     <div className="max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Bookings</h1>
           <p className="text-slate-500 text-sm mt-1">
@@ -220,7 +220,7 @@ export default function BookingsPage() {
             )}
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           <select
             value={filterYear}
             onChange={e => setFilterYear(e.target.value)}
@@ -231,25 +231,28 @@ export default function BookingsPage() {
           {contactCount > 0 && (
             <button
               onClick={exportContacts}
-              className="flex items-center gap-2 border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm hover:bg-slate-50 transition-colors"
+              className="flex items-center gap-2 border border-slate-200 text-slate-600 px-3 py-2 rounded-lg text-sm hover:bg-slate-50 transition-colors"
               title={`Export ${contactCount} guest contact${contactCount !== 1 ? 's' : ''} as CSV`}
             >
-              <Download className="w-4 h-4" /> Export Contacts
+              <Download className="w-4 h-4" />
+              <span className="hidden sm:inline">Export Contacts</span>
             </button>
           )}
           {bookings.length > 0 && (
             <button
               onClick={clearAll}
-              className="flex items-center gap-2 border border-red-200 text-red-600 px-4 py-2 rounded-lg text-sm hover:bg-red-50 transition-colors"
+              className="flex items-center gap-2 border border-red-200 text-red-600 px-3 py-2 rounded-lg text-sm hover:bg-red-50 transition-colors"
             >
-              <AlertTriangle className="w-4 h-4" /> Clear All
+              <AlertTriangle className="w-4 h-4" />
+              <span className="hidden sm:inline">Clear All</span>
             </button>
           )}
           <button
             onClick={() => setShowAdd(true)}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 transition-colors"
+            className="flex items-center gap-2 bg-emerald-600 text-white px-3 py-2 rounded-lg text-sm hover:bg-emerald-700 transition-colors"
           >
-            <Plus className="w-4 h-4" /> Add Booking
+            <Plus className="w-4 h-4" />
+            <span className="hidden sm:inline">Add Booking</span>
           </button>
         </div>
       </div>
@@ -542,7 +545,7 @@ export default function BookingsPage() {
                     {isEditing && (
                       <tr key={`${b.id}-contact`} className="border-b border-slate-200 bg-slate-50">
                         <td colSpan={8} className="px-4 pb-3">
-                          <div className="grid grid-cols-3 gap-3">
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                             <div>
                               <label className="text-xs text-slate-500 block mb-1">Email</label>
                               <input
