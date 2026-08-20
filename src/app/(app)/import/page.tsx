@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Platform } from '@/types';
 import { Upload, CheckCircle, AlertCircle, ArrowRight, RefreshCw } from 'lucide-react';
 interface ParsedRow {
@@ -50,6 +50,15 @@ export default function ImportPage() {
   const [hostexSyncing, setHostexSyncing] = useState(false);
   const [hostexResult, setHostexResult] = useState<{ created: number; updated: number; total: number } | null>(null);
   const [hostexError, setHostexError] = useState('');
+  // null = loading, '' = no token saved, 'set' = token exists
+  const [hostexTokenStatus, setHostexTokenStatus] = useState<null | '' | 'set'>(null);
+  const [hostexTokenInput, setHostexTokenInput] = useState('');
+
+  useEffect(() => {
+    fetch('/api/settings')
+      .then(r => r.json())
+      .then(s => setHostexTokenStatus(s.hostexAccessToken ? 'set' : ''));
+  }, []);
 
   async function handleFile(file: File) {
     setError('');
@@ -105,6 +114,18 @@ export default function ImportPage() {
     setHostexError('');
     setHostexResult(null);
     try {
+      // If a new token was typed, save it to settings first
+      const token = hostexTokenInput.trim();
+      if (token) {
+        const s = await fetch('/api/settings').then(r => r.json());
+        await fetch('/api/settings', {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...s, hostexAccessToken: token }),
+        });
+        setHostexTokenStatus('set');
+        setHostexTokenInput('');
+      }
       const res = await fetch('/api/sync/hostex', { method: 'POST' });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? 'Sync failed');
@@ -132,23 +153,40 @@ export default function ImportPage() {
 
       {/* Hostex sync */}
       <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm mb-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="font-semibold text-slate-800">Sync from Hostex</h2>
-            <p className="text-xs text-slate-500 mt-1">
-              Pulls all reservations directly from your Hostex account. Requires an access token saved in{' '}
-              <a href="/settings" className="text-emerald-600 underline">Settings → Integrations</a>.
-            </p>
+        <h2 className="font-semibold text-slate-800 mb-1">Sync from Hostex</h2>
+        <p className="text-xs text-slate-500 mb-4">
+          Pulls all reservations directly from your Hostex account — no CSV needed.
+        </p>
+
+        {hostexTokenStatus === '' && (
+          <div className="mb-3">
+            <label className="text-xs text-slate-500 block mb-1">Hostex Access Token</label>
+            <input
+              type="password"
+              value={hostexTokenInput}
+              onChange={e => setHostexTokenInput(e.target.value)}
+              className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 font-mono"
+              placeholder="Paste your access token from Hostex → Settings → OpenAPI"
+              autoComplete="off"
+            />
           </div>
-          <button
-            onClick={syncHostex}
-            disabled={hostexSyncing}
-            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 transition-colors whitespace-nowrap shrink-0"
-          >
-            <RefreshCw className={`w-4 h-4 ${hostexSyncing ? 'animate-spin' : ''}`} />
-            {hostexSyncing ? 'Syncing…' : 'Sync Now'}
-          </button>
-        </div>
+        )}
+
+        {hostexTokenStatus === 'set' && (
+          <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 mb-3">
+            Token configured. <button onClick={() => { setHostexTokenStatus(''); setHostexTokenInput(''); }} className="underline ml-1">Replace</button>
+          </p>
+        )}
+
+        <button
+          onClick={syncHostex}
+          disabled={hostexSyncing || hostexTokenStatus === null || (hostexTokenStatus === '' && !hostexTokenInput.trim())}
+          className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 transition-colors"
+        >
+          <RefreshCw className={`w-4 h-4 ${hostexSyncing ? 'animate-spin' : ''}`} />
+          {hostexSyncing ? 'Syncing…' : 'Sync Now'}
+        </button>
+
         {hostexResult && (
           <div className="flex items-center gap-3 mt-4 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
             <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
