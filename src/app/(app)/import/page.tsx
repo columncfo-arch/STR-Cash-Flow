@@ -48,7 +48,7 @@ export default function ImportPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [hostexSyncing, setHostexSyncing] = useState(false);
-  const [hostexResult, setHostexResult] = useState<{ created: number; updated: number; total: number } | null>(null);
+  const [hostexResult, setHostexResult] = useState<{ created: number; updated: number; total: number; deduped: number } | null>(null);
   const [hostexError, setHostexError] = useState('');
   // null = loading, '' = no token saved, 'set' = token exists
   const [hostexTokenStatus, setHostexTokenStatus] = useState<null | '' | 'set'>(null);
@@ -192,7 +192,8 @@ export default function ImportPage() {
             <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
             <p className="text-sm text-emerald-800">
               Synced {hostexResult.total} reservation{hostexResult.total !== 1 ? 's' : ''} —{' '}
-              {hostexResult.created} new, {hostexResult.updated} updated.
+              {hostexResult.created} new, {hostexResult.updated} updated
+              {hostexResult.deduped > 0 && `, ${hostexResult.deduped} duplicate${hostexResult.deduped !== 1 ? 's' : ''} removed`}.
             </p>
           </div>
         )}

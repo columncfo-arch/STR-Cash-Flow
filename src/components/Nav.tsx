@@ -31,8 +31,14 @@ const links: NavLink[] = [
       { href: '/guest-list/welcome', label: 'Welcome Page', icon: Wifi },
     ],
   },
-  { href: '/import', label: 'Import Earnings', icon: Upload },
-  { href: '/settings', label: 'Settings', icon: Settings },
+  {
+    href: '/settings',
+    label: 'Settings',
+    icon: Settings,
+    children: [
+      { href: '/import', label: 'Import / Sync', icon: Upload },
+    ],
+  },
 ];
 
 export default function Nav() {

@@ -48,11 +48,13 @@ async function fetchPage(token: string, page: number, pageSize: number): Promise
     `${HOSTEX_BASE}/reservations?page=${page}&page_size=${pageSize}`,
     { headers: { 'Hostex-Access-Token': token } }
   );
-  const json = await res.json() as {
-    error_code?: number;
-    error_msg?: string;
-    data?: { reservations?: HostexReservation[]; total?: number };
-  };
+  const text = await res.text();
+  let json: { error_code?: number; error_msg?: string; data?: { reservations?: HostexReservation[]; total?: number } };
+  try {
+    json = JSON.parse(text);
+  } catch {
+    throw new Error(`Hostex returned non-JSON (HTTP ${res.status}): ${text.slice(0, 300)}`);
+  }
   if (!res.ok || (json.error_code && json.error_code !== 0)) {
     throw new Error(json.error_msg ?? `Hostex API error ${res.status}`);
   }
@@ -157,8 +159,35 @@ export async function POST() {
       }
     }
 
-    await replaceAllBookings(userId, existing);
-    return NextResponse.json({ created, updated, total: active.length });
+    // Deduplicate: same platform + checkIn → keep the Hostex-sourced one (or the one with a confirmation code)
+    let deduped = 0;
+    const seen = new Map<string, number>(); // key → index in existing
+    const toRemove = new Set<number>();
+    for (let i = 0; i < existing.length; i++) {
+      const b = existing[i];
+      const key = `${b.platform}|${b.checkIn}`;
+      const prevIdx = seen.get(key);
+      if (prevIdx === undefined) {
+        seen.set(key, i);
+        continue;
+      }
+      const prev = existing[prevIdx];
+      // If confirmation codes differ they may genuinely be different bookings — skip
+      if (b.confirmationCode && prev.confirmationCode && b.confirmationCode !== prev.confirmationCode) continue;
+      // Prefer Hostex-sourced; otherwise prefer whichever has a confirmation code
+      const keepNew = b.sourceId === 'hostex' || (!prev.confirmationCode && b.confirmationCode);
+      if (keepNew) {
+        toRemove.add(prevIdx);
+        seen.set(key, i);
+      } else {
+        toRemove.add(i);
+      }
+      deduped++;
+    }
+    const dedupedBookings = existing.filter((_, i) => !toRemove.has(i));
+
+    await replaceAllBookings(userId, dedupedBookings);
+    return NextResponse.json({ created, updated, total: active.length, deduped });
   } catch (err) {
     if (err instanceof AuthError) return unauthorized();
     console.error('Hostex sync error:', err);
