@@ -3,7 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { UserButton } from '@clerk/nextjs';
-import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, Upload, TrendingUp, Target, Users, Zap, Wifi, Menu, X } from 'lucide-react';
+import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, TrendingUp, Target, Users, Zap, Wifi, Menu, X } from 'lucide-react';
 
 type SubLink = { href: string; label: string; icon: React.ComponentType<{ className?: string }> };
 type NavLink = { href: string; label: string; icon: React.ComponentType<{ className?: string }>; children?: SubLink[] };
@@ -31,14 +31,7 @@ const links: NavLink[] = [
       { href: '/guest-list/welcome', label: 'Welcome Page', icon: Wifi },
     ],
   },
-  {
-    href: '/settings',
-    label: 'Settings',
-    icon: Settings,
-    children: [
-      { href: '/import', label: 'Import / Sync', icon: Upload },
-    ],
-  },
+  { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
 export default function Nav() {

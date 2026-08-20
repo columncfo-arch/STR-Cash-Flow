@@ -2,6 +2,7 @@
 import { useEffect, useState } from 'react';
 import { Settings } from '@/types';
 import { AlertTriangle } from 'lucide-react';
+import ImportEarnings from '@/components/ImportEarnings';
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -69,7 +70,7 @@ export default function SettingsPage() {
   if (!settings) return <div className="text-slate-400 text-sm">Loading…</div>;
 
   return (
-    <div className="max-w-lg mx-auto">
+    <div className="max-w-3xl mx-auto overflow-x-hidden">
       <h1 className="text-2xl font-bold text-slate-900 mb-2">Settings</h1>
       <p className="text-slate-500 text-sm mb-8">Property details and fixed monthly costs.</p>
 
@@ -124,26 +125,13 @@ export default function SettingsPage() {
         </div>
       </section>
 
-      <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm mb-6">
-        <h2 className="font-semibold text-slate-800 mb-1">Integrations</h2>
-        <p className="text-xs text-slate-500 mb-4">
-          Connect your property management system to sync bookings automatically.
+      <div className="mb-3">
+        <h2 className="text-lg font-bold text-slate-900">Import Earnings</h2>
+        <p className="text-slate-500 text-sm mt-1">
+          Sync bookings from Hostex, or upload a CSV export from your booking platform.
         </p>
-        <div>
-          <label className="text-xs text-slate-500 block mb-1">Hostex Access Token</label>
-          <input
-            type="password"
-            value={settings.hostexAccessToken ?? ''}
-            onChange={e => setSettings({ ...settings, hostexAccessToken: e.target.value })}
-            onBlur={() => save(settings)}
-            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 font-mono"
-            placeholder="Paste your Hostex access token"
-          />
-          <p className="text-xs text-slate-400 mt-1">
-            Generate at Hostex → Settings → OpenAPI. Once saved, use the Sync button on the Import page.
-          </p>
-        </div>
-      </section>
+      </div>
+      <ImportEarnings />
 
       <p className="text-xs text-slate-500 mb-4">
         Growth rates and vacancy assumptions are configured on the{' '}
