@@ -5,8 +5,17 @@ import { Booking, Platform } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
-// Hostex REST API base — https://open.hostex.io/v3
-const HOSTEX_BASE = 'https://open.hostex.io/v3';
+// Hostex REST API base. open.hostex.io serves their guest booking site, not the
+// API, so probe the likely hosts and use whichever answers with JSON.
+// Override with HOSTEX_API_BASE once the correct one is confirmed.
+const HOSTEX_BASES = process.env.HOSTEX_API_BASE
+  ? [process.env.HOSTEX_API_BASE]
+  : [
+      'https://api.hostex.io/v3',
+      'https://api.hostex.io/openapi/v3',
+      'https://hostex.io/api/v3',
+      'https://open.hostex.io/openapi/v3',
+    ];
 
 interface HostexGuest {
   first_name?: string;
@@ -43,37 +52,78 @@ function mapPlatform(channel: string): Platform {
   return 'other';
 }
 
-async function fetchPage(token: string, page: number, pageSize: number): Promise<{ reservations: HostexReservation[]; total: number }> {
+interface HostexEnvelope {
+  error_code?: number;
+  error_msg?: string;
+  data?: { reservations?: HostexReservation[]; total?: number };
+}
+
+// Raw call — returns the parsed envelope, or null when the host answered with
+// something that isn't JSON (i.e. it's not the API).
+async function callReservations(
+  base: string,
+  token: string,
+  page: number,
+  pageSize: number,
+): Promise<{ json: HostexEnvelope | null; status: number; text: string }> {
   const res = await fetch(
-    `${HOSTEX_BASE}/reservations?page=${page}&page_size=${pageSize}`,
-    { headers: { 'Hostex-Access-Token': token } }
+    `${base}/reservations?page=${page}&page_size=${pageSize}`,
+    { headers: { 'Hostex-Access-Token': token } },
   );
   const text = await res.text();
-  let json: { error_code?: number; error_msg?: string; data?: { reservations?: HostexReservation[]; total?: number } };
   try {
-    json = JSON.parse(text);
+    return { json: JSON.parse(text) as HostexEnvelope, status: res.status, text };
   } catch {
-    throw new Error(`Hostex returned non-JSON (HTTP ${res.status}): ${text.slice(0, 300)}`);
+    return { json: null, status: res.status, text };
   }
-  if (!res.ok || (json.error_code && json.error_code !== 0)) {
-    throw new Error(json.error_msg ?? `Hostex API error ${res.status}`);
+}
+
+// Find the base URL that actually speaks the API. An auth error still counts as
+// a hit — it means we reached the API and the token is the problem.
+async function resolveBase(token: string): Promise<string> {
+  const failures: string[] = [];
+  for (const base of HOSTEX_BASES) {
+    try {
+      const { json, status, text } = await callReservations(base, token, 1, 1);
+      if (json) {
+        if (json.error_code && json.error_code !== 0) {
+          throw new Error(`${json.error_msg ?? 'Hostex API error'} (${base})`);
+        }
+        return base;
+      }
+      failures.push(`${base} → HTTP ${status}, ${text.slice(0, 60).replace(/\s+/g, ' ')}…`);
+    } catch (e) {
+      if (e instanceof Error && e.message.includes('Hostex')) throw e;
+      failures.push(`${base} → ${e instanceof Error ? e.message : 'unreachable'}`);
+    }
   }
+  throw new Error(
+    `Could not find the Hostex API. Tried:\n${failures.join('\n')}\n\n` +
+    `Set HOSTEX_API_BASE to the correct base URL from api-doc.hostex.io.`,
+  );
+}
+
+async function fetchPage(base: string, token: string, page: number, pageSize: number): Promise<{ reservations: HostexReservation[]; total: number }> {
+  const { json, status, text } = await callReservations(base, token, page, pageSize);
+  if (!json) throw new Error(`Hostex returned non-JSON (HTTP ${status}): ${text.slice(0, 300)}`);
+  if (json.error_code && json.error_code !== 0) throw new Error(json.error_msg ?? `Hostex API error ${status}`);
   return {
     reservations: json.data?.reservations ?? [],
     total: json.data?.total ?? 0,
   };
 }
 
-async function fetchAll(token: string): Promise<HostexReservation[]> {
+async function fetchAll(token: string): Promise<{ reservations: HostexReservation[]; base: string }> {
+  const base = await resolveBase(token);
   const pageSize = 100;
-  const first = await fetchPage(token, 1, pageSize);
+  const first = await fetchPage(base, token, 1, pageSize);
   const all = [...first.reservations];
   const pages = Math.ceil(first.total / pageSize);
   for (let p = 2; p <= pages; p++) {
-    const { reservations } = await fetchPage(token, p, pageSize);
+    const { reservations } = await fetchPage(base, token, p, pageSize);
     all.push(...reservations);
   }
-  return all;
+  return { reservations: all, base };
 }
 
 export async function POST() {
@@ -89,7 +139,7 @@ export async function POST() {
       );
     }
 
-    const raw = await fetchAll(token);
+    const { reservations: raw, base } = await fetchAll(token);
 
     const active = raw.filter(r => {
       const s = (r.status ?? '').toLowerCase();
@@ -187,7 +237,7 @@ export async function POST() {
     const dedupedBookings = existing.filter((_, i) => !toRemove.has(i));
 
     await replaceAllBookings(userId, dedupedBookings);
-    return NextResponse.json({ created, updated, total: active.length, deduped });
+    return NextResponse.json({ created, updated, total: active.length, deduped, base });
   } catch (err) {
     if (err instanceof AuthError) return unauthorized();
     console.error('Hostex sync error:', err);

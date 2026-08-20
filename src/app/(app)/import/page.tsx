@@ -48,7 +48,7 @@ export default function ImportPage() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   const [hostexSyncing, setHostexSyncing] = useState(false);
-  const [hostexResult, setHostexResult] = useState<{ created: number; updated: number; total: number; deduped: number } | null>(null);
+  const [hostexResult, setHostexResult] = useState<{ created: number; updated: number; total: number; deduped: number; base: string } | null>(null);
   const [hostexError, setHostexError] = useState('');
   // null = loading, '' = no token saved, 'set' = token exists
   const [hostexTokenStatus, setHostexTokenStatus] = useState<null | '' | 'set'>(null);
@@ -188,18 +188,22 @@ export default function ImportPage() {
         </button>
 
         {hostexResult && (
-          <div className="flex items-center gap-3 mt-4 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
-            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
-            <p className="text-sm text-emerald-800">
-              Synced {hostexResult.total} reservation{hostexResult.total !== 1 ? 's' : ''} —{' '}
-              {hostexResult.created} new, {hostexResult.updated} updated
-              {hostexResult.deduped > 0 && `, ${hostexResult.deduped} duplicate${hostexResult.deduped !== 1 ? 's' : ''} removed`}.
-            </p>
+          <div className="flex items-start gap-3 mt-4 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-sm text-emerald-800">
+                Synced {hostexResult.total} reservation{hostexResult.total !== 1 ? 's' : ''} —{' '}
+                {hostexResult.created} new, {hostexResult.updated} updated
+                {hostexResult.deduped > 0 && `, ${hostexResult.deduped} duplicate${hostexResult.deduped !== 1 ? 's' : ''} removed`}.
+              </p>
+              <p className="text-xs text-emerald-600 font-mono mt-1">via {hostexResult.base}</p>
+            </div>
           </div>
         )}
         {hostexError && (
           <div className="flex items-start gap-2 mt-4 text-sm text-red-600 bg-red-50 rounded-lg p-3">
-            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /> {hostexError}
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+            <span className="whitespace-pre-wrap break-all">{hostexError}</span>
           </div>
         )}
       </section>
