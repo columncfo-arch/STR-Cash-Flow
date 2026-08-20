@@ -124,6 +124,27 @@ export default function SettingsPage() {
         </div>
       </section>
 
+      <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm mb-6">
+        <h2 className="font-semibold text-slate-800 mb-1">Integrations</h2>
+        <p className="text-xs text-slate-500 mb-4">
+          Connect your property management system to sync bookings automatically.
+        </p>
+        <div>
+          <label className="text-xs text-slate-500 block mb-1">Hostex Access Token</label>
+          <input
+            type="password"
+            value={settings.hostexAccessToken ?? ''}
+            onChange={e => setSettings({ ...settings, hostexAccessToken: e.target.value })}
+            onBlur={() => save(settings)}
+            className="w-full text-sm border border-slate-200 rounded-lg px-3 py-2 font-mono"
+            placeholder="Paste your Hostex access token"
+          />
+          <p className="text-xs text-slate-400 mt-1">
+            Generate at Hostex → Settings → OpenAPI. Once saved, use the Sync button on the Import page.
+          </p>
+        </div>
+      </section>
+
       <p className="text-xs text-slate-500 mb-4">
         Growth rates and vacancy assumptions are configured on the{' '}
         <a href="/forecast" className="text-emerald-600 underline font-medium">Long Term Forecast</a> page.

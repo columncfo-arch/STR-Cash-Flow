@@ -1,7 +1,7 @@
 'use client';
 import { useRef, useState } from 'react';
 import { Platform } from '@/types';
-import { Upload, CheckCircle, AlertCircle, ArrowRight } from 'lucide-react';
+import { Upload, CheckCircle, AlertCircle, ArrowRight, RefreshCw } from 'lucide-react';
 interface ParsedRow {
   confirmationCode: string;
   checkIn: string;
@@ -46,6 +46,10 @@ export default function ImportPage() {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [rawSample, setRawSample] = useState<any[]>([]);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const [hostexSyncing, setHostexSyncing] = useState(false);
+  const [hostexResult, setHostexResult] = useState<{ created: number; updated: number; total: number } | null>(null);
+  const [hostexError, setHostexError] = useState('');
 
   async function handleFile(file: File) {
     setError('');
@@ -96,6 +100,22 @@ export default function ImportPage() {
     }
   }
 
+  async function syncHostex() {
+    setHostexSyncing(true);
+    setHostexError('');
+    setHostexResult(null);
+    try {
+      const res = await fetch('/api/sync/hostex', { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? 'Sync failed');
+      setHostexResult(data);
+    } catch (e) {
+      setHostexError(e instanceof Error ? e.message : 'Sync failed');
+    } finally {
+      setHostexSyncing(false);
+    }
+  }
+
   const totals = rows?.reduce(
     (s, r) => ({ gross: s.gross + r.grossAmount, fee: s.fee + r.platformFee, net: s.net + r.netAmount }),
     { gross: 0, fee: 0, net: 0 }
@@ -108,6 +128,46 @@ export default function ImportPage() {
         <p className="text-slate-500 text-sm mt-1">
           Upload a CSV export from your booking platform to import income and platform fees.
         </p>
+      </div>
+
+      {/* Hostex sync */}
+      <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm mb-6">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="font-semibold text-slate-800">Sync from Hostex</h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Pulls all reservations directly from your Hostex account. Requires an access token saved in{' '}
+              <a href="/settings" className="text-emerald-600 underline">Settings → Integrations</a>.
+            </p>
+          </div>
+          <button
+            onClick={syncHostex}
+            disabled={hostexSyncing}
+            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60 transition-colors whitespace-nowrap shrink-0"
+          >
+            <RefreshCw className={`w-4 h-4 ${hostexSyncing ? 'animate-spin' : ''}`} />
+            {hostexSyncing ? 'Syncing…' : 'Sync Now'}
+          </button>
+        </div>
+        {hostexResult && (
+          <div className="flex items-center gap-3 mt-4 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+            <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+            <p className="text-sm text-emerald-800">
+              Synced {hostexResult.total} reservation{hostexResult.total !== 1 ? 's' : ''} —{' '}
+              {hostexResult.created} new, {hostexResult.updated} updated.
+            </p>
+          </div>
+        )}
+        {hostexError && (
+          <div className="flex items-start gap-2 mt-4 text-sm text-red-600 bg-red-50 rounded-lg p-3">
+            <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /> {hostexError}
+          </div>
+        )}
+      </section>
+
+      <div className="relative mb-6">
+        <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200" /></div>
+        <div className="relative flex justify-center"><span className="bg-slate-50 px-3 text-xs text-slate-400">or import from CSV</span></div>
       </div>
 
       {/* Platform selector */}

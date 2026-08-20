@@ -143,6 +143,8 @@ export interface Settings {
   directNightlyRate?: number;
   directMinNights?: number;
   directDescription?: string;
+  // API integrations
+  hostexAccessToken?: string;
 }
 
 export interface ForecastYear {
