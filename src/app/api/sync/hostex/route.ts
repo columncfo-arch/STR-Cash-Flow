@@ -93,6 +93,31 @@ async function fetchAll(token: string): Promise<HostexReservation[]> {
   return all;
 }
 
+// GET /api/sync/hostex — returns the raw first reservation verbatim, writing
+// nothing. Use it to confirm which fields Hostex actually sends before trusting
+// the mapping below.
+export async function GET() {
+  try {
+    const userId = await requireAuth();
+    const settings = await loadSettings(userId);
+    const token = settings.hostexAccessToken?.trim();
+    if (!token) return NextResponse.json({ error: 'No Hostex access token saved.' }, { status: 400 });
+
+    const res = await fetch(`${HOSTEX_BASE}/reservations?page=1&page_size=1`, {
+      headers: { 'Hostex-Access-Token': token },
+    });
+    const text = await res.text();
+    try {
+      return NextResponse.json({ base: HOSTEX_BASE, status: res.status, body: JSON.parse(text) });
+    } catch {
+      return NextResponse.json({ base: HOSTEX_BASE, status: res.status, body: text.slice(0, 2000) });
+    }
+  } catch (err) {
+    if (err instanceof AuthError) return unauthorized();
+    return NextResponse.json({ error: err instanceof Error ? err.message : 'Failed' }, { status: 500 });
+  }
+}
+
 export async function POST() {
   try {
     const userId = await requireAuth();
