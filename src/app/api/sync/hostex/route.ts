@@ -11,30 +11,53 @@ const HOSTEX_BASE = process.env.HOSTEX_API_BASE ?? 'https://api.hostex.io/v3';
 // too since plenty of endpoints in this family use it.
 const OK_CODES = new Set([0, 200]);
 
-interface HostexGuest {
-  first_name?: string;
-  last_name?: string;
-  email?: string;
-  phone?: string;
+interface HostexMoney {
+  currency?: string;
+  amount?: number;
+}
+
+// Line items on a reservation. ACCOMMODATION + the guest-paid fees sum to
+// total_rate; HOST_SERVICE_FEE is the channel's cut and is deducted from it.
+interface HostexRateDetail {
+  type?: string;
+  description?: string;
+  currency?: string;
+  amount?: number;
 }
 
 interface HostexReservation {
-  code?: string;
+  reservation_code?: string;
   stay_code?: string;
-  status?: string;
+  status?: string;              // accepted / cancelled / denied …
+  stay_status?: string;         // stay_completed / checkin_pending …
+  cancelled_at?: string | null;
   check_in_date?: string;
   check_out_date?: string;
-  nights?: number;
-  guest?: HostexGuest;
-  accommodation_fare?: number;
-  total_price?: number;
-  host_service_fee?: number;
-  host_payout?: number;
-  channel?: string;
-  source?: string;
-  property?: { id?: string | number; title?: string };
+  channel_type?: string;        // airbnb / vrbo / booking …
+  custom_channel?: { id?: number; name?: string };
+  property_id?: number;
+  listing_id?: string;
+  guest_name?: string;
+  guest_email?: string;
+  guest_phone?: string;
+  guests?: { name?: string; email?: string; phone?: string; is_booker?: boolean }[];
+  number_of_guests?: number;
+  number_of_adults?: number;
+  number_of_children?: number;
+  booked_at?: string;
   created_at?: string;
-  booking_date?: string;
+  remarks?: string;
+  rates?: {
+    total_rate?: HostexMoney;      // gross the guest paid
+    total_commission?: HostexMoney; // channel commission / host service fee
+    tax?: HostexMoney | null;
+    details?: HostexRateDetail[];
+  };
+  payment?: {
+    currency?: string;
+    total_amount?: number;    // net payout = total_rate − total_commission
+    received_amount?: number;
+  };
 }
 
 function mapPlatform(channel: string): Platform {
@@ -44,6 +67,26 @@ function mapPlatform(channel: string): Platform {
   if (c.includes('vrbo') || c.includes('homeaway')) return 'vrbo';
   if (c.includes('direct') || c.includes('manual')) return 'direct';
   return 'other';
+}
+
+function detailAmount(details: HostexRateDetail[] | undefined, type: string): number | undefined {
+  const hit = details?.find(d => d.type === type);
+  return hit?.amount || undefined;
+}
+
+// Copy every field `drop` has and `keep` is missing onto `keep`, so discarding a
+// duplicate never throws away detail the survivor lacks. `id` and `createdAt`
+// are the survivor's identity and are never overwritten.
+function absorb(keep: Booking, drop: Booking): void {
+  const preserved = new Set(['id', 'createdAt']);
+  for (const [k, v] of Object.entries(drop) as [keyof Booking, unknown][]) {
+    if (preserved.has(k) || v === undefined || v === null || v === '') continue;
+    const cur = keep[k];
+    // Treat 0 as missing for money/count fields so a real figure wins over a zero.
+    if (cur === undefined || cur === null || cur === '' || (cur === 0 && typeof v === 'number' && v !== 0)) {
+      (keep as unknown as Record<string, unknown>)[k] = v;
+    }
+  }
 }
 
 interface HostexEnvelope {
@@ -134,6 +177,7 @@ export async function POST() {
     const raw = await fetchAll(token);
 
     const active = raw.filter(r => {
+      if (r.cancelled_at) return false;
       const s = (r.status ?? '').toLowerCase();
       return s !== 'cancelled' && s !== 'canceled' && s !== 'denied' && s !== 'inquiry';
     });
@@ -144,22 +188,27 @@ export async function POST() {
     let updated = 0;
 
     for (const r of active) {
-      const confirmationCode = r.code ?? r.stay_code ?? '';
+      const confirmationCode = r.reservation_code ?? r.stay_code ?? '';
       const checkIn = r.check_in_date ?? '';
       const checkOut = r.check_out_date ?? '';
       if (!checkIn) continue;
 
-      const nights = r.nights ??
-        (checkOut
-          ? Math.max(Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000), 1)
-          : 1);
+      // Hostex doesn't send a night count — derive it from the stay dates.
+      const nights = checkOut
+        ? Math.max(Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000), 1)
+        : 1;
 
-      const guestName = r.guest
-        ? [r.guest.first_name, r.guest.last_name].filter(Boolean).join(' ') || undefined
-        : undefined;
+      const booker = r.guests?.find(g => g.is_booker) ?? r.guests?.[0];
+      const guestName = r.guest_name || booker?.name || undefined;
 
-      const platform = mapPlatform(r.channel ?? r.source ?? '');
-      const income = r.total_price ?? r.accommodation_fare ?? 0;
+      const platform = mapPlatform(r.channel_type ?? r.custom_channel?.name ?? '');
+
+      // total_rate is the gross the guest paid (accommodation + cleaning + pet
+      // + extra-guest fees). total_commission is the channel's cut, already
+      // excluded from payment.total_amount, which is the net payout.
+      const income = r.rates?.total_rate?.amount ?? 0;
+      const platformFee = r.rates?.total_commission?.amount || undefined;
+      const paidOut = r.payment?.total_amount ?? undefined;
 
       const existingIdx = confirmationCode
         ? existing.findIndex(b => b.confirmationCode === confirmationCode || b.uid === confirmationCode)
@@ -169,15 +218,24 @@ export async function POST() {
         checkIn,
         checkOut,
         nights,
-        guestName: guestName || undefined,
-        email: r.guest?.email || undefined,
-        phone: r.guest?.phone || undefined,
+        guestName,
+        email: r.guest_email || booker?.email || undefined,
+        phone: r.guest_phone || booker?.phone || undefined,
         income,
-        platformFee: r.host_service_fee || undefined,
-        paidOut: r.host_payout || undefined,
+        platformFee,
+        paidOut,
+        cleaningFee: detailAmount(r.rates?.details, 'CLEANING_FEE'),
+        petFee: detailAmount(r.rates?.details, 'PET_FEE'),
+        taxRemitted: r.rates?.tax?.amount || undefined,
+        currency: r.rates?.total_rate?.currency || r.payment?.currency || undefined,
         status: r.status || undefined,
-        listing: r.property?.title || undefined,
-        bookingDate: r.booking_date ?? r.created_at?.slice(0, 10) ?? undefined,
+        propertyId: r.property_id !== undefined ? String(r.property_id) : undefined,
+        unitId: r.listing_id || undefined,
+        bookingDate: r.booked_at?.slice(0, 10) ?? r.created_at?.slice(0, 10) ?? undefined,
+        adults: r.number_of_adults || undefined,
+        children: r.number_of_children || undefined,
+        people: r.number_of_guests || undefined,
+        notes: r.remarks || undefined,
         updatedAt: now,
       };
 
@@ -201,7 +259,9 @@ export async function POST() {
       }
     }
 
-    // Deduplicate: same platform + checkIn → keep the Hostex-sourced one (or the one with a confirmation code)
+    // Deduplicate same platform + checkIn. The winner absorbs any field the
+    // loser had and it lacks, so collapsing a pair never loses data — a CSV
+    // row's cleaning/tax detail survives into the Hostex record that replaces it.
     let deduped = 0;
     const seen = new Map<string, number>(); // key → index in existing
     const toRemove = new Set<number>();
@@ -214,16 +274,17 @@ export async function POST() {
         continue;
       }
       const prev = existing[prevIdx];
-      // If confirmation codes differ they may genuinely be different bookings — skip
+      // Distinct confirmation codes, or distinct check-outs, mean these are
+      // genuinely different bookings that happen to share a start date.
       if (b.confirmationCode && prev.confirmationCode && b.confirmationCode !== prev.confirmationCode) continue;
+      if (b.checkOut && prev.checkOut && b.checkOut !== prev.checkOut) continue;
+
       // Prefer Hostex-sourced; otherwise prefer whichever has a confirmation code
-      const keepNew = b.sourceId === 'hostex' || (!prev.confirmationCode && b.confirmationCode);
-      if (keepNew) {
-        toRemove.add(prevIdx);
-        seen.set(key, i);
-      } else {
-        toRemove.add(i);
-      }
+      const keepNew = b.sourceId === 'hostex' || (!prev.confirmationCode && !!b.confirmationCode);
+      const [keep, drop] = keepNew ? [b, prev] : [prev, b];
+      absorb(keep, drop);
+      toRemove.add(keepNew ? prevIdx : i);
+      if (keepNew) seen.set(key, i);
       deduped++;
     }
     const dedupedBookings = existing.filter((_, i) => !toRemove.has(i));
