@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Check, ChevronRight, Home, Building2, TreePine, Waves } from 'lucide-react';
+import { BookOpen, Check, ChevronRight, Home, Building2, TreePine, Waves, Plug, CalendarDays, Upload } from 'lucide-react';
 
 const PROPERTY_TYPES = [
   { id: 'house',  label: 'House',       icon: Home },
@@ -17,7 +17,35 @@ const PLATFORMS = [
   { id: 'direct',  label: 'Direct bookings',  color: 'bg-emerald-500' },
 ];
 
-const STEP_LABELS = ['Your property', 'Platforms', 'Set targets', 'Create account'];
+// Airbnb has no public host API, so every route to revenue data runs through
+// one of these three.
+const CONNECT_OPTIONS = [
+  {
+    id: 'hostex' as const,
+    label: 'Hostex',
+    icon: Plug,
+    recommended: true,
+    body: 'Syncs Airbnb, VRBO and Booking.com reservations with full revenue, fees and payouts. Needs a Hostex account.',
+  },
+  {
+    id: 'ical' as const,
+    label: 'Airbnb calendar link',
+    icon: CalendarDays,
+    recommended: false,
+    body: 'Keeps your booked dates in sync. Calendar only — Airbnb’s feed carries no revenue figures.',
+  },
+  {
+    id: 'csv' as const,
+    label: 'Upload a CSV later',
+    icon: Upload,
+    recommended: false,
+    body: 'Export earnings from each platform and upload them. Full history, but manual each time.',
+  },
+];
+
+const STEP_LABELS = ['Your property', 'Platforms', 'Connect', 'Set targets', 'Create account'];
+
+const LAST_STEP = 3;
 
 export default function OnboardingPage() {
   const router = useRouter();
@@ -26,6 +54,8 @@ export default function OnboardingPage() {
   const [propertyName, setPropertyName] = useState('');
   const [propertyType, setPropertyType] = useState('');
   const [platforms, setPlatforms] = useState<string[]>([]);
+  const [connectMethod, setConnectMethod] = useState<'hostex' | 'ical' | 'csv' | ''>('');
+  const [airbnbIcalUrl, setAirbnbIcalUrl] = useState('');
   const [piti, setPiti] = useState('');
   const [annualTarget, setAnnualTarget] = useState('');
   const [occTarget, setOccTarget] = useState('');
@@ -38,6 +68,7 @@ export default function OnboardingPage() {
     propertyName.trim().length > 0 && propertyType.length > 0,
     platforms.length > 0,
     true,
+    true,
   ][step] ?? true;
 
   function goToSignUp() {
@@ -45,6 +76,8 @@ export default function OnboardingPage() {
       propertyName: propertyName.trim() || 'My Property',
       propertyType,
       platforms,
+      connectMethod: connectMethod || undefined,
+      airbnbIcalUrl: airbnbIcalUrl.trim() || undefined,
       piti: piti ? parseFloat(piti) : undefined,
       occTarget: occTarget ? parseFloat(occTarget) : undefined,
       annualTarget: annualTarget ? parseFloat(annualTarget) : undefined,
@@ -160,8 +193,69 @@ export default function OnboardingPage() {
               </>
             )}
 
-            {/* ── Step 2: Targets ── */}
+            {/* ── Step 2: Connect bookings ── */}
             {step === 2 && (
+              <>
+                <h1 className="text-2xl font-bold text-slate-900 mb-1">Connect your bookings</h1>
+                <p className="text-slate-500 text-sm mb-6">
+                  Airbnb doesn&apos;t offer a direct connection for hosts, so there are three ways to get
+                  your data in. You can change this later.
+                </p>
+                <div className="space-y-3">
+                  {CONNECT_OPTIONS.map(o => (
+                    <button
+                      key={o.id}
+                      onClick={() => setConnectMethod(o.id)}
+                      className={`w-full flex items-start gap-3 p-4 rounded-xl border-2 transition-colors text-left ${
+                        connectMethod === o.id
+                          ? 'border-emerald-500 bg-emerald-50'
+                          : 'border-slate-200 hover:border-slate-300 bg-white'
+                      }`}
+                    >
+                      <o.icon className={`w-5 h-5 flex-shrink-0 mt-0.5 ${connectMethod === o.id ? 'text-emerald-600' : 'text-slate-400'}`} />
+                      <div className="flex-1 min-w-0">
+                        <p className={`font-medium text-sm ${connectMethod === o.id ? 'text-emerald-700' : 'text-slate-700'}`}>
+                          {o.label}
+                          {o.recommended && (
+                            <span className="ml-2 text-xs font-semibold text-emerald-600 bg-emerald-100 px-1.5 py-0.5 rounded">
+                              Recommended
+                            </span>
+                          )}
+                        </p>
+                        <p className="text-xs text-slate-500 mt-1 leading-snug">{o.body}</p>
+                      </div>
+                      {connectMethod === o.id && <Check className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />}
+                    </button>
+                  ))}
+                </div>
+
+                {connectMethod === 'ical' && (
+                  <div className="mt-5">
+                    <label className="text-sm font-medium text-slate-700 block mb-1.5">Airbnb calendar link</label>
+                    <input
+                      type="url"
+                      value={airbnbIcalUrl}
+                      onChange={e => setAirbnbIcalUrl(e.target.value)}
+                      className="w-full border border-slate-200 rounded-xl px-4 py-3 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      placeholder="https://www.airbnb.com/calendar/ical/12345.ics?s=…"
+                    />
+                    <p className="text-xs text-slate-400 mt-1.5">
+                      Airbnb → Calendar → Availability → Connect to another website → Export calendar.
+                    </p>
+                  </div>
+                )}
+
+                {connectMethod === 'hostex' && (
+                  <p className="mt-5 text-xs text-slate-500 bg-slate-50 rounded-xl px-4 py-3 leading-relaxed">
+                    You&apos;ll paste your Hostex access token right after creating your account — we keep
+                    it on the server rather than in your browser.
+                  </p>
+                )}
+              </>
+            )}
+
+            {/* ── Step 3: Targets ── */}
+            {step === 3 && (
               <>
                 <h1 className="text-2xl font-bold text-slate-900 mb-1">Set your targets</h1>
                 <p className="text-slate-500 text-sm mb-8">Optional — you can set these any time in the app.</p>
@@ -219,7 +313,7 @@ export default function OnboardingPage() {
                 </button>
               ) : <div />}
 
-              {step < 2 ? (
+              {step < LAST_STEP ? (
                 <button
                   onClick={() => setStep(s => s + 1)}
                   disabled={!canAdvance}

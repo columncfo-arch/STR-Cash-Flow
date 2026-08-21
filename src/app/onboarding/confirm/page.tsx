@@ -4,19 +4,21 @@ import { useSearchParams } from 'next/navigation';
 import { useUser } from '@clerk/nextjs';
 import { Suspense, useState, useEffect } from 'react';
 import { BookOpen, Check, Upload, DollarSign, LayoutDashboard, MessageSquare, ArrowRight, Loader2 } from 'lucide-react';
+import HostexConnect from '@/components/HostexConnect';
 
 const APP = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
 const SELF_SERVE_STEPS = [
-  { n: 1, icon: Upload,          title: 'Import your earnings', body: 'Upload a CSV from Airbnb, VRBO, or Booking.com.',    href: `${APP}/import` },
+  { n: 1, icon: Upload,          title: 'Import your earnings', body: 'Upload a CSV from Airbnb, VRBO, or Booking.com.',    href: `${APP}/settings` },
   { n: 2, icon: DollarSign,      title: 'Add your expenses',    body: 'Enter your mortgage (PITI) and recurring costs.',    href: `${APP}/expenses` },
-  { n: 3, icon: LayoutDashboard, title: 'See your cash flow',   body: 'Your P&L, forecast, and pacing — all in one view.', href: `${APP}/import` },
+  { n: 3, icon: LayoutDashboard, title: 'See your cash flow',   body: 'Your P&L, forecast, and pacing — all in one view.', href: `${APP}/settings` },
 ];
 
 function ConfirmContent() {
   const { user } = useUser();
   const searchParams = useSearchParams();
   const [propertyName, setPropertyName] = useState(searchParams.get('property') || 'My Property');
+  const [connectMethod, setConnectMethod] = useState<string | undefined>();
 
   const [helpOpen, setHelpOpen] = useState(false);
   const [note, setNote] = useState('');
@@ -29,11 +31,14 @@ function ConfirmContent() {
     if (!saved) return;
     const data = JSON.parse(saved) as {
       propertyName?: string;
+      connectMethod?: string;
+      airbnbIcalUrl?: string;
       piti?: number;
       occTarget?: number;
       annualTarget?: number;
     };
     if (data.propertyName) setPropertyName(data.propertyName);
+    if (data.connectMethod) setConnectMethod(data.connectMethod);
 
     async function applySettings() {
       try {
@@ -43,6 +48,7 @@ function ConfirmContent() {
         const updated = {
           ...current,
           ...(data.propertyName ? { propertyName: data.propertyName } : {}),
+          ...(data.airbnbIcalUrl ? { airbnbIcalUrl: data.airbnbIcalUrl } : {}),
           ...(data.piti ? { monthlyPITI: data.piti } : {}),
           ...(data.occTarget ? { targetOccupancyPct: data.occTarget } : {}),
           ...(data.annualTarget ? {
@@ -123,6 +129,16 @@ function ConfirmContent() {
             </p>
           </div>
 
+          {/* Connect bookings — shown when Hostex was chosen during onboarding */}
+          {connectMethod === 'hostex' && (
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-6">
+              <HostexConnect
+                heading="Connect your bookings"
+                subheading="Paste the access token from Hostex → Settings → OpenAPI to pull in your Airbnb, VRBO and Booking.com reservations."
+              />
+            </div>
+          )}
+
           {/* Two paths */}
           <div className="grid sm:grid-cols-2 gap-4">
 
@@ -150,7 +166,7 @@ function ConfirmContent() {
                 ))}
               </div>
               <a
-                href={`${APP}/import`}
+                href={`${APP}/settings`}
                 className="mt-6 block text-center bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors"
               >
                 Import your earnings →
@@ -170,7 +186,7 @@ function ConfirmContent() {
                   <p className="text-slate-400 text-xs leading-relaxed">
                     We'll reach out within one business day to schedule your walkthrough.
                   </p>
-                  <a href={`${APP}/import`} className="mt-5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
+                  <a href={`${APP}/settings`} className="mt-5 text-xs text-emerald-400 hover:text-emerald-300 transition-colors">
                     Go to app →
                   </a>
                 </div>
@@ -234,7 +250,7 @@ function ConfirmContent() {
 
           <p className="text-center text-xs text-slate-400">
             Already familiar with the app?{' '}
-            <a href={`${APP}/import`} className="text-slate-500 hover:text-slate-700 underline underline-offset-2 transition-colors">
+            <a href={`${APP}/settings`} className="text-slate-500 hover:text-slate-700 underline underline-offset-2 transition-colors">
               Go straight to the app
             </a>
           </p>
