@@ -74,6 +74,26 @@ function detailAmount(details: HostexRateDetail[] | undefined, type: string): nu
   return hit?.amount || undefined;
 }
 
+function booker(r: HostexReservation) {
+  return r.guests?.find(g => g.is_booker) ?? r.guests?.[0];
+}
+
+/**
+ * Pick the more complete of two names. Airbnb only ever exposes a guest's first
+ * name through Hostex, so a stored "Karen Whitfield" must not be overwritten
+ * with the "Karen" a later sync brings back.
+ */
+function fullerName(a: string | undefined, b: string | undefined): string | undefined {
+  const x = a?.trim(), y = b?.trim();
+  if (!x) return y || undefined;
+  if (!y) return x;
+  // One being a prefix of the other means it's the same name, less of it.
+  const lx = x.toLowerCase(), ly = y.toLowerCase();
+  if (ly.startsWith(lx)) return y;
+  if (lx.startsWith(ly)) return x;
+  return y; // genuinely different names — trust the incoming one
+}
+
 // Copy every field `drop` has and `keep` is missing onto `keep`, so discarding a
 // duplicate never throws away detail the survivor lacks. `id` and `createdAt`
 // are the survivor's identity and are never overwritten.
@@ -198,8 +218,12 @@ export async function POST() {
         ? Math.max(Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000), 1)
         : 1;
 
-      const booker = r.guests?.find(g => g.is_booker) ?? r.guests?.[0];
-      const guestName = r.guest_name || booker?.name || undefined;
+      // Prefer whichever name carries the most detail. Airbnb only ever supplies
+      // a first name through Hostex; VRBO and Booking.com send the full name.
+      const nameCandidates = [r.guest_name, booker(r)?.name, ...(r.guests ?? []).map(g => g.name)]
+        .map(n => n?.trim())
+        .filter((n): n is string => !!n);
+      const guestName = nameCandidates.sort((a, b) => b.length - a.length)[0];
 
       const platform = mapPlatform(r.channel_type ?? r.custom_channel?.name ?? '');
 
@@ -219,8 +243,8 @@ export async function POST() {
         checkOut,
         nights,
         guestName,
-        email: r.guest_email || booker?.email || undefined,
-        phone: r.guest_phone || booker?.phone || undefined,
+        email: r.guest_email || booker(r)?.email || undefined,
+        phone: r.guest_phone || booker(r)?.phone || undefined,
         income,
         platformFee,
         paidOut,
@@ -240,7 +264,16 @@ export async function POST() {
       };
 
       if (existingIdx >= 0) {
-        existing[existingIdx] = { ...existing[existingIdx], ...sharedFields };
+        const prior = existing[existingIdx];
+        existing[existingIdx] = {
+          ...prior,
+          ...sharedFields,
+          // platform lives outside sharedFields, so without this a record
+          // written by an earlier sync keeps whatever channel it was given.
+          platform,
+          summary: guestName ? `${platform} - ${guestName}` : platform,
+          guestName: fullerName(prior.guestName, guestName),
+        };
         updated++;
       } else {
         const id = `hostex-${confirmationCode || checkIn}-${Math.random().toString(36).slice(2, 7)}`;
@@ -259,30 +292,31 @@ export async function POST() {
       }
     }
 
-    // Deduplicate same platform + checkIn. The winner absorbs any field the
-    // loser had and it lacks, so collapsing a pair never loses data — a CSV
-    // row's cleaning/tax detail survives into the Hostex record that replaces it.
+    // Deduplicate by the stay itself — one unit cannot hold two bookings over
+    // the same check-in/check-out pair, so a collision is the same reservation
+    // recorded twice. Confirmation codes deliberately do NOT gate this: a CSV
+    // row and its Hostex counterpart carry different codes, and those are
+    // precisely the duplicates worth collapsing. The winner absorbs the loser's
+    // fields, so a CSV row's cleaning/tax detail survives the merge.
     let deduped = 0;
     const seen = new Map<string, number>(); // key → index in existing
     const toRemove = new Set<number>();
     for (let i = 0; i < existing.length; i++) {
       const b = existing[i];
-      const key = `${b.platform}|${b.checkIn}`;
+      // Without both dates the stay isn't identified well enough to merge on.
+      if (!b.checkIn || !b.checkOut) continue;
+      const key = `${b.checkIn}|${b.checkOut}`;
       const prevIdx = seen.get(key);
       if (prevIdx === undefined) {
         seen.set(key, i);
         continue;
       }
       const prev = existing[prevIdx];
-      // Distinct confirmation codes, or distinct check-outs, mean these are
-      // genuinely different bookings that happen to share a start date.
-      if (b.confirmationCode && prev.confirmationCode && b.confirmationCode !== prev.confirmationCode) continue;
-      if (b.checkOut && prev.checkOut && b.checkOut !== prev.checkOut) continue;
-
       // Prefer Hostex-sourced; otherwise prefer whichever has a confirmation code
       const keepNew = b.sourceId === 'hostex' || (!prev.confirmationCode && !!b.confirmationCode);
       const [keep, drop] = keepNew ? [b, prev] : [prev, b];
       absorb(keep, drop);
+      keep.guestName = fullerName(keep.guestName, drop.guestName);
       toRemove.add(keepNew ? prevIdx : i);
       if (keepNew) seen.set(key, i);
       deduped++;
