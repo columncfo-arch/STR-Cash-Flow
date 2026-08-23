@@ -150,6 +150,22 @@ function perfColor(variance: number, missMagnitude: number | null, withBg: boole
   return withBg ? 'bg-red-50 text-red-600' : 'text-red-500';
 }
 
+// Shared pacing bands for the dashboard status columns: at or above target is
+// on track, short by up to 5% is a warning, a wider gap is behind. `met` short
+// -circuits the bands when the underlying goal has already been reached.
+type PacingStatus = { label: string; color: string };
+
+function pacingStatus(
+  variancePct: number | null | undefined,
+  met?: { reached: boolean; label: string },
+): PacingStatus {
+  if (met?.reached) return { label: met.label, color: 'text-emerald-600' };
+  if (variancePct == null) return { label: '—', color: 'text-slate-900' };
+  if (variancePct >= 0) return { label: 'On Track', color: 'text-emerald-600' };
+  if (variancePct >= -5) return { label: 'Warning', color: 'text-orange-600' };
+  return { label: 'Behind', color: 'text-red-600' };
+}
+
 function PnLTable({ m, fmt }: { m: PnLData; fmt: (n: number) => string }) {
   // Operating expenses minus the owner-remitted taxes shown separately above the total
   const otherOpEx = m.totalOperatingExpenses - m.ownerTaxes;
@@ -699,13 +715,10 @@ export default function Dashboard() {
       {hasData && !selMonth && annualForecast != null && (() => {
         const remainingToTarget = Math.max(0, annualForecast - ytdGross);
         const annualPct = annualForecast > 0 ? Math.min(100, (ytdGross / annualForecast) * 100) : 0;
-        // Behind by 5% or less is a warning; a wider gap reads as behind.
-        const status =
-          remainingToTarget === 0 ? { label: 'Target Met', color: 'text-emerald-600' }
-          : pacingVariance == null || pacingVariancePct == null ? { label: '—', color: 'text-slate-900' }
-          : pacingVariance >= 0 ? { label: 'On Track', color: 'text-emerald-600' }
-          : pacingVariancePct >= -5 ? { label: 'Warning', color: 'text-orange-600' }
-          : { label: 'Behind', color: 'text-red-600' };
+        const status = pacingStatus(pacingVariancePct, {
+          reached: remainingToTarget === 0,
+          label: 'Target Met',
+        });
         return (
           <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
             {editingTarget ? (
@@ -875,11 +888,7 @@ export default function Dashboard() {
         // How far net cash flow sits from breakeven, as a share of the month's
         // costs. Same 5% band as the annual revenue status.
         const breakevenPct = totalCosts > 0 ? (curMonthStmt.netIncome / totalCosts) * 100 : null;
-        const cashStatus =
-          breakevenPct == null ? { label: '—', color: 'text-slate-900' }
-          : breakevenPct >= 0 ? { label: 'On Track', color: 'text-emerald-600' }
-          : breakevenPct >= -5 ? { label: 'Warning', color: 'text-orange-600' }
-          : { label: 'Behind', color: 'text-red-600' };
+        const cashStatus = pacingStatus(breakevenPct);
         return (
           <div className={`bg-white rounded-xl border px-5 py-4 shadow-sm mb-6 ${curMonthStmt.netIncome < 0 ? 'border-red-200' : 'border-slate-200'}`}>
             <div className="flex items-start gap-4 sm:gap-6">
@@ -945,6 +954,7 @@ export default function Dashboard() {
         const annualNetPct = annualNetForecast != null && annualNetForecast > 0
           ? Math.min(100, Math.max(0, (ytdNetIncome / annualNetForecast) * 100))
           : 0;
+        const netStatus = pacingStatus(netPacingVariancePct);
         return (
           <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
             <div className="flex items-start gap-4 sm:gap-6">
@@ -953,11 +963,6 @@ export default function Dashboard() {
                   <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">YTD Net Income</p>
                   <p className={`text-xl font-bold leading-tight mt-0.5 ${ytdNetIncome >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
                     {fmt(ytdNetIncome)}
-                    {netPacingVariancePct != null && (
-                      <span className={`ml-1.5 text-xs font-semibold ${netPacingVariance != null && netPacingVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                        {netPacingVariance != null && netPacingVariance >= 0 ? '▲' : '▼'}{Math.abs(netPacingVariancePct).toFixed(1)}%
-                      </span>
-                    )}
                   </p>
                   <p className="text-[11px] text-slate-400 truncate">of {fmt(ytdNetForecast)} YTD projected</p>
                 </div>
@@ -971,6 +976,22 @@ export default function Dashboard() {
                   <p className="text-[11px] text-slate-400 truncate">
                     {fmt(ytdNetIncome)} earned
                     {projRemainingNet != null && ` · ${fmt(projRemainingNet)} proj. remaining`}
+                  </p>
+                </div>
+              )}
+              {ytdNetForecast != null && (
+                <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                  <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
+                  <p className={`text-xl font-bold leading-tight mt-0.5 ${netStatus.color}`}>{netStatus.label}</p>
+                  <p className="text-[11px] text-slate-400 truncate">
+                    {netPacingVariancePct != null
+                      ? <>
+                          <span className={netStatus.color}>
+                            {netPacingVariancePct >= 0 ? '▲' : '▼'}{Math.abs(netPacingVariancePct).toFixed(1)}%
+                          </span>
+                          {' vs YTD projected'}
+                        </>
+                      : 'no YTD projection'}
                   </p>
                 </div>
               )}
