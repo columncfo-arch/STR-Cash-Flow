@@ -872,6 +872,14 @@ export default function Dashboard() {
       {/* Current month cash flow tile — uses actual booked revenue and entered expenses */}
       {hasData && !selMonth && curMonthStmt != null && (() => {
         const totalCosts = curMonthStmt.totalOperatingExpenses + curMonthStmt.piti;
+        // How far net cash flow sits from breakeven, as a share of the month's
+        // costs. Same 5% band as the annual revenue status.
+        const breakevenPct = totalCosts > 0 ? (curMonthStmt.netIncome / totalCosts) * 100 : null;
+        const cashStatus =
+          breakevenPct == null ? { label: '—', color: 'text-slate-900' }
+          : breakevenPct >= 0 ? { label: 'On Track', color: 'text-emerald-600' }
+          : breakevenPct >= -5 ? { label: 'Warning', color: 'text-orange-600' }
+          : { label: 'Behind', color: 'text-red-600' };
         return (
           <div className={`bg-white rounded-xl border px-5 py-4 shadow-sm mb-6 ${curMonthStmt.netIncome < 0 ? 'border-red-200' : 'border-slate-200'}`}>
             <div className="flex items-start gap-4 sm:gap-6">
@@ -884,15 +892,6 @@ export default function Dashboard() {
                 <p className="text-[11px] text-slate-400 truncate">booked − platform fees</p>
               </div>
 
-              {/* Costs */}
-              <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Costs</p>
-                <p className="text-xl font-bold text-red-500 leading-tight mt-0.5">−{fmt(totalCosts)}</p>
-                <p className="text-[11px] text-slate-400 truncate">
-                  {fmt(curMonthStmt.totalOperatingExpenses)} opex · {fmt(curMonthStmt.piti)} PITI
-                </p>
-              </div>
-
               {/* Net cash flow */}
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                 <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Net Cash Flow</p>
@@ -900,25 +899,42 @@ export default function Dashboard() {
                   {curMonthStmt.netIncome >= 0 ? '+' : ''}{fmt(curMonthStmt.netIncome)}
                 </p>
                 <p className="text-[11px] text-slate-400 truncate">
-                  {curMonthForecastGross > 0
+                  after {fmt(curMonthStmt.totalOperatingExpenses)} opex · {fmt(curMonthStmt.piti)} PITI
+                </p>
+              </div>
+
+              {/* Status against breakeven */}
+              <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
+                <p className={`text-xl font-bold leading-tight mt-0.5 ${cashStatus.color}`}>{cashStatus.label}</p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  {breakevenPct != null
                     ? <>
-                        {fmt(curMonthConfirmedGross)} on books
-                        {curMonthCashGapToFill > 0
-                          ? ` · ${fmt(curMonthCashGapToFill)} to fill`
-                          : <span className="text-emerald-600"> · covered</span>}
+                        <span className={cashStatus.color}>
+                          {breakevenPct >= 0 ? '▲' : '▼'}{Math.abs(breakevenPct).toFixed(1)}%
+                        </span>
+                        {' vs breakeven'}
                       </>
-                    : 'net to date'}
+                    : 'no costs recorded'}
                 </p>
               </div>
             </div>
 
             {curMonthForecastGross > 0 && (
-              <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
-                <div
-                  className={`h-1 rounded-full transition-all ${curMonthCoveragePct >= 80 ? 'bg-emerald-400' : curMonthCoveragePct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                  style={{ width: `${curMonthCoveragePct}%` }}
-                />
-              </div>
+              <>
+                <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
+                  <div
+                    className={`h-1 rounded-full transition-all ${curMonthCoveragePct >= 80 ? 'bg-emerald-400' : curMonthCoveragePct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                    style={{ width: `${curMonthCoveragePct}%` }}
+                  />
+                </div>
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {fmt(curMonthConfirmedGross)} on books
+                  {curMonthCashGapToFill > 0
+                    ? ` · ${fmt(curMonthCashGapToFill)} to fill`
+                    : <span className="text-emerald-600"> · covered</span>}
+                </p>
+              </>
             )}
           </div>
         );
