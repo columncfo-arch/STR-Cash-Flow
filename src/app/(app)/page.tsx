@@ -150,9 +150,9 @@ function perfColor(variance: number, missMagnitude: number | null, withBg: boole
   return withBg ? 'bg-red-50 text-red-600' : 'text-red-500';
 }
 
-// Shared pacing bands for the dashboard status columns: at or above target is
-// on track, short by up to 5% is a warning, a wider gap is behind. `met` short
-// -circuits the bands when the underlying goal has already been reached.
+// Shared pacing bands for the dashboard status columns: within 5% of the goal
+// — at, above, or short by up to 5% — is on track; a wider shortfall is behind.
+// `met` short-circuits the bands when the underlying goal has been reached.
 type PacingStatus = { label: string; color: string };
 
 function pacingStatus(
@@ -161,8 +161,7 @@ function pacingStatus(
 ): PacingStatus {
   if (met?.reached) return { label: met.label, color: 'text-emerald-600' };
   if (variancePct == null) return { label: '—', color: 'text-slate-900' };
-  if (variancePct >= 0) return { label: 'On Track', color: 'text-emerald-600' };
-  if (variancePct >= -5) return { label: 'Warning', color: 'text-orange-600' };
+  if (variancePct >= -5) return { label: 'On Track', color: 'text-emerald-600' };
   return { label: 'Behind', color: 'text-red-600' };
 }
 
