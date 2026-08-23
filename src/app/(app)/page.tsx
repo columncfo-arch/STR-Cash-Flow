@@ -699,6 +699,13 @@ export default function Dashboard() {
       {hasData && !selMonth && annualForecast != null && (() => {
         const remainingToTarget = Math.max(0, annualForecast - ytdGross);
         const annualPct = annualForecast > 0 ? Math.min(100, (ytdGross / annualForecast) * 100) : 0;
+        // Behind by 5% or less is a warning; a wider gap reads as behind.
+        const status =
+          remainingToTarget === 0 ? { label: 'Target Met', color: 'text-emerald-600' }
+          : pacingVariance == null || pacingVariancePct == null ? { label: '—', color: 'text-slate-900' }
+          : pacingVariance >= 0 ? { label: 'On Track', color: 'text-emerald-600' }
+          : pacingVariancePct >= -5 ? { label: 'Warning', color: 'text-amber-600' }
+          : { label: 'Behind', color: 'text-red-600' };
         return (
           <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
             {editingTarget ? (
@@ -754,20 +761,13 @@ export default function Dashboard() {
                         <Pencil className="w-3 h-3" />
                       </button>
                     </div>
-                    <p className={`text-xl font-bold leading-tight mt-0.5 ${
-                      remainingToTarget === 0 ? 'text-emerald-600'
-                        : pacingVariance == null ? 'text-slate-900'
-                        : pacingVariance >= 0 ? 'text-emerald-600' : 'text-red-600'
-                    }`}>
-                      {remainingToTarget === 0
-                        ? 'Target Met'
-                        : pacingVariance == null ? '—'
-                        : pacingVariance >= 0 ? 'On Track' : 'Behind'}
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${status.color}`}>
+                      {status.label}
                     </p>
                     <p className="text-[11px] text-slate-400 truncate">
                       {pacingVariance != null && pacingVariancePct != null
                         ? <>
-                            <span className={pacingVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}>
+                            <span className={status.color}>
                               {pacingVariance >= 0 ? '▲' : '▼'}{Math.abs(pacingVariancePct).toFixed(1)}%
                             </span>
                             {' vs '}{ytdForecast != null ? fmt(ytdForecast) : '—'} YTD
