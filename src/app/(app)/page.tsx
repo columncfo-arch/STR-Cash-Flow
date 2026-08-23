@@ -837,46 +837,42 @@ export default function Dashboard() {
 
       {/* Current month cash flow tile — uses actual booked revenue and entered expenses */}
       {hasData && !selMonth && curMonthStmt != null && (
-        <div className={`bg-white rounded-xl border p-4 shadow-sm mb-6 ${curMonthStmt.netIncome < 0 ? 'border-red-200' : 'border-slate-200'}`}>
-          <p className="text-xs uppercase tracking-wide font-semibold text-slate-500 mb-1">{MONTHS_LONG[currentMonthIdx]} Forecast Cash Flow</p>
-          <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
-            <div className="shrink-0">
-              <p className={`text-2xl font-bold ${curMonthStmt.netIncome < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
-                {curMonthStmt.netIncome >= 0 ? '+' : ''}{fmt(curMonthStmt.netIncome)}
-              </p>
-              <p className="text-xs text-slate-400 mt-0.5">net to date</p>
-            </div>
-            <div className="flex-1 min-w-0 w-full space-y-1 pt-0.5">
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-500">Net revenue (booked − fees)</span>
-                <span className="text-slate-700 font-medium">{fmt(curMonthStmt.netRevenue)}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-500">Operating expenses</span>
-                <span className="text-red-500">−{fmt(curMonthStmt.totalOperatingExpenses)}</span>
-              </div>
-              <div className="flex justify-between text-xs border-t border-slate-100 pt-1">
-                <span className="text-slate-500">PITI</span>
-                <span className="text-red-500">−{fmt(curMonthStmt.piti)}</span>
-              </div>
-              {curMonthForecastGross > 0 && (
-                <div className="pt-1">
-                  <div className="w-full bg-slate-100 rounded-full h-1 mb-1">
-                    <div
-                      className={`h-1 rounded-full ${curMonthCoveragePct >= 80 ? 'bg-emerald-400' : curMonthCoveragePct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                      style={{ width: `${curMonthCoveragePct}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    {fmt(curMonthConfirmedGross)} on books
-                    {curMonthCashGapToFill > 0
-                      ? <span> · {fmt(curMonthCashGapToFill)} to fill</span>
-                      : <span className="text-emerald-600"> · covered</span>}
-                  </p>
-                </div>
-              )}
-            </div>
+        <div className={`bg-white rounded-xl border px-5 py-4 shadow-sm mb-6 ${curMonthStmt.netIncome < 0 ? 'border-red-200' : 'border-slate-200'}`}>
+          <div className="flex items-baseline flex-wrap gap-x-3 gap-y-1">
+            <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-400">
+              {MONTHS_LONG[currentMonthIdx]} Forecast Cash Flow
+            </p>
+            <p className={`text-xl font-bold ${curMonthStmt.netIncome < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+              {curMonthStmt.netIncome >= 0 ? '+' : ''}{fmt(curMonthStmt.netIncome)}
+            </p>
+            <span className="text-[11px] text-slate-400">net to date</span>
           </div>
+
+          {/* Breakdown as one inline equation rather than three stacked rows */}
+          <p className="text-[11px] text-slate-400 mt-1">
+            <span className="text-slate-600 font-medium">{fmt(curMonthStmt.netRevenue)}</span> net revenue
+            {' · '}
+            <span className="text-red-500 font-medium">−{fmt(curMonthStmt.totalOperatingExpenses)}</span> opex
+            {' · '}
+            <span className="text-red-500 font-medium">−{fmt(curMonthStmt.piti)}</span> PITI
+          </p>
+
+          {curMonthForecastGross > 0 && (
+            <>
+              <div className="w-full bg-slate-100 rounded-full h-1 mt-3">
+                <div
+                  className={`h-1 rounded-full ${curMonthCoveragePct >= 80 ? 'bg-emerald-400' : curMonthCoveragePct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                  style={{ width: `${curMonthCoveragePct}%` }}
+                />
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                {fmt(curMonthConfirmedGross)} on books
+                {curMonthCashGapToFill > 0
+                  ? <span> · {fmt(curMonthCashGapToFill)} to fill</span>
+                  : <span className="text-emerald-600"> · covered</span>}
+              </p>
+            </>
+          )}
         </div>
       )}
 
