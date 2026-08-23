@@ -862,45 +862,59 @@ export default function Dashboard() {
       </div>
 
       {/* Current month cash flow tile — uses actual booked revenue and entered expenses */}
-      {hasData && !selMonth && curMonthStmt != null && (
-        <div className={`bg-white rounded-xl border px-5 py-4 shadow-sm mb-6 ${curMonthStmt.netIncome < 0 ? 'border-red-200' : 'border-slate-200'}`}>
-          <div className="flex items-baseline flex-wrap gap-x-3 gap-y-1">
-            <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-400">
-              {MONTHS_LONG[currentMonthIdx]} Forecast Cash Flow
-            </p>
-            <p className={`text-xl font-bold ${curMonthStmt.netIncome < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
-              {curMonthStmt.netIncome >= 0 ? '+' : ''}{fmt(curMonthStmt.netIncome)}
-            </p>
-            <span className="text-[11px] text-slate-400">net to date</span>
-          </div>
+      {hasData && !selMonth && curMonthStmt != null && (() => {
+        const totalCosts = curMonthStmt.totalOperatingExpenses + curMonthStmt.piti;
+        return (
+          <div className={`bg-white rounded-xl border px-5 py-4 shadow-sm mb-6 ${curMonthStmt.netIncome < 0 ? 'border-red-200' : 'border-slate-200'}`}>
+            <div className="flex items-start gap-4 sm:gap-6">
+              {/* Net revenue */}
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">
+                  {MONTHS_LONG[currentMonthIdx]} Net Revenue
+                </p>
+                <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{fmt(curMonthStmt.netRevenue)}</p>
+                <p className="text-[11px] text-slate-400 truncate">booked − platform fees</p>
+              </div>
 
-          {/* Breakdown as one inline equation rather than three stacked rows */}
-          <p className="text-[11px] text-slate-400 mt-1">
-            <span className="text-slate-600 font-medium">{fmt(curMonthStmt.netRevenue)}</span> net revenue
-            {' · '}
-            <span className="text-red-500 font-medium">−{fmt(curMonthStmt.totalOperatingExpenses)}</span> opex
-            {' · '}
-            <span className="text-red-500 font-medium">−{fmt(curMonthStmt.piti)}</span> PITI
-          </p>
+              {/* Costs */}
+              <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Costs</p>
+                <p className="text-xl font-bold text-red-500 leading-tight mt-0.5">−{fmt(totalCosts)}</p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  {fmt(curMonthStmt.totalOperatingExpenses)} opex · {fmt(curMonthStmt.piti)} PITI
+                </p>
+              </div>
 
-          {curMonthForecastGross > 0 && (
-            <>
-              <div className="w-full bg-slate-100 rounded-full h-1 mt-3">
+              {/* Net cash flow */}
+              <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Net Cash Flow</p>
+                <p className={`text-xl font-bold leading-tight mt-0.5 ${curMonthStmt.netIncome < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                  {curMonthStmt.netIncome >= 0 ? '+' : ''}{fmt(curMonthStmt.netIncome)}
+                </p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  {curMonthForecastGross > 0
+                    ? <>
+                        {fmt(curMonthConfirmedGross)} on books
+                        {curMonthCashGapToFill > 0
+                          ? ` · ${fmt(curMonthCashGapToFill)} to fill`
+                          : <span className="text-emerald-600"> · covered</span>}
+                      </>
+                    : 'net to date'}
+                </p>
+              </div>
+            </div>
+
+            {curMonthForecastGross > 0 && (
+              <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
                 <div
-                  className={`h-1 rounded-full ${curMonthCoveragePct >= 80 ? 'bg-emerald-400' : curMonthCoveragePct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                  className={`h-1 rounded-full transition-all ${curMonthCoveragePct >= 80 ? 'bg-emerald-400' : curMonthCoveragePct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
                   style={{ width: `${curMonthCoveragePct}%` }}
                 />
               </div>
-              <p className="text-[11px] text-slate-400 mt-1">
-                {fmt(curMonthConfirmedGross)} on books
-                {curMonthCashGapToFill > 0
-                  ? <span> · {fmt(curMonthCashGapToFill)} to fill</span>
-                  : <span className="text-emerald-600"> · covered</span>}
-              </p>
-            </>
-          )}
-        </div>
-      )}
+            )}
+          </div>
+        );
+      })()}
 
       {/* Net income pacing + annual projection — one condensed row */}
       {hasData && !selMonth && (ytdNetForecast != null || annualNetForecast != null) && (() => {
