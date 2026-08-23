@@ -880,36 +880,52 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Net Income pacing tiles */}
-      {hasData && !selMonth && (ytdNetForecast != null || annualNetForecast != null) && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-          {ytdNetForecast != null && (
-            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">YTD Net Income Pacing</p>
-              <p className={`text-2xl font-bold ${ytdNetIncome >= 0 ? 'text-slate-900' : 'text-red-600'}`}>{fmt(ytdNetIncome)}</p>
-              <p className="text-xs text-slate-400 mt-0.5 mb-2">of {fmt(ytdNetForecast)} YTD projected</p>
-              {netPacingVariance != null && (
-                <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2 py-1 rounded-lg ${perfColor(netPacingVariance, netPacingVariancePct != null ? Math.abs(netPacingVariancePct) : null, true)}`}>
-                  {netPacingVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(netPacingVariance))}
-                  {netPacingVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(netPacingVariancePct).toFixed(1)}%)</span>}
-                </span>
+      {/* Net income pacing + annual projection — one condensed row */}
+      {hasData && !selMonth && (ytdNetForecast != null || annualNetForecast != null) && (() => {
+        const annualNetPct = annualNetForecast != null && annualNetForecast > 0
+          ? Math.min(100, Math.max(0, (ytdNetIncome / annualNetForecast) * 100))
+          : 0;
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
+            <div className="flex items-start gap-4 sm:gap-6">
+              {ytdNetForecast != null && (
+                <div className="min-w-0 flex-1">
+                  <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">YTD Net Income</p>
+                  <p className={`text-xl font-bold leading-tight mt-0.5 ${ytdNetIncome >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+                    {fmt(ytdNetIncome)}
+                    {netPacingVariancePct != null && (
+                      <span className={`ml-1.5 text-xs font-semibold ${netPacingVariance != null && netPacingVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                        {netPacingVariance != null && netPacingVariance >= 0 ? '▲' : '▼'}{Math.abs(netPacingVariancePct).toFixed(1)}%
+                      </span>
+                    )}
+                  </p>
+                  <p className="text-[11px] text-slate-400 truncate">of {fmt(ytdNetForecast)} YTD projected</p>
+                </div>
+              )}
+              {annualNetForecast != null && (
+                <div className={`min-w-0 flex-1 ${ytdNetForecast != null ? 'border-l border-slate-100 pl-4 sm:pl-6' : ''}`}>
+                  <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Annual Projection</p>
+                  <p className={`text-xl font-bold leading-tight mt-0.5 ${annualNetForecast >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
+                    {fmt(annualNetForecast)}
+                  </p>
+                  <p className="text-[11px] text-slate-400 truncate">
+                    {fmt(ytdNetIncome)} earned
+                    {projRemainingNet != null && ` · ${fmt(projRemainingNet)} proj. remaining`}
+                  </p>
+                </div>
               )}
             </div>
-          )}
-          {annualNetForecast != null && (
-            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">Annual Net Income Projection</p>
-              <p className={`text-2xl font-bold ${annualNetForecast >= 0 ? 'text-slate-900' : 'text-red-600'}`}>{fmt(annualNetForecast)}</p>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {fmt(ytdNetIncome)} earned ·{' '}
-                {projRemainingNet != null
-                  ? `${fmt(projRemainingNet)} proj. remaining`
-                  : '—'}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
+            {annualNetForecast != null && annualNetForecast > 0 && (
+              <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
+                <div
+                  className="h-1 rounded-full bg-indigo-500 transition-all"
+                  style={{ width: `${annualNetPct}%` }}
+                />
+              </div>
+            )}
+          </div>
+        );
+      })()}
 
       {/* P&L Chart */}
       {hasData && (
