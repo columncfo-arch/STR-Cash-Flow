@@ -728,29 +728,24 @@ export default function Dashboard() {
                     <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{fmt(annualForecast)}</p>
                     <p className="text-[11px] text-slate-400 truncate">
                       {manualTarget ? 'Manually set' : `Prior year ${growthPct > 0 ? '+' : ''}${growthPct}%`}
+                      {' · '}{fmt(ytdGross)} earned
                     </p>
                   </div>
 
-                  {hasTarget && (
-                    <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">YTD Pacing</p>
-                      <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
-                        {fmt(ytdGross)}
-                        {pacingVariancePct != null && (
-                          <span className={`ml-1.5 text-xs font-semibold ${pacingVariance != null && pacingVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-                            {pacingVariance != null && pacingVariance >= 0 ? '▲' : '▼'}{Math.abs(pacingVariancePct).toFixed(1)}%
-                          </span>
-                        )}
-                      </p>
-                      <p className="text-[11px] text-slate-400 truncate">
-                        of {ytdForecast != null ? fmt(ytdForecast) : '—'} YTD
-                      </p>
-                    </div>
-                  )}
+                  {/* Revenue still to earn against the annual target */}
+                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Remaining Revenue</p>
+                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{fmt(remainingToTarget)}</p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {fmt(futureConfirmedGross)} on books
+                      {stillToBook != null && stillToBook > 0 ? ` · ${fmt(stillToBook)} to fill` : ' · covered'}
+                    </p>
+                  </div>
 
+                  {/* Pacing status against the YTD target */}
                   <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Still Needed</p>
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
                       <button
                         onClick={() => { setTargetInput(String(manualTarget ?? Math.round(annualForecast))); setEditingTarget(true); }}
                         className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
@@ -759,12 +754,25 @@ export default function Dashboard() {
                         <Pencil className="w-3 h-3" />
                       </button>
                     </div>
-                    <p className={`text-xl font-bold leading-tight mt-0.5 ${remainingToTarget === 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
-                      {remainingToTarget === 0 ? 'On Track' : fmt(remainingToTarget)}
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${
+                      remainingToTarget === 0 ? 'text-emerald-600'
+                        : pacingVariance == null ? 'text-slate-900'
+                        : pacingVariance >= 0 ? 'text-emerald-600' : 'text-red-600'
+                    }`}>
+                      {remainingToTarget === 0
+                        ? 'Target Met'
+                        : pacingVariance == null ? '—'
+                        : pacingVariance >= 0 ? 'On Track' : 'Behind'}
                     </p>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {fmt(futureConfirmedGross)} on books
-                      {stillToBook != null && stillToBook > 0 ? ` · ${fmt(stillToBook)} to fill` : ' · covered'}
+                      {pacingVariance != null && pacingVariancePct != null
+                        ? <>
+                            <span className={pacingVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}>
+                              {pacingVariance >= 0 ? '▲' : '▼'}{Math.abs(pacingVariancePct).toFixed(1)}%
+                            </span>
+                            {' vs '}{ytdForecast != null ? fmt(ytdForecast) : '—'} YTD
+                          </>
+                        : 'no YTD target set'}
                     </p>
                   </div>
                 </div>
