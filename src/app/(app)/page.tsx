@@ -591,33 +591,59 @@ export default function Dashboard() {
         const monthlyVariance = monthlyActual - monthlyTarget;
         const monthlyVariancePct = monthlyTarget > 0 ? (monthlyVariance / monthlyTarget) * 100 : null;
         const monthlyPct = monthlyTarget > 0 ? Math.min(100, (monthlyActual / monthlyTarget) * 100) : 0;
+        const monthlyRemaining = Math.max(0, monthlyTarget - monthlyActual);
         return (
-          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">
-                {MONTHS_LONG[currentMonthIdx]} Revenue Pacing
-              </p>
-              <button
-                onClick={openSeasonalityEditor}
-                className="text-slate-300 hover:text-slate-500 transition-colors"
-                title={`Edit ${year - 1} monthly actuals for seasonal distribution`}
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-            </div>
-            <div className="flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="text-4xl font-bold text-slate-900 leading-none">{fmt(monthlyActual)}</p>
-                <p className="text-sm text-slate-400 mt-2">of {fmt(monthlyTarget)} target</p>
+          <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
+            <div className="flex items-start gap-4 sm:gap-6">
+              {/* Month target */}
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">
+                  {MONTHS_LONG[currentMonthIdx]} Target
+                </p>
+                <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{fmt(monthlyTarget)}</p>
+                <p className="text-[11px] text-slate-400 truncate">seasonal share of annual</p>
               </div>
-              <span className={`inline-flex items-center gap-1 text-base font-semibold px-3 py-1.5 rounded-lg ${perfColor(monthlyVariance, monthlyVariancePct != null ? Math.abs(monthlyVariancePct) : null, true)}`}>
-                {monthlyVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(monthlyVariance))}
-                {monthlyVariancePct != null && <span className="font-normal text-sm ml-0.5">({Math.abs(monthlyVariancePct).toFixed(1)}%)</span>}
-              </span>
+
+              {/* Booked so far */}
+              <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Booked</p>
+                <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
+                  {fmt(monthlyActual)}
+                  {monthlyVariancePct != null && (
+                    <span className={`ml-1.5 text-xs font-semibold ${monthlyVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                      {monthlyVariance >= 0 ? '▲' : '▼'}{Math.abs(monthlyVariancePct).toFixed(1)}%
+                    </span>
+                  )}
+                </p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  {monthlyVariance >= 0 ? '+' : '−'}{fmt(Math.abs(monthlyVariance))} vs target
+                </p>
+              </div>
+
+              {/* Gap to month target */}
+              <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Still Needed</p>
+                  <button
+                    onClick={openSeasonalityEditor}
+                    className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
+                    title={`Edit ${year - 1} monthly actuals for seasonal distribution`}
+                  >
+                    <Pencil className="w-3 h-3" />
+                  </button>
+                </div>
+                <p className={`text-xl font-bold leading-tight mt-0.5 ${monthlyRemaining === 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+                  {monthlyRemaining === 0 ? 'On Track' : fmt(monthlyRemaining)}
+                </p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  {monthlyPct.toFixed(0)}% of {MONTHS_LONG[currentMonthIdx]} target
+                </p>
+              </div>
             </div>
-            <div className="w-full bg-slate-100 rounded-full h-1.5 mt-5">
+
+            <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
               <div
-                className={`h-1.5 rounded-full transition-all ${monthlyVariance >= 0 ? 'bg-emerald-500' : monthlyPct >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
+                className={`h-1 rounded-full transition-all ${monthlyVariance >= 0 ? 'bg-emerald-500' : monthlyPct >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
                 style={{ width: `${monthlyPct}%` }}
               />
             </div>
