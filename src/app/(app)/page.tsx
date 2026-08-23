@@ -704,7 +704,7 @@ export default function Dashboard() {
           remainingToTarget === 0 ? { label: 'Target Met', color: 'text-emerald-600' }
           : pacingVariance == null || pacingVariancePct == null ? { label: '—', color: 'text-slate-900' }
           : pacingVariance >= 0 ? { label: 'On Track', color: 'text-emerald-600' }
-          : pacingVariancePct >= -5 ? { label: 'Warning', color: 'text-amber-600' }
+          : pacingVariancePct >= -5 ? { label: 'Warning', color: 'text-orange-600' }
           : { label: 'Behind', color: 'text-red-600' };
         return (
           <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
