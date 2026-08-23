@@ -674,84 +674,83 @@ export default function Dashboard() {
         const remainingToTarget = Math.max(0, annualForecast - ytdGross);
         const annualPct = annualForecast > 0 ? Math.min(100, (ytdGross / annualForecast) * 100) : 0;
         return (
-          <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
-            {/* Annual target */}
-            <div className="flex items-center justify-between mb-1">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">Annual Gross Revenue Target</p>
-              {!editingTarget ? (
-                <button
-                  onClick={() => { setTargetInput(String(manualTarget ?? Math.round(annualForecast))); setEditingTarget(true); }}
-                  className="text-slate-300 hover:text-slate-500 transition-colors"
-                  title="Edit annual target"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </button>
-              ) : (
+          <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
+            {editingTarget ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 whitespace-nowrap">{year} target</span>
+                <span className="text-sm text-slate-400">$</span>
+                <input
+                  type="number"
+                  value={targetInput}
+                  onChange={e => setTargetInput(e.target.value)}
+                  onBlur={saveTarget}
+                  onKeyDown={e => e.key === 'Enter' && saveTarget()}
+                  className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5"
+                  placeholder="68500"
+                  autoFocus
+                />
                 <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingTarget(false)} className="text-slate-300 hover:text-slate-500">
                   <X className="w-3.5 h-3.5" />
                 </button>
-              )}
-            </div>
-
-            {editingTarget ? (
-              <div className="space-y-2 py-1">
-                <p className="text-xs text-slate-500">Set your {year} annual target</p>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-400">$</span>
-                  <input
-                    type="number"
-                    value={targetInput}
-                    onChange={e => setTargetInput(e.target.value)}
-                    onBlur={saveTarget}
-                    onKeyDown={e => e.key === 'Enter' && saveTarget()}
-                    className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5"
-                    placeholder="68500"
-                    autoFocus
-                  />
-                </div>
               </div>
             ) : (
               <>
-                <p className="text-3xl font-bold text-slate-900">{fmt(annualForecast)}</p>
-                <p className="text-xs text-slate-400 mt-1">
-                  {manualTarget ? 'Manually set · ' : `Prior year + ${growthPct > 0 ? '+' : ''}${growthPct}% growth · `}
-                  {fmt(ytdGross)} earned
-                </p>
-                <div className="w-full bg-slate-100 rounded-full h-1.5 mt-4">
+                <div className="flex items-start gap-4 sm:gap-6">
+                  {/* Annual target */}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Annual Target</p>
+                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{fmt(annualForecast)}</p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {manualTarget ? 'Manually set' : `Prior year ${growthPct > 0 ? '+' : ''}${growthPct}%`}
+                    </p>
+                  </div>
+
+                  {hasTarget && (
+                    <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">YTD Pacing</p>
+                      <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
+                        {fmt(ytdGross)}
+                        {pacingVariancePct != null && (
+                          <span className={`ml-1.5 text-xs font-semibold ${pacingVariance != null && pacingVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
+                            {pacingVariance != null && pacingVariance >= 0 ? '▲' : '▼'}{Math.abs(pacingVariancePct).toFixed(1)}%
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[11px] text-slate-400 truncate">
+                        of {ytdForecast != null ? fmt(ytdForecast) : '—'} YTD
+                      </p>
+                    </div>
+                  )}
+
+                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Still Needed</p>
+                      <button
+                        onClick={() => { setTargetInput(String(manualTarget ?? Math.round(annualForecast))); setEditingTarget(true); }}
+                        className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
+                        title="Edit annual target"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${remainingToTarget === 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+                      {remainingToTarget === 0 ? 'On Track' : fmt(remainingToTarget)}
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {fmt(futureConfirmedGross)} on books
+                      {stillToBook != null && stillToBook > 0 ? ` · ${fmt(stillToBook)} to fill` : ' · covered'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
                   <div
-                    className="h-1.5 rounded-full bg-emerald-500 transition-all"
+                    className="h-1 rounded-full bg-emerald-500 transition-all"
                     style={{ width: `${annualPct}%` }}
                   />
                 </div>
               </>
             )}
-
-            {/* YTD pacing + remaining gap */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6 pt-6 border-t border-slate-100">
-              {hasTarget && (
-                <div>
-                  <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2">YTD Revenue Pacing</p>
-                  <p className="text-2xl font-bold text-slate-900">{fmt(ytdGross)}</p>
-                  <p className="text-xs text-slate-400 mt-0.5 mb-2">of {ytdForecast != null ? fmt(ytdForecast) : '—'} YTD target</p>
-                  {pacingVariance != null && (
-                    <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2 py-1 rounded-lg ${perfColor(pacingVariance, pacingVariancePct != null ? Math.abs(pacingVariancePct) : null, true)}`}>
-                      {pacingVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(pacingVariance))}
-                      {pacingVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(pacingVariancePct).toFixed(1)}%)</span>}
-                    </span>
-                  )}
-                </div>
-              )}
-              <div>
-                <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-2">Revenue Still Needed</p>
-                <p className={`text-2xl font-bold ${remainingToTarget === 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
-                  {remainingToTarget === 0 ? 'On Track' : fmt(remainingToTarget)}
-                </p>
-                <p className="text-xs text-slate-400 mt-1">
-                  {fmt(futureConfirmedGross)} on books
-                  {stillToBook != null && stillToBook > 0 ? ` · ${fmt(stillToBook)} to fill` : ' · target covered'}
-                </p>
-              </div>
-            </div>
           </div>
         );
       })()}
