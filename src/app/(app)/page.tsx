@@ -954,7 +954,12 @@ export default function Dashboard() {
         const annualNetPct = annualNetForecast != null && annualNetForecast > 0
           ? Math.min(100, Math.max(0, (ytdNetIncome / annualNetForecast) * 100))
           : 0;
-        const netStatus = pacingStatus(netPacingVariancePct);
+        // Judged against where the year is projected to land, not the YTD plan:
+        // clearing a projected annual loss is exceeding expectations, not lagging.
+        const annualNetVariancePct = annualNetForecast != null && annualNetForecast !== 0
+          ? ((ytdNetIncome - annualNetForecast) / Math.abs(annualNetForecast)) * 100
+          : null;
+        const netStatus = pacingStatus(annualNetVariancePct);
         return (
           <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
             <div className="flex items-start gap-4 sm:gap-6">
@@ -979,19 +984,19 @@ export default function Dashboard() {
                   </p>
                 </div>
               )}
-              {ytdNetForecast != null && (
+              {annualNetForecast != null && (
                 <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                   <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
                   <p className={`text-xl font-bold leading-tight mt-0.5 ${netStatus.color}`}>{netStatus.label}</p>
                   <p className="text-[11px] text-slate-400 truncate">
-                    {netPacingVariancePct != null
+                    {annualNetVariancePct != null
                       ? <>
                           <span className={netStatus.color}>
-                            {netPacingVariancePct >= 0 ? '▲' : '▼'}{Math.abs(netPacingVariancePct).toFixed(1)}%
+                            {annualNetVariancePct >= 0 ? '▲' : '▼'}{fmt(Math.abs(ytdNetIncome - annualNetForecast))}
                           </span>
-                          {' vs YTD projected'}
+                          {' vs annual projection'}
                         </>
-                      : 'no YTD projection'}
+                      : 'no annual projection'}
                   </p>
                 </div>
               )}
