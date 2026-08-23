@@ -954,12 +954,9 @@ export default function Dashboard() {
         const annualNetPct = annualNetForecast != null && annualNetForecast > 0
           ? Math.min(100, Math.max(0, (ytdNetIncome / annualNetForecast) * 100))
           : 0;
-        // Judged against where the year is projected to land, not the YTD plan:
-        // clearing a projected annual loss is exceeding expectations, not lagging.
-        const annualNetVariancePct = annualNetForecast != null && annualNetForecast !== 0
-          ? ((ytdNetIncome - annualNetForecast) / Math.abs(annualNetForecast)) * 100
-          : null;
-        const netStatus = pacingStatus(annualNetVariancePct);
+        // Measured against the YTD plan. Not the annual projection — that is
+        // built from YTD actual, so comparing the two is circular.
+        const netStatus = pacingStatus(netPacingVariancePct);
         return (
           <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
             <div className="flex items-start gap-4 sm:gap-6">
@@ -980,23 +977,23 @@ export default function Dashboard() {
                   </p>
                   <p className="text-[11px] text-slate-400 truncate">
                     {fmt(ytdNetIncome)} earned
-                    {projRemainingNet != null && ` · ${fmt(projRemainingNet)} proj. remaining`}
+                    {projRemainingNet != null && ` · ${fmt(projRemainingNet)} proj. ${MONTHS[currentMonthIdx]}–Dec`}
                   </p>
                 </div>
               )}
-              {annualNetForecast != null && (
+              {ytdNetForecast != null && (
                 <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                   <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
                   <p className={`text-xl font-bold leading-tight mt-0.5 ${netStatus.color}`}>{netStatus.label}</p>
                   <p className="text-[11px] text-slate-400 truncate">
-                    {annualNetVariancePct != null
+                    {netPacingVariance != null
                       ? <>
                           <span className={netStatus.color}>
-                            {annualNetVariancePct >= 0 ? '▲' : '▼'}{fmt(Math.abs(ytdNetIncome - annualNetForecast))}
+                            {netPacingVariance >= 0 ? '▲' : '▼'}{fmt(Math.abs(netPacingVariance))}
                           </span>
-                          {' vs annual projection'}
+                          {' vs YTD plan'}
                         </>
-                      : 'no annual projection'}
+                      : 'no YTD plan'}
                   </p>
                 </div>
               )}
