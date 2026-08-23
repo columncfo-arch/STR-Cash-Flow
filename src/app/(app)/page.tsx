@@ -464,21 +464,14 @@ export default function Dashboard() {
     : null;
   const annualNetForecast = projRemainingNet != null ? ytdNetIncome + projRemainingNet : null;
 
-  const currentMonthNetIncome = statement?.months[currentMonthIdx]?.netIncome ?? 0;
   // NI pacing: compare completed months actual vs completed months forecast (same time horizon)
   const ytdGrossForecastTotal = monthlyForecasts.slice(0, currentMonthIdx).reduce<number>((s, v) => s + (v ?? 0), 0);
   const ytdNetForecast = cmRatio != null
     ? Math.round(ytdGrossForecastTotal * cmRatio - ytdPITITotal)
     : null;
-  const monthlyNetForecast = cmRatio != null && curMonthForecast != null
-    ? Math.round(curMonthForecast * cmRatio - monthlyPITI)
-    : null;
   const netPacingVariance = ytdNetForecast != null ? ytdNetIncome - ytdNetForecast : null;
   const netPacingVariancePct = ytdNetForecast != null && ytdNetForecast !== 0
     ? (netPacingVariance! / Math.abs(ytdNetForecast)) * 100 : null;
-  const monthlyNetVariance = monthlyNetForecast != null ? currentMonthNetIncome - monthlyNetForecast : null;
-  const monthlyNetVariancePct = monthlyNetForecast != null && monthlyNetForecast !== 0
-    ? (monthlyNetVariance! / Math.abs(monthlyNetForecast)) * 100 : null;
 
   // Current-month cash flow tile
   const curMonthConfirmedGross = curMonthStmt?.grossRevenue ?? 0;
@@ -590,51 +583,6 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold text-slate-900">{settings?.propertyName ?? 'Dashboard'}</h1>
         <p className="text-slate-500 text-sm mt-1">{year} overview</p>
       </div>
-
-      {/* Current month cash flow tile — uses actual booked revenue and entered expenses */}
-      {hasData && !selMonth && curMonthStmt != null && (
-        <div className={`bg-white rounded-xl border p-4 shadow-sm mb-6 ${curMonthStmt.netIncome < 0 ? 'border-red-200' : 'border-slate-200'}`}>
-          <p className="text-xs uppercase tracking-wide font-semibold text-slate-500 mb-1">{MONTHS_LONG[currentMonthIdx]} Forecast Cash Flow</p>
-          <div className="flex items-start gap-6">
-            <div className="shrink-0">
-              <p className={`text-2xl font-bold ${curMonthStmt.netIncome < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
-                {curMonthStmt.netIncome >= 0 ? '+' : ''}{fmt(curMonthStmt.netIncome)}
-              </p>
-              <p className="text-xs text-slate-400 mt-0.5">net to date</p>
-            </div>
-            <div className="flex-1 min-w-0 space-y-1 pt-0.5">
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-500">Net revenue (booked − fees)</span>
-                <span className="text-slate-700 font-medium">{fmt(curMonthStmt.netRevenue)}</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-slate-500">Operating expenses</span>
-                <span className="text-red-500">−{fmt(curMonthStmt.totalOperatingExpenses)}</span>
-              </div>
-              <div className="flex justify-between text-xs border-t border-slate-100 pt-1">
-                <span className="text-slate-500">PITI</span>
-                <span className="text-red-500">−{fmt(curMonthStmt.piti)}</span>
-              </div>
-              {curMonthForecastGross > 0 && (
-                <div className="pt-1">
-                  <div className="w-full bg-slate-100 rounded-full h-1 mb-1">
-                    <div
-                      className={`h-1 rounded-full ${curMonthCoveragePct >= 80 ? 'bg-emerald-400' : curMonthCoveragePct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                      style={{ width: `${curMonthCoveragePct}%` }}
-                    />
-                  </div>
-                  <p className="text-xs text-slate-400">
-                    {fmt(curMonthConfirmedGross)} on books
-                    {curMonthCashGapToFill > 0
-                      ? <span> · {fmt(curMonthCashGapToFill)} to fill</span>
-                      : <span className="text-emerald-600"> · covered</span>}
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Revenue pacing tiles */}
       {!selMonth && hasTarget && annualForecast != null && (
@@ -877,9 +825,54 @@ export default function Dashboard() {
         )}
       </div>
 
+      {/* Current month cash flow tile — uses actual booked revenue and entered expenses */}
+      {hasData && !selMonth && curMonthStmt != null && (
+        <div className={`bg-white rounded-xl border p-4 shadow-sm mb-6 ${curMonthStmt.netIncome < 0 ? 'border-red-200' : 'border-slate-200'}`}>
+          <p className="text-xs uppercase tracking-wide font-semibold text-slate-500 mb-1">{MONTHS_LONG[currentMonthIdx]} Forecast Cash Flow</p>
+          <div className="flex flex-col sm:flex-row items-start gap-4 sm:gap-6">
+            <div className="shrink-0">
+              <p className={`text-2xl font-bold ${curMonthStmt.netIncome < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                {curMonthStmt.netIncome >= 0 ? '+' : ''}{fmt(curMonthStmt.netIncome)}
+              </p>
+              <p className="text-xs text-slate-400 mt-0.5">net to date</p>
+            </div>
+            <div className="flex-1 min-w-0 w-full space-y-1 pt-0.5">
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Net revenue (booked − fees)</span>
+                <span className="text-slate-700 font-medium">{fmt(curMonthStmt.netRevenue)}</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-slate-500">Operating expenses</span>
+                <span className="text-red-500">−{fmt(curMonthStmt.totalOperatingExpenses)}</span>
+              </div>
+              <div className="flex justify-between text-xs border-t border-slate-100 pt-1">
+                <span className="text-slate-500">PITI</span>
+                <span className="text-red-500">−{fmt(curMonthStmt.piti)}</span>
+              </div>
+              {curMonthForecastGross > 0 && (
+                <div className="pt-1">
+                  <div className="w-full bg-slate-100 rounded-full h-1 mb-1">
+                    <div
+                      className={`h-1 rounded-full ${curMonthCoveragePct >= 80 ? 'bg-emerald-400' : curMonthCoveragePct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
+                      style={{ width: `${curMonthCoveragePct}%` }}
+                    />
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    {fmt(curMonthConfirmedGross)} on books
+                    {curMonthCashGapToFill > 0
+                      ? <span> · {fmt(curMonthCashGapToFill)} to fill</span>
+                      : <span className="text-emerald-600"> · covered</span>}
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Net Income pacing tiles */}
-      {hasData && !selMonth && (ytdNetForecast != null || monthlyNetForecast != null || annualNetForecast != null) && (
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-6">
+      {hasData && !selMonth && (ytdNetForecast != null || annualNetForecast != null) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
           {ytdNetForecast != null && (
             <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
               <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">YTD Net Income Pacing</p>
@@ -889,19 +882,6 @@ export default function Dashboard() {
                 <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2 py-1 rounded-lg ${perfColor(netPacingVariance, netPacingVariancePct != null ? Math.abs(netPacingVariancePct) : null, true)}`}>
                   {netPacingVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(netPacingVariance))}
                   {netPacingVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(netPacingVariancePct).toFixed(1)}%)</span>}
-                </span>
-              )}
-            </div>
-          )}
-          {monthlyNetForecast != null && (
-            <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">{MONTHS_LONG[currentMonthIdx]} Net Income</p>
-              <p className={`text-2xl font-bold ${currentMonthNetIncome >= 0 ? 'text-slate-900' : 'text-red-600'}`}>{fmt(currentMonthNetIncome)}</p>
-              <p className="text-xs text-slate-400 mt-0.5 mb-2">of {fmt(monthlyNetForecast)} projected</p>
-              {monthlyNetVariance != null && (
-                <span className={`inline-flex items-center gap-1 text-sm font-semibold px-2 py-1 rounded-lg ${perfColor(monthlyNetVariance, monthlyNetVariancePct != null ? Math.abs(monthlyNetVariancePct) : null, true)}`}>
-                  {monthlyNetVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(monthlyNetVariance))}
-                  {monthlyNetVariancePct != null && <span className="font-normal text-xs ml-0.5">({Math.abs(monthlyNetVariancePct).toFixed(1)}%)</span>}
                 </span>
               )}
             </div>
