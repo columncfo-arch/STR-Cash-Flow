@@ -741,13 +741,13 @@ export default function Dashboard() {
             ) : (
               <>
                 <div className="flex items-start gap-4 sm:gap-6">
-                  {/* Annual target */}
+                  {/* Earned so far, against the annual target */}
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Annual Target</p>
-                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{fmt(annualForecast)}</p>
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Earned YTD</p>
+                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{fmt(ytdGross)}</p>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {manualTarget ? 'Manually set' : `Prior year ${growthPct > 0 ? '+' : ''}${growthPct}%`}
-                      {' · '}{fmt(ytdGross)} earned
+                      of {fmt(annualForecast)} target
+                      {' · '}{manualTarget ? 'manual' : `${growthPct > 0 ? '+' : ''}${growthPct}% YoY`}
                     </p>
                   </div>
 
