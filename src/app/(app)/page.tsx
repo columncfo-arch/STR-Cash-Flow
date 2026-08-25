@@ -751,13 +751,14 @@ export default function Dashboard() {
                     </p>
                   </div>
 
-                  {/* Revenue still to earn against the annual target */}
+                  {/* The unbooked slice of what's left to earn this year */}
                   <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Remaining Revenue</p>
-                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{fmt(remainingToTarget)}</p>
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Still To Book</p>
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${stillToBook === 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+                      {stillToBook == null ? '—' : stillToBook === 0 ? 'Covered' : fmt(stillToBook)}
+                    </p>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {fmt(futureConfirmedGross)} on books
-                      {stillToBook != null && stillToBook > 0 ? ` · ${fmt(stillToBook)} to fill` : ' · covered'}
+                      out of {fmt(remainingToTarget)} remaining · {fmt(futureConfirmedGross)} on books
                     </p>
                   </div>
 
