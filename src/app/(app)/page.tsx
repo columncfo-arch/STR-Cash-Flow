@@ -1218,10 +1218,10 @@ export default function Dashboard() {
                     </div>
                     <p className={`text-xl font-bold leading-tight mt-0.5 ${adrStatus.color}`}>{adrStatus.label}</p>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {adrVariance != null
+                      {adrVariancePct != null
                         ? <>
                             <span className={adrStatus.color}>
-                              {adrVariance >= 0 ? '▲' : '▼'}{fmt(Math.abs(adrVariance))}
+                              {adrVariancePct >= 0 ? '▲' : '▼'}{Math.abs(adrVariancePct).toFixed(1)}%
                             </span>
                             {' vs target'}
                           </>
