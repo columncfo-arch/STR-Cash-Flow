@@ -602,6 +602,12 @@ export default function Dashboard() {
         <p className="text-slate-500 text-sm mt-1">{year} overview</p>
       </div>
 
+      {/* Section label — the revenue tiles below track gross, but none of their
+          own column headings say so */}
+      {!selMonth && annualForecast != null && (
+        <h2 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-3">Gross Revenue</h2>
+      )}
+
       {/* Current month revenue pacing — lead tile */}
       {!selMonth && hasTarget && annualForecast != null && monthlyForecasts[currentMonthIdx] != null && (() => {
         const monthlyActual = statement?.months[currentMonthIdx].grossRevenue ?? 0;
