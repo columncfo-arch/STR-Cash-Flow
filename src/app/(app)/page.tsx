@@ -1029,7 +1029,21 @@ export default function Dashboard() {
                 />
               )} />
               <Legend />
-              <Bar dataKey="Net Income" fill="#6366f1" radius={[3, 3, 0, 0]} />
+              <ReferenceLine y={0} stroke="#cbd5e1" />
+              <Bar dataKey="Net Income" fill="#6366f1" radius={[3, 3, 0, 0]}>
+                {/* Loss-making months read red; the rounded corner follows the bar's direction */}
+                {pnlChartData.map((d, i) => {
+                  const v = d['Net Income'] as number | null;
+                  const negative = v != null && v < 0;
+                  return (
+                    <Cell
+                      key={i}
+                      fill={negative ? '#ef4444' : '#6366f1'}
+                      radius={(negative ? [0, 0, 3, 3] : [3, 3, 0, 0]) as unknown as number}
+                    />
+                  );
+                })}
+              </Bar>
               <Line
                 dataKey="Net Forecast"
                 stroke="#6366f1"
@@ -1043,133 +1057,192 @@ export default function Dashboard() {
         </div>
       )}
 
-      {/* Pricing & Occupancy tiles */}
-      {hasData && !selMonth && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Occupancy</p>
-              {editingOccTarget ? (
-                <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingOccTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
-              ) : (
-                <button onClick={() => { setOccTargetInput(String(settings?.targetOccupancyPct ?? '')); setEditingOccTarget(true); }} className="text-slate-300 hover:text-slate-500" title="Override occupancy baseline"><Pencil className="w-3.5 h-3.5" /></button>
-              )}
-            </div>
+      {/* Occupancy — YTD, current month and status against the baseline */}
+      {hasData && !selMonth && (() => {
+        // Variance is in points; express it against the baseline so it shares
+        // the same 5% bands as the revenue and net income tiles.
+        const occVariancePct = occVariance != null && displayOccTarget != null && displayOccTarget > 0
+          ? (occVariance / displayOccTarget) * 100
+          : null;
+        const occStatus = pacingStatus(occVariancePct);
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
             {editingOccTarget ? (
-              <div className="space-y-2">
-                <p className="text-xs text-slate-500">Override occupancy baseline (%)</p>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number" value={occTargetInput} onChange={e => setOccTargetInput(e.target.value)}
-                    onBlur={saveOccTarget}
-                    onKeyDown={e => e.key === 'Enter' && saveOccTarget()}
-                    className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="70" autoFocus
-                  />
-                  <span className="text-sm text-slate-400">%</span>
-                </div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 whitespace-nowrap">Occupancy baseline</span>
+                <input
+                  type="number" value={occTargetInput} onChange={e => setOccTargetInput(e.target.value)}
+                  onBlur={saveOccTarget}
+                  onKeyDown={e => e.key === 'Enter' && saveOccTarget()}
+                  className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="70" autoFocus
+                />
+                <span className="text-sm text-slate-400">%</span>
+                <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingOccTarget(false)} className="text-slate-300 hover:text-slate-500">
+                  <X className="w-3.5 h-3.5" />
+                </button>
               </div>
             ) : (
               <>
-                <p className="text-2xl font-bold text-slate-900">{ytdOccupancy.toFixed(1)}%</p>
-                {displayOccTarget != null ? (
-                  <div className="mt-2 flex items-center justify-between">
-                    <p className="text-xs text-slate-400">Baseline {displayOccTarget.toFixed(1)}% <span className="text-slate-300">({occBaselineLabel})</span></p>
-                    {occVariance != null && (
-                      <span className={`text-xs font-semibold ${perfColor(occVariance, Math.abs(occVariance), false)}`}>
-                        {occVariance >= 0 ? '▲' : '▼'} {Math.abs(occVariance).toFixed(1)}pts
-                      </span>
-                    )}
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-400 mt-3">Year to date</p>
-                )}
-              </>
-            )}
-          </div>
-
-          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-            <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">{MONTHS_LONG[currentMonthIdx]} Occupancy</p>
-            {currentMonthOccupancy != null ? (
-              <>
-                <p className="text-2xl font-bold text-slate-900">{currentMonthOccupancy.toFixed(1)}%</p>
-                {curMonthOccVariance != null ? (
-                  <div className="mt-2 flex items-center justify-between">
-                    <p className="text-xs text-slate-400">Target {targetOcc!.toFixed(1)}%</p>
-                    <span className={`text-xs font-semibold ${perfColor(curMonthOccVariance, Math.abs(curMonthOccVariance), false)}`}>
-                      {curMonthOccVariance >= 0 ? '▲' : '▼'} {Math.abs(curMonthOccVariance).toFixed(1)}pts
-                    </span>
-                  </div>
-                ) : (
-                  <p className="text-xs text-slate-400 mt-3">This month</p>
-                )}
-              </>
-            ) : (
-              <p className="text-2xl font-bold text-slate-400">—</p>
-            )}
-          </div>
-
-          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold">YTD Daily Rate</p>
-              {derivedAdrTarget == null && (editingAdrTarget ? (
-                <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingAdrTarget(false)} className="text-slate-300 hover:text-slate-500"><X className="w-3.5 h-3.5" /></button>
-              ) : (
-                <button onClick={() => { setAdrTargetInput(String(settings?.targetAdr ?? '')); setEditingAdrTarget(true); }} className="text-slate-300 hover:text-slate-500" title="Set ADR target"><Pencil className="w-3.5 h-3.5" /></button>
-              ))}
-            </div>
-            {editingAdrTarget && derivedAdrTarget == null ? (
-              <div className="space-y-2">
-                <p className="text-xs text-slate-500">ADR target ($)</p>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-slate-400">$</span>
-                  <input
-                    type="number" value={adrTargetInput} onChange={e => setAdrTargetInput(e.target.value)}
-                    onBlur={saveAdrTarget}
-                    onKeyDown={e => e.key === 'Enter' && saveAdrTarget()}
-                    className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="225" autoFocus
-                  />
-                </div>
-              </div>
-            ) : (
-              <>
-                <p className="text-2xl font-bold text-emerald-700">{ytdAdr != null ? fmt(ytdAdr) : '—'}</p>
-                {displayAdrTarget != null ? (
-                  <div className="mt-2 flex items-center justify-between">
-                    <p className="text-xs text-slate-400">
-                      Need {fmt(displayAdrTarget)}
-                      {derivedAdrTarget != null && <span className="text-slate-300"> (@ {displayOccTarget?.toFixed(1)}% occ)</span>}
+                <div className="flex items-start gap-4 sm:gap-6">
+                  {/* YTD occupancy */}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">YTD Occupancy</p>
+                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{ytdOccupancy.toFixed(1)}%</p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {displayOccTarget != null
+                        ? <>of {displayOccTarget.toFixed(1)}% baseline · {occBaselineLabel}</>
+                        : 'year to date'}
                     </p>
-                    {adrVariance != null && (
-                      <span className={`text-xs font-semibold ${perfColor(adrVariance, adrVariancePct != null ? Math.abs(adrVariancePct) : null, false)}`}>
-                        {adrVariance >= 0 ? '▲' : '▼'} {fmt(Math.abs(adrVariance))}{adrVariancePct != null ? ` (${Math.abs(adrVariancePct).toFixed(1)}%)` : ''}
-                      </span>
-                    )}
                   </div>
-                ) : (
-                  <p className="text-xs text-slate-400 mt-3">Per night YTD</p>
+
+                  {/* Current month occupancy */}
+                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">
+                      {MONTHS_LONG[currentMonthIdx]} Occupancy
+                    </p>
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${currentMonthOccupancy != null ? 'text-slate-900' : 'text-slate-400'}`}>
+                      {currentMonthOccupancy != null ? `${currentMonthOccupancy.toFixed(1)}%` : '—'}
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {curMonthOccVariance != null && targetOcc != null
+                        ? <>
+                            <span className={curMonthOccVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}>
+                              {curMonthOccVariance >= 0 ? '▲' : '▼'}{Math.abs(curMonthOccVariance).toFixed(1)}pts
+                            </span>
+                            {' vs '}{targetOcc.toFixed(1)}% target
+                          </>
+                        : 'this month'}
+                    </p>
+                  </div>
+
+                  {/* Status against the baseline */}
+                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
+                      <button
+                        onClick={() => { setOccTargetInput(String(settings?.targetOccupancyPct ?? '')); setEditingOccTarget(true); }}
+                        className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
+                        title="Override occupancy baseline"
+                      >
+                        <Pencil className="w-3 h-3" />
+                      </button>
+                    </div>
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${occStatus.color}`}>{occStatus.label}</p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {occVariance != null
+                        ? <>
+                            <span className={occStatus.color}>
+                              {occVariance >= 0 ? '▲' : '▼'}{Math.abs(occVariance).toFixed(1)}pts
+                            </span>
+                            {' vs baseline'}
+                          </>
+                        : 'no baseline set'}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
+                  <div
+                    className={`h-1 rounded-full transition-all ${occStatus.color === 'text-emerald-600' ? 'bg-emerald-500' : 'bg-red-400'}`}
+                    style={{ width: `${Math.min(100, Math.max(0, ytdOccupancy))}%` }}
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        );
+      })()}
+
+      {/* Daily rate — YTD, break-even and status against the target */}
+      {hasData && !selMonth && (() => {
+        const adrStatus = pacingStatus(adrVariancePct);
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
+            {editingAdrTarget && derivedAdrTarget == null ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 whitespace-nowrap">ADR target</span>
+                <span className="text-sm text-slate-400">$</span>
+                <input
+                  type="number" value={adrTargetInput} onChange={e => setAdrTargetInput(e.target.value)}
+                  onBlur={saveAdrTarget}
+                  onKeyDown={e => e.key === 'Enter' && saveAdrTarget()}
+                  className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="225" autoFocus
+                />
+                <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingAdrTarget(false)} className="text-slate-300 hover:text-slate-500">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-start gap-4 sm:gap-6">
+                  {/* YTD daily rate */}
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">YTD Daily Rate</p>
+                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{ytdAdr != null ? fmt(ytdAdr) : '—'}</p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {displayAdrTarget != null
+                        ? <>
+                            of {fmt(displayAdrTarget)} target
+                            {derivedAdrTarget != null && ` @ ${displayOccTarget?.toFixed(1)}% occ`}
+                          </>
+                        : 'per night YTD'}
+                    </p>
+                  </div>
+
+                  {/* Break-even rate on remaining open nights */}
+                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Break-Even Rate</p>
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${breakEvenAdr == null && stillToBook === 0 ? 'text-emerald-600' : breakEvenAdr != null ? 'text-slate-900' : 'text-slate-400'}`}>
+                      {breakEvenAdr != null ? fmt(breakEvenAdr) : stillToBook === 0 ? 'Covered' : '—'}
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {breakEvenAdr != null
+                        ? `over ${openNights} open nights`
+                        : stillToBook === 0 ? 'bookings exceed target' : 'no target set'}
+                    </p>
+                  </div>
+
+                  {/* Status against the ADR target */}
+                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
+                      {derivedAdrTarget == null && (
+                        <button
+                          onClick={() => { setAdrTargetInput(String(settings?.targetAdr ?? '')); setEditingAdrTarget(true); }}
+                          className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
+                          title="Set ADR target"
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${adrStatus.color}`}>{adrStatus.label}</p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {adrVariance != null
+                        ? <>
+                            <span className={adrStatus.color}>
+                              {adrVariance >= 0 ? '▲' : '▼'}{fmt(Math.abs(adrVariance))}
+                            </span>
+                            {' vs target'}
+                          </>
+                        : 'no target set'}
+                    </p>
+                  </div>
+                </div>
+
+                {displayAdrTarget != null && displayAdrTarget > 0 && ytdAdr != null && (
+                  <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
+                    <div
+                      className={`h-1 rounded-full transition-all ${adrStatus.color === 'text-emerald-600' ? 'bg-emerald-500' : 'bg-red-400'}`}
+                      style={{ width: `${Math.min(100, Math.max(0, (ytdAdr / displayAdrTarget) * 100))}%` }}
+                    />
+                  </div>
                 )}
               </>
             )}
           </div>
-
-          <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm">
-            <p className="text-xs text-slate-500 uppercase tracking-wide font-semibold mb-3">Break-Even Rate</p>
-            {breakEvenAdr != null ? (
-              <>
-                <p className="text-2xl font-bold text-slate-900">{fmt(breakEvenAdr)}<span className="text-sm font-normal text-slate-400"> / night</span></p>
-                <p className="text-xs text-slate-400 mt-3">{openNights} open nights to hit target</p>
-              </>
-            ) : stillToBook === 0 ? (
-              <>
-                <p className="text-2xl font-bold text-emerald-600">Covered</p>
-                <p className="text-xs text-slate-400 mt-3">Bookings exceed target</p>
-              </>
-            ) : (
-              <p className="text-2xl font-bold text-slate-400">—</p>
-            )}
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ── Pricing & Occupancy chart ── */}
       {hasData && (
