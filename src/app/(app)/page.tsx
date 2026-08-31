@@ -161,7 +161,10 @@ function pacingStatus(
 ): PacingStatus {
   if (met?.reached) return { label: met.label, color: 'text-emerald-600' };
   if (variancePct == null) return { label: '—', color: 'text-slate-900' };
-  if (variancePct >= -5) return { label: 'On Track', color: 'text-emerald-600' };
+  // Band the value as displayed, not the raw one, so a caption reading 5.0%
+  // can never sit next to "Behind" because it was really 5.04%.
+  const shown = parseFloat(variancePct.toFixed(1));
+  if (shown >= -5) return { label: 'On Track', color: 'text-emerald-600' };
   return { label: 'Behind', color: 'text-red-600' };
 }
 
