@@ -603,10 +603,8 @@ export default function Dashboard() {
       </div>
 
       {/* Section label — the revenue tiles below track gross, but none of their
-          own column headings say so */}
-      {!selMonth && annualForecast != null && (
-        <h2 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-3">Gross Revenue</h2>
-      )}
+          own column headings say so. Unconditional, matching its chart. */}
+      <h2 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-3">Gross Revenue</h2>
 
       {/* Current month revenue pacing — lead tile */}
       {!selMonth && hasTarget && annualForecast != null && monthlyForecasts[currentMonthIdx] != null && (() => {
@@ -891,6 +889,10 @@ export default function Dashboard() {
         )}
       </div>
 
+      {hasData && (
+        <h2 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-3">Net Income</h2>
+      )}
+
       {/* Current month cash flow tile — uses actual booked revenue and entered expenses */}
       {hasData && !selMonth && curMonthStmt != null && (() => {
         const totalCosts = curMonthStmt.totalOperatingExpenses + curMonthStmt.piti;
@@ -1064,6 +1066,12 @@ export default function Dashboard() {
             </ComposedChart>
           </ResponsiveContainer>
         </div>
+      )}
+
+      {/* One heading covers both the occupancy and rate tiles, since the chart
+          closing this section plots the two together */}
+      {hasData && (
+        <h2 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-3">Occupancy &amp; Pricing</h2>
       )}
 
       {/* Occupancy — YTD, current month and status against the baseline */}
