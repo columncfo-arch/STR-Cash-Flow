@@ -36,6 +36,37 @@ interface NewBooking {
   notes: string;
 }
 
+// Local-date ISO. Bookings store plain YYYY-MM-DD, so ranges are compared as
+// strings — using Date parsing here would shift days across timezones.
+const pad = (n: number) => String(n).padStart(2, '0');
+const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+
+type RangePreset = 'month' | 'ytd' | 'last12' | 'all' | 'custom';
+
+function presetRange(preset: Exclude<RangePreset, 'custom'>): { from: string; to: string } {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = now.getMonth();
+  switch (preset) {
+    case 'month':
+      // day 0 of next month = last day of this one
+      return { from: isoDate(new Date(y, m, 1)), to: isoDate(new Date(y, m + 1, 0)) };
+    case 'ytd':
+      return { from: isoDate(new Date(y, 0, 1)), to: isoDate(now) };
+    case 'last12':
+      return { from: isoDate(new Date(y - 1, m, now.getDate())), to: isoDate(now) };
+    case 'all':
+      return { from: '', to: '' };
+  }
+}
+
+const PRESETS: { id: Exclude<RangePreset, 'custom'>; label: string }[] = [
+  { id: 'month', label: 'This Month' },
+  { id: 'ytd', label: 'YTD' },
+  { id: 'last12', label: 'Last 12 Months' },
+  { id: 'all', label: 'All' },
+];
+
 const emptyNew = (): NewBooking => ({
   platform: 'direct',
   checkIn: '',
@@ -56,7 +87,10 @@ export default function BookingsPage() {
   editStateRef.current = editState;
   const [showAdd, setShowAdd] = useState(false);
   const [newBooking, setNewBooking] = useState<NewBooking>(emptyNew());
-  const [filterYear, setFilterYear] = useState('all');
+  // Always load the full set and narrow client-side, so switching range is
+  // instant and the API's year-prefix filter stays untouched.
+  const [preset, setPreset] = useState<RangePreset>('month');
+  const [range, setRange] = useState(() => presetRange('month'));
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const skipBlurRef = useRef(false);
 
@@ -75,7 +109,7 @@ export default function BookingsPage() {
 
   async function load() {
     try {
-      const res = await fetch(`/api/bookings?year=${filterYear}`);
+      const res = await fetch('/api/bookings?year=all');
       let data: unknown;
       try {
         data = await res.json();
@@ -100,7 +134,18 @@ export default function BookingsPage() {
   useEffect(() => {
     load();
     fetch('/api/settings').then(r => r.json()).then(setSettings);
-  }, [filterYear]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  function applyPreset(id: Exclude<RangePreset, 'custom'>) {
+    setPreset(id);
+    setRange(presetRange(id));
+  }
+
+  function setBound(key: 'from' | 'to', value: string) {
+    setPreset('custom');
+    setRange(r => ({ ...r, [key]: value }));
+  }
 
   function scheduleEditSave(id: string) {
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
@@ -181,7 +226,8 @@ export default function BookingsPage() {
   }
 
   function exportContacts() {
-    const rows = bookings
+    // Exports what's on screen, matching the count shown on the button
+    const rows = visible
       .filter(b => b.email || b.phone)
       .map(b => {
         const name = b.guestName ?? b.bookerName ?? '';
@@ -200,13 +246,25 @@ export default function BookingsPage() {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `guest-contacts-${filterYear}.csv`;
+    a.download = `guest-contacts-${range.from || 'start'}_${range.to || 'end'}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }
 
-  const years = ['all', ...Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i))];
-  const contactCount = bookings.filter(b => b.email || b.phone).length;
+  // Filter on check-in, matching how the API's year/month params behave.
+  const visible = bookings.filter(b => {
+    if (!b.checkIn) return false;
+    if (range.from && b.checkIn < range.from) return false;
+    if (range.to && b.checkIn > range.to) return false;
+    return true;
+  });
+
+  const rangeLabel = preset === 'all'
+    ? 'across all dates'
+    : PRESETS.find(p => p.id === preset)?.label.toLowerCase()
+      ?? `${range.from || '…'} to ${range.to || '…'}`;
+
+  const contactCount = visible.filter(b => b.email || b.phone).length;
 
   return (
     <div className="max-w-5xl mx-auto overflow-x-hidden">
@@ -214,20 +272,13 @@ export default function BookingsPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Bookings</h1>
           <p className="text-slate-500 text-sm mt-1">
-            {bookings.length} bookings {filterYear === 'all' ? 'across all years' : `in ${filterYear}`}
+            {visible.length} of {bookings.length} bookings · {rangeLabel}
             {contactCount > 0 && (
               <span className="ml-2 text-slate-400">· {contactCount} with contact info</span>
             )}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <select
-            value={filterYear}
-            onChange={e => setFilterYear(e.target.value)}
-            className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white text-slate-700"
-          >
-            {years.map(y => <option key={y} value={y}>{y === 'all' ? 'All Years' : y}</option>)}
-          </select>
           {contactCount > 0 && (
             <button
               onClick={exportContacts}
@@ -254,6 +305,52 @@ export default function BookingsPage() {
             <Plus className="w-4 h-4" />
             <span className="hidden sm:inline">Add Booking</span>
           </button>
+        </div>
+      </div>
+
+      {/* Date range filter */}
+      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm mb-6 flex flex-col lg:flex-row lg:items-center gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {PRESETS.map(p => (
+            <button
+              key={p.id}
+              onClick={() => applyPreset(p.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                preset === p.id
+                  ? 'bg-emerald-600 text-white'
+                  : 'border border-slate-200 text-slate-600 hover:border-emerald-300'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2 lg:ml-auto">
+          <input
+            type="date"
+            value={range.from}
+            onChange={e => setBound('from', e.target.value)}
+            className="text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700"
+            aria-label="From date"
+          />
+          <span className="text-xs text-slate-400">to</span>
+          <input
+            type="date"
+            value={range.to}
+            onChange={e => setBound('to', e.target.value)}
+            className="text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700"
+            aria-label="To date"
+          />
+          {preset === 'custom' && (
+            <button
+              onClick={() => applyPreset('all')}
+              className="p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              title="Clear date range"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -383,14 +480,23 @@ export default function BookingsPage() {
             </tr>
           </thead>
           <tbody>
-            {bookings.length === 0 ? (
+            {visible.length === 0 ? (
               <tr>
                 <td colSpan={8} className="text-center py-12 text-slate-400">
-                  No bookings found. Import a CSV from your platform or add bookings manually.
+                  {bookings.length === 0 ? (
+                    'No bookings found. Import a CSV from your platform or add bookings manually.'
+                  ) : (
+                    <>
+                      No bookings in this date range.{' '}
+                      <button onClick={() => applyPreset('all')} className="text-emerald-600 underline">
+                        Show all {bookings.length}
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
             ) : (
-              bookings.map(b => {
+              visible.map(b => {
                 const isEditing = editState?.id === b.id;
                 const displayName = b.guestName ?? b.bookerName ?? b.confirmationCode ?? '—';
                 const hasContact = !!(b.email || b.phone);
@@ -591,12 +697,15 @@ export default function BookingsPage() {
               })
             )}
           </tbody>
-          {bookings.length > 0 && (
+          {visible.length > 0 && (
             <tfoot>
               <tr className="bg-slate-50 border-t border-slate-200 font-semibold">
-                <td colSpan={5} className="px-4 py-3 text-slate-700">Total</td>
+                <td colSpan={5} className="px-4 py-3 text-slate-700">
+                  Total
+                  <span className="ml-2 font-normal text-xs text-slate-400">{rangeLabel}</span>
+                </td>
                 <td className="px-4 py-3 text-right text-emerald-700">
-                  {fmt(bookings.reduce((s, b) => s + b.income, 0))}
+                  {fmt(visible.reduce((s, b) => s + b.income, 0))}
                 </td>
                 <td colSpan={2} className="px-4 py-3" />
               </tr>
