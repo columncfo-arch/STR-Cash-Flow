@@ -154,6 +154,18 @@ async function fileMutate<T extends { id: string }>(file: string, userId: string
 
 const useRedis = Boolean(process.env.REDIS_URL);
 
+/**
+ * Which backend is live, and whether it survives a deploy. On Vercel the file
+ * backend writes to /tmp, which is per-instance and wiped on every deployment —
+ * so without REDIS_URL nothing persists.
+ */
+export function storageBackend(): { backend: 'redis' | 'filesystem'; persists: boolean } {
+  return {
+    backend: useRedis ? 'redis' : 'filesystem',
+    persists: useRedis || !IS_VERCEL,
+  };
+}
+
 export async function loadSettings(userId: string): Promise<Settings> {
   const raw = useRedis
     ? await redisGet<Partial<Settings> | null>(K(userId).settings, null)
