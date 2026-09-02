@@ -4,6 +4,7 @@ import { Booking, Platform, Settings } from '@/types';
 import PlatformBadge from '@/components/PlatformBadge';
 import { format } from 'date-fns';
 import { Pencil, Trash2, Plus, X, Check, AlertTriangle, Download } from 'lucide-react';
+import { RANGE_PRESETS, presetRange, inRange, type RangePreset } from '@/lib/dateRange';
 
 const PLATFORM_OPTIONS: { value: Platform; label: string }[] = [
   { value: 'airbnb', label: 'Airbnb' },
@@ -35,37 +36,6 @@ interface NewBooking {
   income: string;
   notes: string;
 }
-
-// Local-date ISO. Bookings store plain YYYY-MM-DD, so ranges are compared as
-// strings — using Date parsing here would shift days across timezones.
-const pad = (n: number) => String(n).padStart(2, '0');
-const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-
-type RangePreset = 'month' | 'ytd' | 'last12' | 'all' | 'custom';
-
-function presetRange(preset: Exclude<RangePreset, 'custom'>): { from: string; to: string } {
-  const now = new Date();
-  const y = now.getFullYear();
-  const m = now.getMonth();
-  switch (preset) {
-    case 'month':
-      // day 0 of next month = last day of this one
-      return { from: isoDate(new Date(y, m, 1)), to: isoDate(new Date(y, m + 1, 0)) };
-    case 'ytd':
-      return { from: isoDate(new Date(y, 0, 1)), to: isoDate(now) };
-    case 'last12':
-      return { from: isoDate(new Date(y - 1, m, now.getDate())), to: isoDate(now) };
-    case 'all':
-      return { from: '', to: '' };
-  }
-}
-
-const PRESETS: { id: Exclude<RangePreset, 'custom'>; label: string }[] = [
-  { id: 'month', label: 'This Month' },
-  { id: 'ytd', label: 'YTD' },
-  { id: 'last12', label: 'Last 12 Months' },
-  { id: 'all', label: 'All' },
-];
 
 const emptyNew = (): NewBooking => ({
   platform: 'direct',
@@ -252,16 +222,11 @@ export default function BookingsPage() {
   }
 
   // Filter on check-in, matching how the API's year/month params behave.
-  const visible = bookings.filter(b => {
-    if (!b.checkIn) return false;
-    if (range.from && b.checkIn < range.from) return false;
-    if (range.to && b.checkIn > range.to) return false;
-    return true;
-  });
+  const visible = bookings.filter(b => inRange(b.checkIn, range));
 
   const rangeLabel = preset === 'all'
     ? 'across all dates'
-    : PRESETS.find(p => p.id === preset)?.label.toLowerCase()
+    : RANGE_PRESETS.find(p => p.id === preset)?.label.toLowerCase()
       ?? `${range.from || '…'} to ${range.to || '…'}`;
 
   const contactCount = visible.filter(b => b.email || b.phone).length;
@@ -311,7 +276,7 @@ export default function BookingsPage() {
       {/* Date range filter */}
       <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm mb-6 flex flex-col lg:flex-row lg:items-center gap-3">
         <div className="flex flex-wrap items-center gap-1.5">
-          {PRESETS.map(p => (
+          {RANGE_PRESETS.map(p => (
             <button
               key={p.id}
               onClick={() => applyPreset(p.id)}

@@ -3,6 +3,9 @@ import { useEffect, useState } from 'react';
 import { Expense, ExpenseCategory, EXPENSE_CATEGORIES, Settings } from '@/types';
 import { format } from 'date-fns';
 import { Plus, Pencil, Trash2, Check, X, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import {
+  RANGE_PRESETS, presetRange, inRange, recurrenceOverlapsRange, type RangePreset,
+} from '@/lib/dateRange';
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -224,10 +227,12 @@ function ExpenseForm({ f, onChange, onSave, onCancel, submitLabel = 'Add' }: {
 }
 
 export default function ExpensesPage() {
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [prevExpenses, setPrevExpenses] = useState<Expense[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
-  const [filterYear, setFilterYear] = useState(String(new Date().getFullYear()));
+  const [allExpenses, setAllExpenses] = useState<Expense[]>([]);
+  // The range drives the list; the year it lands in still drives the YoY
+  // comparison and bulk entry, which are inherently year-based.
+  const [preset, setPreset] = useState<RangePreset>('month');
+  const [range, setRange] = useState(() => presetRange('month'));
   const [showAdd, setShowAdd] = useState(false);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [editId, setEditId] = useState<string | null>(null);
@@ -250,24 +255,50 @@ export default function ExpensesPage() {
       maximumFractionDigits: 0,
     }).format(n);
 
-  const activeYear = filterYear === 'all' ? new Date().getFullYear() : parseInt(filterYear);
+  // A range ending in 2026 analyses 2026 against 2025. An unbounded range has
+  // no year of its own, so fall back to the current one.
+  const activeYear = range.to ? Number(range.to.slice(0, 4)) : new Date().getFullYear();
+  const filterYear = String(activeYear);
 
+  // One fetch for everything; the year slices below are derived, not refetched.
   async function load() {
-    const res = await fetch(`/api/expenses?year=${filterYear}`);
-    setExpenses(await res.json());
-    if (filterYear !== 'all') {
-      const prevYear = String(parseInt(filterYear) - 1);
-      const prevRes = await fetch(`/api/expenses?year=${prevYear}`);
-      setPrevExpenses(await prevRes.json());
-    } else {
-      setPrevExpenses([]);
-    }
+    const res = await fetch('/api/expenses?year=all');
+    const data = await res.json();
+    setAllExpenses(Array.isArray(data) ? data : []);
   }
 
   useEffect(() => {
     load();
     fetch('/api/settings').then(r => r.json()).then(setSettings);
-  }, [filterYear]);
+  }, []);
+
+  function applyPreset(id: Exclude<RangePreset, 'custom'>) {
+    setPreset(id);
+    setRange(presetRange(id));
+  }
+
+  function setBound(key: 'from' | 'to', value: string) {
+    setPreset('custom');
+    setRange(r => ({ ...r, [key]: value }));
+  }
+
+  // Year slices the YoY / MoM analysis and bulk entry work against. Derived
+  // rather than stored, so they cannot drift from allExpenses.
+  const expenses = allExpenses.filter(e => e.date.startsWith(String(activeYear)));
+  const prevExpenses = allExpenses.filter(e => e.date.startsWith(String(activeYear - 1)));
+
+  // Recurring costs apply every month from their start until recurrenceEnd, so
+  // a monthly bill begun in January must still show in a September range.
+  const visible = allExpenses.filter(e =>
+    e.recurring
+      ? recurrenceOverlapsRange(e.date, e.recurrenceEnd, range)
+      : inRange(e.date, range)
+  );
+
+  const rangeLabel = preset === 'all'
+    ? 'across all dates'
+    : RANGE_PRESETS.find(p => p.id === preset)?.label.toLowerCase()
+      ?? `${range.from || '…'} to ${range.to || '…'}`;
 
   async function addExpense() {
     await fetch('/api/expenses', {
@@ -440,7 +471,6 @@ export default function ExpensesPage() {
     load();
   }
 
-  const years = ['all', ...Array.from({ length: 5 }, (_, i) => String(new Date().getFullYear() - i))];
 
   const totalsByCategory = expenses.reduce((acc, e) => {
     acc[e.category] = (acc[e.category] ?? 0) + e.amount;
@@ -457,14 +487,10 @@ export default function ExpensesPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-900">Expenses</h1>
           <p className="text-slate-500 text-sm mt-1">
-            {expenses.length} entries {filterYear === 'all' ? 'across all years' : `in ${filterYear}`}
+            {visible.length} of {allExpenses.length} entries · {rangeLabel}
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
-          <select value={filterYear} onChange={e => setFilterYear(e.target.value)}
-            className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white text-slate-700">
-            {years.map(y => <option key={y} value={y}>{y === 'all' ? 'All Years' : y}</option>)}
-          </select>
           <button
             onClick={() => { setBulkMode(null); setShowAdd(true); setForm(emptyForm()); }}
             className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border transition-colors ${showAdd && !bulkMode ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
@@ -483,6 +509,52 @@ export default function ExpensesPage() {
           >
             By Month
           </button>
+        </div>
+      </div>
+
+      {/* Date range filter */}
+      <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm mb-6 flex flex-col lg:flex-row lg:items-center gap-3">
+        <div className="flex flex-wrap items-center gap-1.5">
+          {RANGE_PRESETS.map(p => (
+            <button
+              key={p.id}
+              onClick={() => applyPreset(p.id)}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                preset === p.id
+                  ? 'bg-emerald-600 text-white'
+                  : 'border border-slate-200 text-slate-600 hover:border-emerald-300'
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+
+        <div className="flex items-center gap-2 lg:ml-auto">
+          <input
+            type="date"
+            value={range.from}
+            onChange={e => setBound('from', e.target.value)}
+            className="text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700"
+            aria-label="From date"
+          />
+          <span className="text-xs text-slate-400">to</span>
+          <input
+            type="date"
+            value={range.to}
+            onChange={e => setBound('to', e.target.value)}
+            className="text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700"
+            aria-label="To date"
+          />
+          {preset === 'custom' && (
+            <button
+              onClick={() => applyPreset('all')}
+              className="p-1.5 rounded text-slate-400 hover:text-slate-600 hover:bg-slate-100"
+              title="Clear date range"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -751,13 +823,22 @@ export default function ExpensesPage() {
             </tr>
           </thead>
           <tbody>
-            {expenses.length === 0 ? (
+            {visible.length === 0 ? (
               <tr>
                 <td colSpan={5} className="text-center py-12 text-slate-400">
-                  No expenses yet. Add variable expenses above; PITI is set via the pencil above.
+                  {allExpenses.length === 0 ? (
+                    'No expenses yet. Add variable expenses above; PITI is set via the pencil above.'
+                  ) : (
+                    <>
+                      No expenses in this date range.{' '}
+                      <button onClick={() => applyPreset('all')} className="text-emerald-600 underline">
+                        Show all {allExpenses.length}
+                      </button>
+                    </>
+                  )}
                 </td>
               </tr>
-            ) : expenses.map(e => (
+            ) : visible.map(e => (
               editId === e.id ? (
                 <tr key={e.id} className="border-b border-slate-100 bg-emerald-50">
                   <td colSpan={5} className="px-4 py-3">
