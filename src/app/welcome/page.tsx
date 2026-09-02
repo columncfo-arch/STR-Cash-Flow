@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Wifi, MapPin, Check, Home } from 'lucide-react';
 
 type Step = 'loading' | 'form' | 'success' | 'error';
@@ -12,8 +13,14 @@ interface WelcomeInfo {
   localGuideUrl: string | null;
 }
 
-export default function WelcomePage() {
+function WelcomeContent() {
+  // The host embeds ?u=<userId> in the link they share. Without forwarding it
+  // to the API, sign-ups have no account to attach to and are dropped.
+  const hostId = useSearchParams().get('u');
+  const withHost = (path: string) => (hostId ? `${path}?u=${encodeURIComponent(hostId)}` : path);
+
   const [step, setStep] = useState<Step>('loading');
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [propertyName, setPropertyName] = useState('');
   const [hasWifi, setHasWifi] = useState(false);
 
@@ -27,14 +34,16 @@ export default function WelcomePage() {
   const [copied, setCopied] = useState<'network' | 'password' | null>(null);
 
   useEffect(() => {
-    fetch('/api/welcome')
+    fetch(withHost('/api/welcome'))
       .then(r => r.json())
       .then(d => {
         setPropertyName(d.propertyName ?? 'Your Stay');
         setHasWifi(d.hasWifi ?? false);
         setStep('form');
       })
-      .catch(() => setStep('error'));
+      .catch(() => { setErrorMsg(null); setStep('error'); });
+    // withHost is derived from the URL, which does not change while mounted
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function handleSubmit(e: React.FormEvent) {
@@ -42,17 +51,21 @@ export default function WelcomePage() {
     if (!email) return;
     setSubmitting(true);
     try {
-      const res = await fetch('/api/welcome', {
+      const res = await fetch(withHost('/api/welcome'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ firstName, lastName, email, phone, tcpaConsent }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error);
+      if (!res.ok) throw new Error(data.error ?? `Save failed (${res.status})`);
       setInfo(data);
       setStep('success');
-    } catch {
+    } catch (err) {
+      // Surface the reason — a dropped sign-up used to look identical to a
+      // network blip, so a misconfigured link failed silently for weeks.
+      setErrorMsg(err instanceof Error ? err.message : null);
       setStep('error');
+      console.error('Welcome sign-up failed:', err);
     } finally {
       setSubmitting(false);
     }
@@ -78,6 +91,7 @@ export default function WelcomePage() {
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
         <div className="max-w-sm w-full bg-white rounded-2xl shadow-sm border border-slate-200 p-8 text-center">
           <p className="text-slate-500 text-sm">Something went wrong. Please try again or ask your host for the wifi details.</p>
+          {errorMsg && <p className="text-xs text-slate-400 mt-3 font-mono break-words">{errorMsg}</p>}
         </div>
       </div>
     );
@@ -251,5 +265,21 @@ export default function WelcomePage() {
         )}
       </div>
     </div>
+  );
+}
+
+// useSearchParams needs a Suspense boundary or the production build of this
+// static route fails.
+export default function WelcomePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-slate-50 flex items-center justify-center">
+          <div className="w-6 h-6 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      }
+    >
+      <WelcomeContent />
+    </Suspense>
   );
 }

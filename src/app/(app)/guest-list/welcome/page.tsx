@@ -1,9 +1,11 @@
 'use client';
 import { useEffect, useState } from 'react';
+import { useUser } from '@clerk/nextjs';
 import { Settings } from '@/types';
 import { Wifi, Copy, ExternalLink } from 'lucide-react';
 
 export default function WelcomeSettingsPage() {
+  const { user } = useUser();
   const [settings, setSettings] = useState<Settings | null>(null);
 
   useEffect(() => {
@@ -21,6 +23,10 @@ export default function WelcomeSettingsPage() {
   if (!settings) return <div className="text-slate-400 text-sm">Loading…</div>;
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  // ?u= tells the public endpoint which account a sign-up belongs to. A link
+  // shared without it has no account to attach to and the sign-up is dropped.
+  const guestPath = user?.id ? `/welcome?u=${encodeURIComponent(user.id)}` : '/welcome';
+  const guestLink = `${origin}${guestPath}`;
 
   return (
     <div className="max-w-lg mx-auto">
@@ -93,11 +99,11 @@ export default function WelcomeSettingsPage() {
       <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm mb-6">
         <h2 className="font-semibold text-slate-800 mb-3">Guest Link</h2>
         <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-4 py-3 mb-3">
-          <code className="text-sm text-slate-700 flex-1 truncate">{origin}/welcome</code>
+          <code className="text-sm text-slate-700 flex-1 truncate">{guestLink}</code>
         </div>
         <div className="flex items-center gap-3">
           <a
-            href="/welcome"
+            href={guestPath}
             target="_blank"
             rel="noopener noreferrer"
             className="flex items-center gap-1.5 text-sm text-emerald-600 hover:text-emerald-700 font-medium"
@@ -106,13 +112,18 @@ export default function WelcomeSettingsPage() {
           </a>
           <button
             type="button"
-            onClick={() => navigator.clipboard.writeText(`${origin}/welcome`)}
-            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg px-3 py-1.5"
+            disabled={!user?.id}
+            onClick={() => navigator.clipboard.writeText(guestLink)}
+            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg px-3 py-1.5 disabled:opacity-50"
           >
             <Copy className="w-3.5 h-3.5" /> Copy link
           </button>
         </div>
         <p className="text-xs text-slate-400 mt-3">Print as a QR code and place it on the kitchen counter or inside the front door.</p>
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+          Use this exact link — the <code className="font-mono">?u=</code> is what files sign-ups under your account.
+          A link without it cannot be saved. If you printed a QR code before today, reprint it from here.
+        </p>
       </section>
     </div>
   );
