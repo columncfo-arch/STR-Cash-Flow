@@ -237,16 +237,15 @@ export default function ExpensesPage() {
   const [form, setForm] = useState<FormState>(emptyForm());
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<FormState>(emptyForm());
-  const [pitiEdit, setPitiEdit] = useState(false);
-  const [pitiDraft, setPitiDraft] = useState('');
   const [analysisTab, setAnalysisTab] = useState<'yoy' | 'mom'>('yoy');
 
   // Bulk entry state
-  const [bulkMode, setBulkMode] = useState<'category' | 'month' | null>(null);
-  const [bulkCategory, setBulkCategory] = useState<ExpenseCategory>('cleaning');
-  const [bulkMonthIdx, setBulkMonthIdx] = useState(new Date().getMonth());
-  const [bulkAmounts, setBulkAmounts] = useState<Record<string, string>>({});
-  const [bulkSaving, setBulkSaving] = useState(false);
+  // The month grid is the page's primary surface: one month, one column of
+  // amounts, one save.
+  const [gridMonth, setGridMonth] = useState(() => new Date().toISOString().slice(0, 7));
+  const [draft, setDraft] = useState<Record<string, string>>({});
+  const [saving, setSaving] = useState(false);
+  const [showAnalysis, setShowAnalysis] = useState(false);
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', {
@@ -341,18 +340,6 @@ export default function ExpensesPage() {
     load();
   }
 
-  async function savePiti() {
-    if (!settings) return;
-    const updated = { ...settings, monthlyPITI: parseFloat(pitiDraft) || 0 };
-    await fetch('/api/settings', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(updated),
-    });
-    setSettings(updated);
-    setPitiEdit(false);
-  }
-
   function startEdit(e: Expense) {
     setEditId(e.id);
     setEditForm({
@@ -367,119 +354,116 @@ export default function ExpensesPage() {
 
   // ── Bulk entry helpers ──────────────────────────────────────────────────────
 
-  function amountsForCategory(cat: ExpenseCategory): Record<string, string> {
-    const out: Record<string, string> = {};
-    expenses
-      .filter(e => {
-        const d = new Date(e.date + 'T00:00:00');
-        return e.category === cat && d.getFullYear() === activeYear;
-      })
-      .forEach(e => {
-        const m = String(new Date(e.date + 'T00:00:00').getMonth());
-        out[m] = String(Math.round(((parseFloat(out[m] ?? '0') || 0) + e.amount) * 100) / 100);
-      });
-    return out;
+  // ── Month grid ────────────────────────────────────────────────────────────
+  // Rows are per category for the selected month. Recurring costs are shown but
+  // never edited here: they belong to a series, and rewriting one month's copy
+  // would strip its recurrence. Categories holding several one-off entries are
+  // shown as a read-only sum — collapsing them into a single figure would
+  // destroy the individual records and their descriptions.
+
+  interface MonthRow {
+    category: ExpenseCategory;
+    label: string;
+    recurringTotal: number;
+    oneOffs: Expense[];
+    editable: Expense | null;   // the single entry this row may edit in place
+    readOnlyTotal: number;      // shown when a row cannot be edited safely
   }
 
-  function amountsForMonth(monthIdx: number): Record<string, string> {
-    const out: Record<string, string> = {};
-    expenses
-      .filter(e => {
-        const d = new Date(e.date + 'T00:00:00');
-        return d.getFullYear() === activeYear && d.getMonth() === monthIdx;
-      })
-      .forEach(e => {
-        out[e.category] = String(Math.round(((parseFloat(out[e.category] ?? '0') || 0) + e.amount) * 100) / 100);
-      });
-    return out;
+  const monthRows: MonthRow[] = EXPENSE_CATEGORIES.map(({ value, label }) => {
+    const recurring = allExpenses.filter(e =>
+      e.category === value && e.recurring &&
+      recurrenceOverlapsRange(e.date, e.recurrenceEnd, { from: `${gridMonth}-01`, to: `${gridMonth}-31` })
+    );
+    const oneOffs = allExpenses.filter(e =>
+      e.category === value && !e.recurring && e.date.startsWith(gridMonth)
+    );
+    return {
+      category: value,
+      label,
+      recurringTotal: recurring.reduce((s, e) => s + e.amount, 0),
+      oneOffs,
+      editable: oneOffs.length <= 1 ? (oneOffs[0] ?? null) : null,
+      readOnlyTotal: oneOffs.reduce((s, e) => s + e.amount, 0),
+    };
+  });
+
+  // Reset the draft whenever the month or underlying data changes
+  const draftKey = `${gridMonth}:${allExpenses.length}`;
+  const [draftKeyRef, setDraftKeyRef] = useState(draftKey);
+  if (draftKeyRef !== draftKey) {
+    setDraftKeyRef(draftKey);
+    setDraft(Object.fromEntries(
+      monthRows.filter(r => r.oneOffs.length <= 1)
+        .map(r => [r.category, r.editable ? String(r.editable.amount) : ''])
+    ));
   }
 
-  function openByCat(cat: ExpenseCategory) {
-    setBulkCategory(cat);
-    setBulkAmounts(amountsForCategory(cat));
-    setBulkMode('category');
-    setShowAdd(false);
-  }
+  const monthVariableTotal =
+    monthRows.reduce((s, r) => s + r.recurringTotal + r.readOnlyTotal, 0);
 
-  function openByMonth(monthIdx: number) {
-    setBulkMonthIdx(monthIdx);
-    setBulkAmounts(amountsForMonth(monthIdx));
-    setBulkMode('month');
-    setShowAdd(false);
-  }
+  async function saveMonth() {
+    setSaving(true);
+    try {
+      const jobs: Promise<unknown>[] = [];
+      for (const row of monthRows) {
+        if (row.oneOffs.length > 1) continue;      // never touch multi-entry rows
+        const raw = (draft[row.category] ?? '').trim();
+        const value = raw === '' ? null : parseFloat(raw);
+        if (value !== null && !isFinite(value)) continue;
 
-  async function saveBulkByCategory() {
-    setBulkSaving(true);
-    const toDelete = expenses.filter(e => {
-      const d = new Date(e.date + 'T00:00:00');
-      return e.category === bulkCategory && d.getFullYear() === activeYear;
-    });
-    await Promise.all(toDelete.map(e => fetch(`/api/expenses/${e.id}`, { method: 'DELETE' })));
-
-    const catLabel = EXPENSE_CATEGORIES.find(c => c.value === bulkCategory)?.label ?? bulkCategory;
-    await Promise.all(
-      Object.entries(bulkAmounts)
-        .filter(([, v]) => v && parseFloat(v) > 0)
-        .map(([m, v]) => {
-          const mi = parseInt(m);
-          return fetch('/api/expenses', {
+        if (row.editable && value === null) {
+          // cleared → remove that one entry
+          jobs.push(fetch(`/api/expenses/${row.editable.id}`, { method: 'DELETE' }));
+        } else if (row.editable && value !== null && value !== row.editable.amount) {
+          // changed → update in place, keeping description and recurrence
+          jobs.push(fetch(`/api/expenses/${row.editable.id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              date: row.editable.date,
+              category: row.editable.category,
+              description: row.editable.description,
+              amount: value,
+              recurring: row.editable.recurring ?? false,
+              recurrenceEnd: row.editable.recurrenceEnd ?? null,
+            }),
+          }));
+        } else if (!row.editable && value !== null && value > 0) {
+          // new entry for an empty category
+          jobs.push(fetch('/api/expenses', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-              date: `${activeYear}-${String(mi + 1).padStart(2, '0')}-01`,
-              category: bulkCategory,
-              description: `${MONTHS_SHORT[mi]} ${catLabel.toLowerCase()}`,
-              amount: parseFloat(v),
+              date: `${gridMonth}-01`,
+              category: row.category,
+              description: `${MONTHS_SHORT[Number(gridMonth.slice(5, 7)) - 1]} ${row.label.toLowerCase()}`,
+              amount: value,
             }),
-          });
-        })
-    );
-    setBulkSaving(false);
-    setBulkMode(null);
-    load();
+          }));
+        }
+      }
+      await Promise.all(jobs);
+      await load();
+    } finally {
+      setSaving(false);
+    }
   }
 
-  async function saveBulkByMonth() {
-    setBulkSaving(true);
-    const toDelete = expenses.filter(e => {
-      const d = new Date(e.date + 'T00:00:00');
-      return d.getFullYear() === activeYear && d.getMonth() === bulkMonthIdx;
-    });
-    await Promise.all(toDelete.map(e => fetch(`/api/expenses/${e.id}`, { method: 'DELETE' })));
-
-    const monthName = MONTHS_SHORT[bulkMonthIdx];
-    const dateStr = `${activeYear}-${String(bulkMonthIdx + 1).padStart(2, '0')}-01`;
-    await Promise.all(
-      Object.entries(bulkAmounts)
-        .filter(([, v]) => v && parseFloat(v) > 0)
-        .map(([cat, v]) => {
-          const catLabel = EXPENSE_CATEGORIES.find(c => c.value === cat)?.label ?? cat;
-          return fetch('/api/expenses', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              date: dateStr,
-              category: cat,
-              description: `${monthName} ${catLabel.toLowerCase()}`,
-              amount: parseFloat(v),
-            }),
-          });
-        })
-    );
-    setBulkSaving(false);
-    setBulkMode(null);
-    load();
+  function shiftMonth(delta: number) {
+    const [y, m] = gridMonth.split('-').map(Number);
+    const d = new Date(y, m - 1 + delta, 1);
+    setGridMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
   }
 
-
-  const totalsByCategory = expenses.reduce((acc, e) => {
+  // Footer totals summarise the table below, so they follow the range filter
+  const totalsByCategory = visible.reduce((acc, e) => {
     acc[e.category] = (acc[e.category] ?? 0) + e.amount;
     return acc;
   }, {} as Record<string, number>);
-  const grandTotal = expenses.reduce((s, e) => s + e.amount, 0);
+  const grandTotal = visible.reduce((s, e) => s + e.amount, 0);
 
   const pitiMonthly = settings?.monthlyPITI ?? 0;
-  const pitiAnnual = pitiMonthly * 12;
 
   return (
     <div className="max-w-5xl mx-auto">
@@ -492,23 +476,100 @@ export default function ExpensesPage() {
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button
-            onClick={() => { setBulkMode(null); setShowAdd(true); setForm(emptyForm()); }}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border transition-colors ${showAdd && !bulkMode ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+            onClick={() => { setShowAdd(v => !v); setForm(emptyForm()); }}
+            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border transition-colors ${showAdd ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
           >
-            <Plus className="w-4 h-4" /> Single
+            <Plus className="w-4 h-4" /> Add one-off
           </button>
+        </div>
+      </div>
+
+      {/* ── One-off entry (dated, or recurring) ── */}
+      {showAdd && (
+        <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6 shadow-sm">
+          <h2 className="font-semibold text-slate-800 mb-4">New Expense</h2>
+          <ExpenseForm
+            f={form}
+            onChange={patch => setForm(p => ({ ...p, ...patch }))}
+            onSave={addExpense}
+            onCancel={() => { setShowAdd(false); setForm(emptyForm()); }}
+            submitLabel="Add Expense"
+          />
+        </div>
+      )}
+
+      {/* ── Month grid: the primary way to log a month's costs ── */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-slate-100">
+          <div className="flex items-center gap-2">
+            <button onClick={() => shiftMonth(-1)} className="p-1.5 rounded hover:bg-slate-100 text-slate-500" title="Previous month">‹</button>
+            <span className="font-semibold text-slate-800 min-w-[9rem] text-center">
+              {MONTHS_LONG[Number(gridMonth.slice(5, 7)) - 1]} {gridMonth.slice(0, 4)}
+            </span>
+            <button onClick={() => shiftMonth(1)} className="p-1.5 rounded hover:bg-slate-100 text-slate-500" title="Next month">›</button>
+          </div>
           <button
-            onClick={() => openByCat(bulkCategory)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border transition-colors ${bulkMode === 'category' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
+            onClick={saveMonth}
+            disabled={saving}
+            className="flex items-center gap-2 bg-emerald-600 text-white px-4 py-1.5 rounded-lg text-sm font-medium hover:bg-emerald-700 disabled:opacity-60"
           >
-            By Category
+            <Check className="w-4 h-4" /> {saving ? 'Saving…' : 'Save month'}
           </button>
-          <button
-            onClick={() => openByMonth(bulkMonthIdx)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm border transition-colors ${bulkMode === 'month' ? 'bg-emerald-600 text-white border-emerald-600' : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50'}`}
-          >
-            By Month
-          </button>
+        </div>
+
+        <div className="divide-y divide-slate-50">
+          {monthRows.map(row => {
+            const multi = row.oneOffs.length > 1;
+            const hasRecurring = row.recurringTotal > 0;
+            return (
+              <div key={row.category} className="flex items-center gap-3 px-5 py-2">
+                <span className="text-sm text-slate-700 flex-1 min-w-0 truncate">
+                  {row.label}
+                  {hasRecurring && (
+                    <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">
+                      {fmt(row.recurringTotal)} recurring
+                    </span>
+                  )}
+                  {multi && (
+                    <span className="ml-2 text-[10px] text-slate-400">{row.oneOffs.length} entries — edit below</span>
+                  )}
+                </span>
+                {multi ? (
+                  <span className="text-sm font-medium text-slate-500 w-28 text-right pr-3">{fmt(row.readOnlyTotal)}</span>
+                ) : (
+                  <div className="flex items-center gap-1 w-28">
+                    <span className="text-xs text-slate-400">$</span>
+                    <input
+                      type="number"
+                      value={draft[row.category] ?? ''}
+                      onChange={e => setDraft(d => ({ ...d, [row.category]: e.target.value }))}
+                      className="w-full text-sm border border-slate-200 rounded-lg px-2 py-1 text-right"
+                      placeholder="0"
+                      min="0"
+                    />
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="bg-slate-50 border-t border-slate-200 px-5 py-3 space-y-1">
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-500">Variable expenses</span>
+            <span className="font-medium text-slate-800">{fmt(monthVariableTotal)}</span>
+          </div>
+          <div className="flex justify-between text-sm">
+            <span className="text-slate-500">
+              PITI
+              <a href="/settings" className="ml-1.5 text-xs text-emerald-600 underline">edit in Settings</a>
+            </span>
+            <span className="font-medium text-slate-800">{fmt(pitiMonthly)}</span>
+          </div>
+          <div className="flex justify-between text-sm border-t border-slate-200 pt-1 font-semibold">
+            <span className="text-slate-700">Month total</span>
+            <span className="text-red-700">{fmt(monthVariableTotal + pitiMonthly)}</span>
+          </div>
         </div>
       </div>
 
@@ -558,259 +619,6 @@ export default function ExpensesPage() {
         </div>
       </div>
 
-      <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 mb-6">
-        {pitiEdit ? (
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-slate-700">Monthly PITI ($)</p>
-              <p className="text-xs text-slate-500 mt-0.5">Mortgage P&amp;I + property tax + insurance</p>
-            </div>
-            <input
-              type="number"
-              value={pitiDraft}
-              onChange={e => setPitiDraft(e.target.value)}
-              onBlur={savePiti}
-              autoFocus
-              placeholder="0"
-              min="0"
-              className="w-32 text-sm border border-slate-300 rounded-lg px-3 py-2 text-right"
-              onKeyDown={e => { if (e.key === 'Enter') savePiti(); if (e.key === 'Escape') setPitiEdit(false); }}
-            />
-            <button
-              onMouseDown={e => e.preventDefault()}
-              onClick={() => setPitiEdit(false)}
-              className="flex items-center gap-1.5 border border-slate-200 bg-white px-3 py-2 rounded-lg text-sm hover:bg-slate-50">
-              <X className="w-3.5 h-3.5" /> Cancel
-            </button>
-          </div>
-        ) : (
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-slate-700">PITI (Mortgage, Tax, Insurance)</p>
-              <p className="text-xs text-slate-500 mt-0.5">Fixed monthly cost applied automatically to P&amp;L</p>
-            </div>
-            <div className="flex items-center gap-2">
-              {pitiMonthly > 0 ? (
-                <div className="text-right">
-                  <p className="font-bold text-slate-800">{fmt(pitiMonthly)}<span className="text-xs font-normal text-slate-500">/mo</span></p>
-                  {filterYear !== 'all' && <p className="text-xs text-slate-400">{fmt(pitiAnnual)}/yr</p>}
-                </div>
-              ) : (
-                <span className="text-sm text-slate-400">Not set</span>
-              )}
-              <button
-                onClick={() => { setPitiDraft(pitiMonthly > 0 ? String(pitiMonthly) : ''); setPitiEdit(true); }}
-                className="p-1.5 rounded hover:bg-slate-200 text-slate-400 hover:text-slate-600 transition-colors"
-                title="Edit PITI"
-              >
-                <Pencil className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Expense Analysis */}
-      {expenses.length > 0 && filterYear !== 'all' && (() => {
-        const now = new Date();
-        const thisMonthIdx = now.getMonth();
-        const prevMonthIdx = thisMonthIdx === 0 ? 11 : thisMonthIdx - 1;
-        const prevMonthYear = thisMonthIdx === 0 ? String(parseInt(filterYear) - 1) : filterYear;
-
-        const currMonthExpenses = expenses.filter(e => {
-          const d = new Date(e.date);
-          return d.getFullYear() === parseInt(filterYear) && d.getMonth() === thisMonthIdx;
-        });
-        const priorMonthExpenses = (prevMonthYear === filterYear ? expenses : prevExpenses).filter(e => {
-          const d = new Date(e.date);
-          return d.getFullYear() === parseInt(prevMonthYear) && d.getMonth() === prevMonthIdx;
-        });
-
-        return (
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-6">
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="font-semibold text-slate-800">Expense Analysis</h2>
-              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
-                <button
-                  onClick={() => setAnalysisTab('yoy')}
-                  className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors ${analysisTab === 'yoy' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                  Year over Year
-                </button>
-                <button
-                  onClick={() => setAnalysisTab('mom')}
-                  className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors ${analysisTab === 'mom' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-                >
-                  Month over Month
-                </button>
-              </div>
-            </div>
-
-            {analysisTab === 'yoy' ? (
-              <AnalysisTable
-                current={expenses}
-                prior={prevExpenses}
-                currentLabel={filterYear}
-                priorLabel={String(parseInt(filterYear) - 1)}
-                fmt={fmt}
-              />
-            ) : (
-              <AnalysisTable
-                current={currMonthExpenses}
-                prior={priorMonthExpenses}
-                currentLabel={MONTHS_SHORT[thisMonthIdx]}
-                priorLabel={`${MONTHS_SHORT[prevMonthIdx]}${prevMonthYear !== filterYear ? ` '${prevMonthYear.slice(2)}` : ''}`}
-                fmt={fmt}
-              />
-            )}
-
-            <p className="text-xs text-slate-400 mt-3">
-              <span className="inline-flex items-center gap-1 text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded mr-2">↑ Up</span>
-              ≥15% increase &nbsp;
-              <span className="inline-flex items-center gap-1 text-red-700 bg-red-50 px-1.5 py-0.5 rounded mr-2">↑ High</span>
-              ≥50% increase &nbsp;
-              <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded mr-2">↓ Down/Low</span>
-              decrease
-            </p>
-          </div>
-        );
-      })()}
-
-      {/* ── Single expense entry ── */}
-      {showAdd && !bulkMode && (
-        <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6 shadow-sm">
-          <h2 className="font-semibold text-slate-800 mb-4">New Expense</h2>
-          <ExpenseForm
-            f={form}
-            onChange={patch => setForm(p => ({ ...p, ...patch }))}
-            onSave={addExpense}
-            onCancel={() => { setShowAdd(false); setForm(emptyForm()); }}
-            submitLabel="Add Expense"
-          />
-        </div>
-      )}
-
-      {/* ── By Category bulk entry ── */}
-      {bulkMode === 'category' && (
-        <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-slate-800">Enter by Category</h2>
-            <button onClick={() => setBulkMode(null)} className="text-slate-400 hover:text-slate-600">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="flex items-center gap-3 mb-5">
-            <label className="text-xs text-slate-500 whitespace-nowrap">Category</label>
-            <select
-              value={bulkCategory}
-              onChange={e => {
-                const cat = e.target.value as ExpenseCategory;
-                setBulkCategory(cat);
-                setBulkAmounts(amountsForCategory(cat));
-              }}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
-            >
-              {EXPENSE_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-            </select>
-            <span className="text-xs text-slate-400">Saving to {activeYear} · leave blank to clear a month</span>
-          </div>
-          <div className="grid grid-cols-3 md:grid-cols-6 gap-3 mb-5">
-            {MONTHS_SHORT.map((month, i) => (
-              <div key={i}>
-                <label className="text-xs text-slate-500 block mb-1">{month}</label>
-                <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden focus-within:border-emerald-400">
-                  <span className="text-xs text-slate-400 px-2">$</span>
-                  <input
-                    type="number"
-                    value={bulkAmounts[i] ?? ''}
-                    onChange={e => setBulkAmounts(p => ({ ...p, [i]: e.target.value }))}
-                    className="flex-1 text-sm py-1.5 pr-2 outline-none min-w-0"
-                    placeholder="0"
-                    min="0"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={saveBulkByCategory}
-              disabled={bulkSaving}
-              className="flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-50"
-            >
-              <Check className="w-3.5 h-3.5" /> {bulkSaving ? 'Saving…' : 'Save All'}
-            </button>
-            <button
-              onClick={() => setBulkMode(null)}
-              className="flex items-center gap-1.5 border border-slate-200 px-4 py-2 rounded-lg text-sm hover:bg-slate-50"
-            >
-              <X className="w-3.5 h-3.5" /> Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── By Month bulk entry ── */}
-      {bulkMode === 'month' && (
-        <div className="bg-white border border-slate-200 rounded-xl p-5 mb-6 shadow-sm">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="font-semibold text-slate-800">Enter by Month</h2>
-            <button onClick={() => setBulkMode(null)} className="text-slate-400 hover:text-slate-600">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="flex items-center gap-3 mb-5">
-            <label className="text-xs text-slate-500 whitespace-nowrap">Month</label>
-            <select
-              value={bulkMonthIdx}
-              onChange={e => {
-                const mi = parseInt(e.target.value);
-                setBulkMonthIdx(mi);
-                setBulkAmounts(amountsForMonth(mi));
-              }}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2 bg-white"
-            >
-              {MONTHS_LONG.map((m, i) => <option key={i} value={i}>{m}</option>)}
-            </select>
-            <span className="text-xs text-slate-400">Saving to {activeYear} · leave blank to clear a category</span>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-5">
-            {EXPENSE_CATEGORIES.map(cat => (
-              <div key={cat.value}>
-                <label className="text-xs text-slate-500 block mb-1">{cat.label}</label>
-                <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden focus-within:border-emerald-400">
-                  <span className="text-xs text-slate-400 px-2">$</span>
-                  <input
-                    type="number"
-                    value={bulkAmounts[cat.value] ?? ''}
-                    onChange={e => setBulkAmounts(p => ({ ...p, [cat.value]: e.target.value }))}
-                    className="flex-1 text-sm py-1.5 pr-2 outline-none min-w-0"
-                    placeholder="0"
-                    min="0"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="flex gap-2">
-            <button
-              onClick={saveBulkByMonth}
-              disabled={bulkSaving}
-              className="flex items-center gap-1.5 bg-emerald-600 text-white px-4 py-2 rounded-lg text-sm hover:bg-emerald-700 disabled:opacity-50"
-            >
-              <Check className="w-3.5 h-3.5" /> {bulkSaving ? 'Saving…' : 'Save All'}
-            </button>
-            <button
-              onClick={() => setBulkMode(null)}
-              className="flex items-center gap-1.5 border border-slate-200 px-4 py-2 rounded-lg text-sm hover:bg-slate-50"
-            >
-              <X className="w-3.5 h-3.5" /> Cancel
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ── Expense list ── */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
         <table className="w-full text-sm">
           <thead>
@@ -902,6 +710,87 @@ export default function ExpensesPage() {
           )}
         </table>
       </div>
+
+      {/* ── Analysis: a check you run, not the main event ── */}
+      <div className="mt-6">
+        <button
+          onClick={() => setShowAnalysis(v => !v)}
+          className="flex items-center gap-2 text-sm font-medium text-slate-600 hover:text-slate-800"
+        >
+          <span className="text-xs">{showAnalysis ? '▾' : '▸'}</span> Expense Analysis
+        </button>
+        {showAnalysis && (
+          <div className="mt-3">
+      {/* Expense Analysis */}
+      {expenses.length > 0 && filterYear !== 'all' && (() => {
+        const now = new Date();
+        const thisMonthIdx = now.getMonth();
+        const prevMonthIdx = thisMonthIdx === 0 ? 11 : thisMonthIdx - 1;
+        const prevMonthYear = thisMonthIdx === 0 ? String(parseInt(filterYear) - 1) : filterYear;
+
+        const currMonthExpenses = expenses.filter(e => {
+          const d = new Date(e.date);
+          return d.getFullYear() === parseInt(filterYear) && d.getMonth() === thisMonthIdx;
+        });
+        const priorMonthExpenses = (prevMonthYear === filterYear ? expenses : prevExpenses).filter(e => {
+          const d = new Date(e.date);
+          return d.getFullYear() === parseInt(prevMonthYear) && d.getMonth() === prevMonthIdx;
+        });
+
+        return (
+          <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 mb-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="font-semibold text-slate-800">Expense Analysis</h2>
+              <div className="flex items-center gap-1 bg-slate-100 rounded-lg p-1">
+                <button
+                  onClick={() => setAnalysisTab('yoy')}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors ${analysisTab === 'yoy' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Year over Year
+                </button>
+                <button
+                  onClick={() => setAnalysisTab('mom')}
+                  className={`text-xs font-medium px-3 py-1.5 rounded-md transition-colors ${analysisTab === 'mom' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  Month over Month
+                </button>
+              </div>
+            </div>
+
+            {analysisTab === 'yoy' ? (
+              <AnalysisTable
+                current={expenses}
+                prior={prevExpenses}
+                currentLabel={filterYear}
+                priorLabel={String(parseInt(filterYear) - 1)}
+                fmt={fmt}
+              />
+            ) : (
+              <AnalysisTable
+                current={currMonthExpenses}
+                prior={priorMonthExpenses}
+                currentLabel={MONTHS_SHORT[thisMonthIdx]}
+                priorLabel={`${MONTHS_SHORT[prevMonthIdx]}${prevMonthYear !== filterYear ? ` '${prevMonthYear.slice(2)}` : ''}`}
+                fmt={fmt}
+              />
+            )}
+
+            <p className="text-xs text-slate-400 mt-3">
+              <span className="inline-flex items-center gap-1 text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded mr-2">↑ Up</span>
+              ≥15% increase &nbsp;
+              <span className="inline-flex items-center gap-1 text-red-700 bg-red-50 px-1.5 py-0.5 rounded mr-2">↑ High</span>
+              ≥50% increase &nbsp;
+              <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded mr-2">↓ Down/Low</span>
+              decrease
+            </p>
+          </div>
+        );
+      })()}
+
+          </div>
+        )}
+      </div>
+
     </div>
   );
 }
