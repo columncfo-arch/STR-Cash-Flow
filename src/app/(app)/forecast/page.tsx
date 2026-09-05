@@ -1,6 +1,7 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { ForecastYear, Settings, ForecastOverride } from '@/types';
+import { pacingStatus } from '@/lib/pacing';
 import { Pencil, Check, X, Plus, Trash2, TrendingUp } from 'lucide-react';
 import {
   ComposedChart, Bar, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -296,6 +297,52 @@ export default function ForecastPage() {
   const finalEquity = equityData.length > 0 ? equityData[equityData.length - 1].equity : 0;
   const totalWealth = finalEquity + (finalRow?.cumulative ?? 0);
 
+  // ── Status strip ──────────────────────────────────────────────────────────
+  // Three verdicts rather than nine figures: when the capital comes back,
+  // whether the property pays its own way, and whether it beats the
+  // alternative the owner would otherwise have bought.
+
+  const deployedCapital = settings?.totalCapitalDeployed ?? 0;
+  const benchmarkPct = settings?.benchmarkReturnPct ?? 8;
+
+  // Payback: first year total value returned (equity gained since today plus
+  // cumulative cash flow) covers the capital put in.
+  const paybackYear = (() => {
+    if (deployedCapital <= 0) return null;
+    for (const row of enriched) {
+      const eq = equityData.find(e => e.year === String(row.year));
+      const equityGain = eq ? eq.equity - currentEquity : 0;
+      if (equityGain + row.cumulative >= deployedCapital) return row;
+    }
+    return null;
+  })();
+  const paybackRecovered = (() => {
+    if (!finalRow) return 0;
+    const eq = equityData.find(e => e.year === String(finalRow.year));
+    return (eq ? eq.equity - currentEquity : 0) + finalRow.cumulative;
+  })();
+
+  // Cash flow: does the property cover its own costs, and if not yet, when.
+  const currentCashFlow = currentYearRow?.netIncome ?? 0;
+  const firstPositiveRow = enriched.find(r => r.netIncome > 0) ?? null;
+
+  // Annualised total return, compared against the benchmark.
+  const forecastYearSpan = finalRow && enriched.length > 0
+    ? Math.max(1, finalRow.year - enriched[0].year + 1)
+    : 1;
+  const totalReturnAtEnd = deployedCapital > 0
+    ? (finalEquity - currentEquity) + (finalRow?.cumulative ?? 0)
+    : 0;
+  // CAGR on deployed capital over the forecast span
+  const annualisedReturnPct = deployedCapital > 0 && totalReturnAtEnd > -deployedCapital
+    ? (Math.pow((deployedCapital + totalReturnAtEnd) / deployedCapital, 1 / forecastYearSpan) - 1) * 100
+    : null;
+  const benchmarkVariancePct = annualisedReturnPct != null
+    ? annualisedReturnPct - benchmarkPct
+    : null;
+  const returnStatus = pacingStatus(benchmarkVariancePct);
+
+
   return (
     <div className="max-w-5xl mx-auto">
 
@@ -318,6 +365,81 @@ export default function ForecastPage() {
           <TrendingUp className="w-4 h-4" />
           Forecast Settings
         </button>
+      </div>
+
+      {/* ── Status strip: the three questions this page exists to answer ── */}
+      <div className="bg-white border border-slate-200 rounded-xl px-5 py-4 shadow-sm mb-6">
+        <div className="flex items-start gap-4 sm:gap-6">
+
+          {/* Payback */}
+          <div className="min-w-0 flex-1">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Payback</p>
+            {deployedCapital <= 0 ? (
+              <>
+                <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">—</p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  <button onClick={() => setConfigOpen(true)} className="text-emerald-600 underline">
+                    set capital deployed
+                  </button>
+                </p>
+              </>
+            ) : paybackYear ? (
+              <>
+                <p className="text-xl font-bold text-emerald-600 leading-tight mt-0.5">{paybackYear.year}</p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  year {paybackYear.year - currentYear + 1} · {fmt(deployedCapital)} recovered
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xl font-bold text-red-600 leading-tight mt-0.5">Not by {finalRow?.year}</p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  {fmt(paybackRecovered)} of {fmt(deployedCapital)} recovered
+                </p>
+              </>
+            )}
+          </div>
+
+          {/* Cash flow */}
+          <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+            <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Cash Flow</p>
+            <p className={`text-xl font-bold leading-tight mt-0.5 ${currentCashFlow >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              {currentCashFlow >= 0 ? 'Positive' : 'Negative'}
+            </p>
+            <p className="text-[11px] text-slate-400 truncate">
+              {currentCashFlow >= 0
+                ? `${fmt(currentCashFlow)} in ${currentYear}`
+                : firstPositiveRow
+                  ? `${fmt(currentCashFlow)} now · turns positive ${firstPositiveRow.year}`
+                  : `${fmt(currentCashFlow)} now · negative all forecast`}
+            </p>
+          </div>
+
+          {/* Return vs benchmark */}
+          <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+            <div className="flex items-start justify-between gap-2">
+              <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">vs Benchmark</p>
+              <button
+                onClick={() => setConfigOpen(true)}
+                className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
+                title="Set benchmark return"
+              >
+                <Pencil className="w-3 h-3" />
+              </button>
+            </div>
+            <p className={`text-xl font-bold leading-tight mt-0.5 ${returnStatus.color}`}>{returnStatus.label}</p>
+            <p className="text-[11px] text-slate-400 truncate">
+              {annualisedReturnPct != null
+                ? <>
+                    <span className={returnStatus.color}>
+                      {annualisedReturnPct >= 0 ? '' : '−'}{Math.abs(annualisedReturnPct).toFixed(1)}%/yr
+                    </span>
+                    {` vs ${benchmarkPct}% benchmark`}
+                  </>
+                : 'set capital deployed'}
+            </p>
+          </div>
+        </div>
       </div>
 
       {/* ── Config panel ── */}
@@ -428,6 +550,24 @@ export default function ForecastPage() {
                   </span>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">Annual property value growth used in equity projection.</p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Benchmark Return (%/yr)</label>
+                <div className="flex items-center gap-3">
+                  <input type="range" min="0" max="20" step="0.5"
+                    value={configDraft.benchmarkReturnPct ?? 8}
+                    onChange={e => setConfigDraft(d => ({ ...d, benchmarkReturnPct: parseFloat(e.target.value) }))}
+                    onMouseUp={saveConfig}
+                    onTouchEnd={saveConfig}
+                    className="flex-1" />
+                  <span className="text-sm font-semibold w-14 text-right text-slate-600">
+                    {configDraft.benchmarkReturnPct ?? 8}%
+                  </span>
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  What your capital would earn elsewhere. The status strip reads On Track only if the
+                  property beats this.
+                </p>
               </div>
               <div className="flex items-start gap-2 pt-4">
                 <div className="text-xs text-slate-400 leading-relaxed">

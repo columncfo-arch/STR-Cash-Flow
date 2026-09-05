@@ -124,6 +124,7 @@ export interface Settings {
   sensitivityTarget3?: number;
   platformFeeRate?: number;      // forward-looking platform fee rate override (e.g. 0.15 for Airbnb host-only model)
   totalCapitalDeployed?: number;
+  benchmarkReturnPct?: number;  // annualised return the property is judged against (e.g. 8 for an index fund)
   renovationCosts?: number;
   mortgageRate?: number;          // current interest rate %
   propertyValue?: number;         // estimated current value
