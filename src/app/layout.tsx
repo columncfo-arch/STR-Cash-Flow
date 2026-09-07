@@ -6,7 +6,12 @@ import './globals.css';
 const geist = Geist({ subsets: ['latin'] });
 
 export const metadata: Metadata = {
-  title: 'HostCFO',
+  // template applies to child segments, so a page's own title reads
+  // "CFO Dashboard · HostCFO" rather than replacing the brand outright
+  title: {
+    default: 'HostCFO',
+    template: '%s · HostCFO',
+  },
   description: 'Short-term rental financial intelligence',
 };
 

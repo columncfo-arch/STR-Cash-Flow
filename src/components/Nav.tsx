@@ -9,7 +9,7 @@ type SubLink = { href: string; label: string; icon: React.ComponentType<{ classN
 type NavLink = { href: string; label: string; icon: React.ComponentType<{ className?: string }>; children?: SubLink[] };
 
 const links: NavLink[] = [
-  { href: '/', label: 'Dashboard', icon: Home },
+  { href: '/', label: 'CFO Dashboard', icon: Home },
   {
     href: '/income-statement',
     label: 'Income Statement',
