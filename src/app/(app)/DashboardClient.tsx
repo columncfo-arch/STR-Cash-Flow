@@ -634,7 +634,9 @@ export default function DashboardClient() {
   return (
     <div className="max-w-6xl mx-auto">
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">{settings?.propertyName ?? 'CFO Dashboard'}</h1>
+        <h1 className="text-2xl font-bold text-slate-900">
+            {settings?.propertyName ? `CFO Dashboard for ${settings.propertyName}` : 'CFO Dashboard'}
+          </h1>
         <p className="text-slate-500 text-sm mt-1">{year} overview</p>
       </div>
 
@@ -681,13 +683,16 @@ export default function DashboardClient() {
         </div>
       )}
 
-      <h2 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-3">Gross Revenue</h2>
+      <section className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-100">
+          <h2 className="text-xs uppercase tracking-wide text-slate-400 font-semibold">Gross Revenue</h2>
+        </div>
 
       {/* One tile per measure, reporting the selected period */}
       {!selMonth && hasTarget && annualForecast != null && (() => {
         if (periodMonths.length === 0) {
           return (
-            <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
+            <div className="px-5 py-4">
               <p className="text-sm text-slate-400">Pick a start and end month.</p>
             </div>
           );
@@ -700,7 +705,7 @@ export default function DashboardClient() {
         const pctOfTarget = target > 0 ? Math.min(100, (earned / target) * 100) : 0;
         const status = pacingStatus(variancePct, { reached: stillNeeded === 0 && target > 0, label: 'Target Met' });
         return (
-          <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
+          <div className="px-5 py-4">
             <div className="flex items-start gap-4 sm:gap-6">
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Earned</p>
@@ -764,7 +769,7 @@ export default function DashboardClient() {
 
       {/* 2025 monthly actuals editor */}
       {editingSeasonality && !selMonth && (
-        <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm mb-6">
+        <div className="mx-5 mb-4 bg-slate-50 border border-slate-200 rounded-lg p-4">
           <div className="flex items-center justify-between mb-1">
             <p className="font-semibold text-slate-800">{year - 1} Monthly Revenue</p>
             <button onMouseDown={e => e.preventDefault()} onClick={() => { cancelSeasonalitySave(); setEditingSeasonality(false); }} className="text-slate-400 hover:text-slate-600">
@@ -805,13 +810,13 @@ export default function DashboardClient() {
           </div>
         </div>
       )}
-
+        <div className="border-t border-slate-100">
       {/* Chart */}
-      <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
-        <h2 className="font-semibold text-slate-800 mb-1 flex items-center gap-2">
-          <TrendingUp className="w-4 h-4 text-emerald-600" />
-          Gross Revenue Pacing (Target and Actual)
-        </h2>
+      <div className="px-5 py-4">
+        <p className="text-xs font-medium text-slate-500 mb-1 flex items-center gap-1.5">
+          <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
+          Target vs actual by month
+        </p>
         <p className="text-xs text-slate-400 mb-4">Click a month to drill into its P&amp;L</p>
         {hasData ? (
           <>
@@ -885,10 +890,13 @@ export default function DashboardClient() {
           </div>
         )}
       </div>
+        </div>
+      </section>
 
-      {hasData && (
-        <h2 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-3">Net Income</h2>
-      )}
+      <section className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-100">
+          <h2 className="text-xs uppercase tracking-wide text-slate-400 font-semibold">Net Income</h2>
+        </div>
 
       {/* One tile: what the period earned after costs, and against projection */}
       {!selMonth && hasData && (() => {
@@ -905,7 +913,7 @@ export default function DashboardClient() {
         const piti = periodMonths.reduce((s, m) => s + (monthStmt(m)?.piti ?? 0), 0);
 
         return (
-          <div className={`bg-white rounded-xl border px-5 py-4 shadow-sm mb-6 ${net < 0 ? 'border-red-200' : 'border-slate-200'}`}>
+          <div className={`px-5 py-4 ${net < 0 ? 'bg-red-50/40' : ''}`}>
             <div className="flex items-start gap-4 sm:gap-6">
               <div className="min-w-0 flex-1">
                 <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Net Income</p>
@@ -944,12 +952,12 @@ export default function DashboardClient() {
         );
       })()}
 
-
+        <div className="border-t border-slate-100">
       {/* P&L Chart */}
       {hasData && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
-          <h2 className="font-semibold text-slate-800 mb-1">Net Income</h2>
-          <p className="text-xs text-slate-400 mb-4">Monthly net income · actuals and projected</p>
+        <div className="px-5 py-4">
+          <p className="text-xs font-medium text-slate-500 mb-1">By month</p>
+          <p className="text-xs text-slate-400 mb-4">Actuals and projected</p>
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart data={pnlChartData} barGap={4} barCategoryGap="30%">
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -991,12 +999,13 @@ export default function DashboardClient() {
           </ResponsiveContainer>
         </div>
       )}
+        </div>
+      </section>
 
-      {/* One heading covers both the occupancy and rate tiles, since the chart
-          closing this section plots the two together */}
-      {hasData && (
-        <h2 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-3">Occupancy &amp; Pricing</h2>
-      )}
+      <section className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+        <div className="px-5 py-3 border-b border-slate-100">
+          <h2 className="text-xs uppercase tracking-wide text-slate-400 font-semibold">Occupancy &amp; Pricing</h2>
+        </div>
 
       {/* One tile: occupancy for the period against the baseline */}
       {!selMonth && hasData && (() => {
@@ -1011,7 +1020,7 @@ export default function DashboardClient() {
         const status = pacingStatus(variancePct);
 
         return (
-          <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
+          <div className="px-5 py-4">
             {editingOccTarget ? (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-500 whitespace-nowrap">Occupancy baseline</span>
@@ -1073,13 +1082,13 @@ export default function DashboardClient() {
         );
       })()}
 
-
+        <div className="border-t border-slate-100">
       {/* Daily rate — period rate, break-even and status against the target */}
       {hasData && !selMonth && (() => {
         if (periodMonths.length === 0) return null;
         const adrStatus = pacingStatus(periodAdrVariancePct);
         return (
-          <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
+          <div className="px-5 py-4">
             {editingAdrTarget && derivedAdrTarget == null ? (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-500 whitespace-nowrap">ADR target</span>
@@ -1166,12 +1175,13 @@ export default function DashboardClient() {
           </div>
         );
       })()}
-
+        </div>
+        <div className="border-t border-slate-100">
       {/* ── Pricing & Occupancy chart ── */}
       {hasData && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-8">
+        <div className="px-5 py-4">
           <div className="flex items-center justify-between mb-1">
-            <h2 className="font-semibold text-slate-800">Pricing &amp; Occupancy</h2>
+            <p className="text-xs font-medium text-slate-500">Rate and occupancy by month</p>
             {targetOcc != null && (
               <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${perfColor(occVariance ?? 0, occVariance != null ? Math.abs(occVariance) : null, true)}`}>
                 YTD {ytdOccupancy.toFixed(1)}% {occVariance != null ? `(${occVariance >= 0 ? '+' : ''}${occVariance.toFixed(1)}pts vs target)` : ''}
@@ -1236,6 +1246,9 @@ export default function DashboardClient() {
           </ResponsiveContainer>
         </div>
       )}
+        </div>
+      </section>
+
 
       {/* ── Year Health + YTD tables — hidden when a month is drilled into ── */}
       {hasData && !selMonth && (
