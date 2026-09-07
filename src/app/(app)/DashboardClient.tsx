@@ -620,6 +620,16 @@ export default function DashboardClient() {
     : healthNorm > -0.4 ? { verdict: 'On Track', level: 'on-track' }
     : { verdict: 'At Risk', level: 'at-risk' };
 
+  // The one signal worth surfacing is the binding constraint — the weakest —
+  // since that is what would have to change. Ties break on which measure
+  // matters most, not on the order the signals happen to be pushed.
+  const HEALTH_PRIORITY = ['Net Income', 'Revenue', 'Occupancy', 'Target Path'];
+  const mainSignal = healthSignals.length > 0
+    ? [...healthSignals].sort((a, b) =>
+        (a.score - b.score) ||
+        (HEALTH_PRIORITY.indexOf(a.label) - HEALTH_PRIORITY.indexOf(b.label)))[0]
+    : null;
+
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function handleChartClick(data: any) {
     const idx: number | null | undefined = data?.activeTooltipIndex;
@@ -1200,27 +1210,20 @@ export default function DashboardClient() {
               yearHealth.level === 'on-track' ? 'bg-slate-50 border-slate-200' :
               'bg-red-50 border-red-200'
             }`}>
-              <div className="flex items-start md:items-center gap-4 flex-col md:flex-row">
-                <div className="shrink-0">
-                  <p className="text-xs uppercase tracking-wide font-semibold text-slate-400 mb-0.5">Year Health</p>
-                  <p className={`text-xl font-bold ${
-                    yearHealth.level === 'exceeding' ? 'text-emerald-700' :
-                    yearHealth.level === 'on-track' ? 'text-slate-700' :
-                    'text-red-700'
-                  }`}>{yearHealth.verdict}</p>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {healthSignals.map(sig => (
-                    <span key={sig.label} className={`inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-full font-medium border bg-white ${
-                      sig.score === 1 ? 'text-emerald-700 border-emerald-300' :
-                      sig.score === 0 ? 'text-amber-700 border-amber-300' :
-                      'text-red-600 border-red-300'
-                    }`}>
-                      {sig.score === 1 ? '▲' : sig.score === -1 ? '▼' : '~'} {sig.label}
-                      <span className="font-normal opacity-75 ml-0.5">· {sig.detail}</span>
-                    </span>
-                  ))}
-                </div>
+              <div className="flex items-baseline flex-wrap gap-x-3 gap-y-1">
+                <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-400">Year Health</p>
+                <p className={`text-xl font-bold ${
+                  yearHealth.level === 'exceeding' ? 'text-emerald-700' :
+                  yearHealth.level === 'on-track' ? 'text-slate-700' :
+                  'text-red-700'
+                }`}>{yearHealth.verdict}</p>
+                {mainSignal && (
+                  <p className="text-xs text-slate-500">
+                    {mainSignal.score === 1 ? '▲' : mainSignal.score === -1 ? '▼' : '~'}{' '}
+                    <span className="font-medium text-slate-700">{mainSignal.label}</span>{' '}
+                    {mainSignal.detail}
+                  </p>
+                )}
               </div>
             </div>
           )}
