@@ -681,7 +681,7 @@ export default function DashboardClient() {
 
       <section className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-100">
-          <h2 className="text-xs uppercase tracking-wide text-slate-400 font-semibold">Gross Revenue</h2>
+          <h2 className="text-xs uppercase tracking-wide text-slate-900 font-semibold">Gross Revenue</h2>
         </div>
 
       {/* One tile per measure, reporting the selected period */}
@@ -891,7 +891,7 @@ export default function DashboardClient() {
 
       <section className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-100">
-          <h2 className="text-xs uppercase tracking-wide text-slate-400 font-semibold">Net Income</h2>
+          <h2 className="text-xs uppercase tracking-wide text-slate-900 font-semibold">Net Income</h2>
         </div>
 
       {/* One tile: what the period earned after costs, and against projection */}
@@ -1000,7 +1000,7 @@ export default function DashboardClient() {
 
       <section className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-100">
-          <h2 className="text-xs uppercase tracking-wide text-slate-400 font-semibold">Occupancy &amp; Pricing</h2>
+          <h2 className="text-xs uppercase tracking-wide text-slate-900 font-semibold">Occupancy &amp; Pricing</h2>
         </div>
 
       {/* Occupancy and rate for the period, with one status. Break-even rate,
