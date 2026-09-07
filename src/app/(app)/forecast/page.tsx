@@ -532,6 +532,60 @@ export default function ForecastPage() {
           </div>
 
           <div className="border-t border-slate-100 pt-5 mb-5">
+            <h3 className="text-xs font-medium text-slate-600 mb-3">Initial Investment</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Total Capital Deployed ($)</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-slate-400">$</span>
+                  <input
+                    type="number"
+                    value={configDraft.totalCapitalDeployed ?? ''}
+                    onChange={e => setConfigDraft(d => ({
+                      ...d, totalCapitalDeployed: e.target.value === '' ? undefined : parseFloat(e.target.value),
+                    }))}
+                    onBlur={saveConfig}
+                    className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5"
+                    placeholder="210000"
+                    min="0"
+                  />
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Everything you put in: down payment, closing costs and renovation. Payback and
+                  return are measured against this.
+                </p>
+              </div>
+              <div>
+                <label className="text-xs text-slate-500 block mb-1">Of which renovation / startup ($)</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-slate-400">$</span>
+                  <input
+                    type="number"
+                    value={configDraft.renovationCosts ?? ''}
+                    onChange={e => setConfigDraft(d => ({
+                      ...d, renovationCosts: e.target.value === '' ? undefined : parseFloat(e.target.value),
+                    }))}
+                    onBlur={saveConfig}
+                    className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5"
+                    placeholder="35000"
+                    min="0"
+                  />
+                </div>
+                <p className="text-xs text-slate-400 mt-1">
+                  Optional. Splits the capital stack into down payment vs renovation — it is part of
+                  the total above, not added to it.
+                </p>
+                {(configDraft.totalCapitalDeployed ?? 0) > 0 &&
+                 (configDraft.renovationCosts ?? 0) > (configDraft.totalCapitalDeployed ?? 0) && (
+                  <p className="text-xs text-red-600 mt-1">
+                    Renovation exceeds total capital — the down payment would be negative.
+                  </p>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="border-t border-slate-100 pt-5 mb-5">
             <h3 className="text-xs font-medium text-slate-600 mb-3">Equity Projection Settings</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>

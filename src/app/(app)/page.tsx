@@ -479,11 +479,54 @@ export default function Dashboard() {
   const netPacingVariancePct = ytdNetForecast != null && ytdNetForecast !== 0
     ? (netPacingVariance! / Math.abs(ytdNetForecast)) * 100 : null;
 
-  // Current-month cash flow tile
-  const curMonthConfirmedGross = curMonthStmt?.grossRevenue ?? 0;
-  const curMonthForecastGross = curMonthForecast ?? 0;
-  const curMonthCashGapToFill = Math.max(0, curMonthForecastGross - curMonthConfirmedGross);
-  const curMonthCoveragePct = curMonthForecastGross > 0 ? Math.min(100, Math.round((curMonthConfirmedGross / curMonthForecastGross) * 100)) : 0;
+
+  // ── Selected period ────────────────────────────────────────────────────────
+  // One window drives the revenue, net income and occupancy tiles, so the whole
+  // page reports the same span. Months, not days: targets and actuals are
+  // monthly, so a day picker would imply precision the data does not have.
+  const periodMonths: { year: number; mi: number }[] = (() => {
+    if (period === 'month') return [{ year, mi: currentMonthIdx }];
+    if (period === 'ytd') return Array.from({ length: currentMonthIdx + 1 }, (_, i) => ({ year, mi: i }));
+    if (period === 'last12') {
+      return Array.from({ length: 12 }, (_, k) => {
+        const off = currentMonthIdx - 11 + k;
+        return off < 0 ? { year: year - 1, mi: off + 12 } : { year, mi: off };
+      });
+    }
+    if (!customFrom || !customTo || customFrom > customTo) return [];
+    const out: { year: number; mi: number }[] = [];
+    for (const y of [year - 1, year]) {
+      for (let mi = 0; mi < 12; mi++) {
+        const key = `${y}-${String(mi + 1).padStart(2, '0')}`;
+        if (key >= customFrom && key <= customTo) out.push({ year: y, mi });
+      }
+    }
+    return out;
+  })();
+
+  const monthsOfYear = (y: number) => (y === year ? statement?.months : prevStatement?.months);
+  const monthStmt = ({ year: y, mi }: { year: number; mi: number }) => monthsOfYear(y)?.[mi];
+
+  const periodLabel = period === 'month' ? MONTHS_LONG[currentMonthIdx]
+    : period === 'ytd' ? `${year} to date`
+    : period === 'last12' ? 'last 12 months'
+    : customFrom && customTo ? `${customFrom} to ${customTo}` : 'custom range';
+
+  // Only current-year months carry a target; closed prior-year months are their
+  // own baseline, so they contribute no variance.
+  const periodGrossTarget = periodMonths.reduce((s, m) =>
+    s + (m.year === year ? (monthlyForecasts[m.mi] ?? 0) : (effectivePriorMonthly?.[m.mi] ?? 0)), 0);
+  const periodGrossActual = periodMonths.reduce((s, m) => s + (monthStmt(m)?.grossRevenue ?? 0), 0);
+
+  const periodNetTarget = periodMonths.reduce((s, m) =>
+    s + (m.year === year ? (monthlyNetForecasts[m.mi] ?? 0) : (monthStmt(m)?.netIncome ?? 0)), 0);
+  const periodNetActual = periodMonths.reduce((s, m) => s + (monthStmt(m)?.netIncome ?? 0), 0);
+
+  // Occupancy is a rate: average across the window rather than a sum.
+  const periodOccMonths = periodMonths.map(monthStmt).filter((m): m is NonNullable<typeof m> => !!m);
+  const periodOccActual = periodOccMonths.length
+    ? periodOccMonths.reduce((s, m) => s + m.occupancyRate, 0) / periodOccMonths.length
+    : null;
 
   const pnlChartData = statement?.months.map((m, i) => {
     const isActual = i <= currentMonthIdx;
@@ -533,8 +576,6 @@ export default function Dashboard() {
 
   const targetOcc = displayOccTarget;
   const occVariance = targetOcc != null ? ytdOccupancy - targetOcc : null;
-  const currentMonthOccupancy = statement?.months[currentMonthIdx]?.occupancyRate ?? null;
-  const curMonthOccVariance = targetOcc != null && currentMonthOccupancy != null ? currentMonthOccupancy - targetOcc : null;
   const adrVariance = displayAdrTarget != null && ytdAdr != null ? ytdAdr - displayAdrTarget : null;
   const adrVariancePct = adrVariance != null && displayAdrTarget ? (adrVariance / displayAdrTarget) * 100 : null;
 
@@ -590,197 +631,127 @@ export default function Dashboard() {
         <p className="text-slate-500 text-sm mt-1">{year} overview</p>
       </div>
 
-      {/* Section label — the revenue tiles below track gross, but none of their
-          own column headings say so. Unconditional, matching its chart. */}
+      {/* ── Period filter: drives every tile on the page ── */}
+      {!selMonth && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
+          <div className="flex flex-wrap items-center gap-1.5">
+            {([
+              ['month', 'This Month'],
+              ['ytd', 'YTD'],
+              ['last12', 'Last 12 Months'],
+              ['custom', 'Custom'],
+            ] as const).map(([id, label]) => (
+              <button
+                key={id}
+                onClick={() => setPeriod(id)}
+                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                  period === id
+                    ? 'bg-emerald-600 text-white'
+                    : 'border border-slate-200 text-slate-600 hover:border-emerald-300 bg-white'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {period === 'custom' && (
+            <div className="flex items-center gap-2 sm:ml-auto">
+              <input
+                type="month" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
+                min={`${year - 1}-01`} max={`${year}-12`}
+                className="text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700"
+                aria-label="From month"
+              />
+              <span className="text-xs text-slate-400">to</span>
+              <input
+                type="month" value={customTo} onChange={e => setCustomTo(e.target.value)}
+                min={`${year - 1}-01`} max={`${year}-12`}
+                className="text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700"
+                aria-label="To month"
+              />
+            </div>
+          )}
+        </div>
+      )}
+
       <h2 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-3">Gross Revenue</h2>
 
-      {/* ── Period filter + one revenue tile ────────────────────────────────
-          Was two tiles, month and annual, showing the same three measures for
-          different spans. One tile driven by a filter says the same thing once.
-          Granularity is months, not days: targets are distributed monthly, so a
-          day picker would imply precision the forecast does not have. */}
+      {/* One tile per measure, reporting the selected period */}
       {!selMonth && hasTarget && annualForecast != null && (() => {
-        const priorMonthly = effectivePriorMonthly ?? [];
-
-        // Months in the selected window, newest last
-        const windowMonths: { year: number; mi: number }[] = (() => {
-          if (period === 'month') return [{ year, mi: currentMonthIdx }];
-          if (period === 'ytd') return Array.from({ length: currentMonthIdx + 1 }, (_, i) => ({ year, mi: i }));
-          if (period === 'last12') {
-            return Array.from({ length: 12 }, (_, k) => {
-              const off = currentMonthIdx - 11 + k;
-              return off < 0 ? { year: year - 1, mi: off + 12 } : { year, mi: off };
-            });
-          }
-          // custom: inclusive YYYY-MM range, clamped to the two years we hold
-          if (!customFrom || !customTo || customFrom > customTo) return [];
-          const out: { year: number; mi: number }[] = [];
-          for (const y of [year - 1, year]) {
-            for (let mi = 0; mi < 12; mi++) {
-              const key = `${y}-${String(mi + 1).padStart(2, '0')}`;
-              if (key >= customFrom && key <= customTo) out.push({ year: y, mi });
-            }
-          }
-          return out;
-        })();
-
-        const monthsOf = (y: number) => (y === year ? statement?.months : prevStatement?.months);
-        const actualFor = ({ year: y, mi }: { year: number; mi: number }) =>
-          monthsOf(y)?.[mi]?.grossRevenue ?? 0;
-        // Closed prior-year months are their own baseline — there was no target
-        // set for them, so they contribute no variance.
-        const targetFor = ({ year: y, mi }: { year: number; mi: number }) =>
-          y === year ? (monthlyForecasts[mi] ?? 0) : (priorMonthly[mi] ?? 0);
-
-        const earned = windowMonths.reduce((s, m) => s + actualFor(m), 0);
-        const target = windowMonths.reduce((s, m) => s + targetFor(m), 0);
+        if (periodMonths.length === 0) {
+          return (
+            <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
+              <p className="text-sm text-slate-400">Pick a start and end month.</p>
+            </div>
+          );
+        }
+        const earned = periodGrossActual;
+        const target = periodGrossTarget;
         const stillNeeded = Math.max(0, target - earned);
         const variance = earned - target;
         const variancePct = target > 0 ? (variance / target) * 100 : null;
         const pctOfTarget = target > 0 ? Math.min(100, (earned / target) * 100) : 0;
         const status = pacingStatus(variancePct, { reached: stillNeeded === 0 && target > 0, label: 'Target Met' });
-
-        const periodLabel = period === 'month' ? MONTHS_LONG[currentMonthIdx]
-          : period === 'ytd' ? `${year} to date`
-          : period === 'last12' ? 'last 12 months'
-          : customFrom && customTo ? `${customFrom} to ${customTo}` : 'custom range';
-
         return (
-          <>
-            {/* Filter */}
-            <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-3">
-              <div className="flex flex-wrap items-center gap-1.5">
-                {([
-                  ['month', 'This Month'],
-                  ['ytd', 'YTD'],
-                  ['last12', 'Last 12 Months'],
-                  ['custom', 'Custom'],
-                ] as const).map(([id, label]) => (
-                  <button
-                    key={id}
-                    onClick={() => setPeriod(id)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                      period === id
-                        ? 'bg-emerald-600 text-white'
-                        : 'border border-slate-200 text-slate-600 hover:border-emerald-300 bg-white'
-                    }`}
-                  >
-                    {label}
-                  </button>
-                ))}
+          <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
+            <div className="flex items-start gap-4 sm:gap-6">
+              <div className="min-w-0 flex-1">
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Earned</p>
+                <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{fmt(earned)}</p>
+                <p className="text-[11px] text-slate-400 truncate">of {fmt(target)} target · {periodLabel}</p>
               </div>
-              {period === 'custom' && (
-                <div className="flex items-center gap-2 sm:ml-auto">
-                  <input
-                    type="month" value={customFrom} onChange={e => setCustomFrom(e.target.value)}
-                    min={`${year - 1}-01`} max={`${year}-12`}
-                    className="text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700"
-                    aria-label="From month"
-                  />
-                  <span className="text-xs text-slate-400">to</span>
-                  <input
-                    type="month" value={customTo} onChange={e => setCustomTo(e.target.value)}
-                    min={`${year - 1}-01`} max={`${year}-12`}
-                    className="text-sm border border-slate-200 rounded-lg px-2.5 py-1.5 text-slate-700"
-                    aria-label="To month"
-                  />
+              <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Still Needed</p>
+                <p className={`text-xl font-bold leading-tight mt-0.5 ${stillNeeded === 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
+                  {stillNeeded === 0 ? 'Covered' : fmt(stillNeeded)}
+                </p>
+                <p className="text-[11px] text-slate-400 truncate">{pctOfTarget.toFixed(0)}% of target earned</p>
+              </div>
+              <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
+                  <div className="flex items-center gap-1 shrink-0 -mt-0.5">
+                    <button onClick={openSeasonalityEditor} className="text-slate-300 hover:text-slate-500 transition-colors"
+                      title={`Edit ${year - 1} monthly actuals — sets how the annual target splits across months`}>
+                      <CalendarDays className="w-3 h-3" />
+                    </button>
+                    <button
+                      onClick={() => { setTargetInput(String(manualTarget ?? Math.round(annualForecast))); setEditingTarget(true); }}
+                      className="text-slate-300 hover:text-slate-500 transition-colors" title="Edit annual target">
+                      <Pencil className="w-3 h-3" />
+                    </button>
+                  </div>
                 </div>
-              )}
-            </div>
-
-            {/* The tile */}
-            <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
-              {windowMonths.length === 0 ? (
-                <p className="text-sm text-slate-400 py-2">Pick a start and end month.</p>
-              ) : (
-                <>
-                  <div className="flex items-start gap-4 sm:gap-6">
-                    {/* Earned */}
-                    <div className="min-w-0 flex-1">
-                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Earned</p>
-                      <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{fmt(earned)}</p>
-                      <p className="text-[11px] text-slate-400 truncate">
-                        of {fmt(target)} target · {periodLabel}
-                      </p>
-                    </div>
-
-                    {/* Still needed */}
-                    <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Still Needed</p>
-                      <p className={`text-xl font-bold leading-tight mt-0.5 ${stillNeeded === 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
-                        {stillNeeded === 0 ? 'Covered' : fmt(stillNeeded)}
-                      </p>
-                      <p className="text-[11px] text-slate-400 truncate">
-                        {pctOfTarget.toFixed(0)}% of target earned
-                      </p>
-                    </div>
-
-                    {/* Status */}
-                    <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
-                        <div className="flex items-center gap-1 shrink-0 -mt-0.5">
-                          <button
-                            onClick={openSeasonalityEditor}
-                            className="text-slate-300 hover:text-slate-500 transition-colors"
-                            title={`Edit ${year - 1} monthly actuals — sets how the annual target splits across months`}
-                          >
-                            <CalendarDays className="w-3 h-3" />
-                          </button>
-                          <button
-                            onClick={() => { setTargetInput(String(manualTarget ?? Math.round(annualForecast))); setEditingTarget(true); }}
-                            className="text-slate-300 hover:text-slate-500 transition-colors"
-                            title="Edit annual target"
-                          >
-                            <Pencil className="w-3 h-3" />
-                          </button>
-                        </div>
-                      </div>
-                      {editingTarget ? (
-                        <div className="flex items-center gap-1.5 mt-1">
-                          <span className="text-sm text-slate-400">$</span>
-                          <input
-                            type="number"
-                            value={targetInput}
-                            onChange={e => setTargetInput(e.target.value)}
-                            onBlur={saveTarget}
-                            onKeyDown={e => e.key === 'Enter' && saveTarget()}
-                            className="flex-1 min-w-0 text-sm border border-slate-200 rounded-lg px-2 py-1"
-                            placeholder="68500"
-                            autoFocus
-                          />
-                          <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingTarget(false)} className="text-slate-300 hover:text-slate-500">
-                            <X className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <p className={`text-xl font-bold leading-tight mt-0.5 ${status.color}`}>{status.label}</p>
-                          <p className="text-[11px] text-slate-400 truncate">
-                            {variancePct != null
-                              ? <>
-                                  <span className={status.color}>
-                                    {variance >= 0 ? '▲' : '▼'}{Math.abs(variancePct).toFixed(1)}%
-                                  </span>
-                                  {` · ${fmt(annualForecast)} annual target`}
-                                </>
-                              : 'no target for this period'}
-                          </p>
-                        </>
-                      )}
-                    </div>
+                {editingTarget ? (
+                  <div className="flex items-center gap-1.5 mt-1">
+                    <span className="text-sm text-slate-400">$</span>
+                    <input type="number" value={targetInput} onChange={e => setTargetInput(e.target.value)}
+                      onBlur={saveTarget} onKeyDown={e => e.key === 'Enter' && saveTarget()}
+                      className="flex-1 min-w-0 text-sm border border-slate-200 rounded-lg px-2 py-1" placeholder="68500" autoFocus />
+                    <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingTarget(false)} className="text-slate-300 hover:text-slate-500">
+                      <X className="w-3.5 h-3.5" />
+                    </button>
                   </div>
-
-                  <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
-                    <div
-                      className={`h-1 rounded-full transition-all ${variance >= 0 ? 'bg-emerald-500' : pctOfTarget >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
-                      style={{ width: `${pctOfTarget}%` }}
-                    />
-                  </div>
-                </>
-              )}
+                ) : (
+                  <>
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${status.color}`}>{status.label}</p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {variancePct != null
+                        ? <>
+                            <span className={status.color}>{variance >= 0 ? '▲' : '▼'}{Math.abs(variancePct).toFixed(1)}%</span>
+                            {` · ${fmt(annualForecast)} annual target`}
+                          </>
+                        : 'no target for this period'}
+                    </p>
+                  </>
+                )}
+              </div>
             </div>
-          </>
+            <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
+              <div className={`h-1 rounded-full transition-all ${variance >= 0 ? 'bg-emerald-500' : pctOfTarget >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
+                style={{ width: `${pctOfTarget}%` }} />
+            </div>
+          </div>
         );
       })()}
 
@@ -912,133 +883,60 @@ export default function Dashboard() {
         <h2 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-3">Net Income</h2>
       )}
 
-      {/* Current month cash flow tile — uses actual booked revenue and entered expenses */}
-      {hasData && !selMonth && curMonthStmt != null && (() => {
-        const totalCosts = curMonthStmt.totalOperatingExpenses + curMonthStmt.piti;
-        // How far net cash flow sits from breakeven, as a share of the month's
-        // costs. Same 5% band as the annual revenue status.
-        const breakevenPct = totalCosts > 0 ? (curMonthStmt.netIncome / totalCosts) * 100 : null;
-        const cashStatus = pacingStatus(breakevenPct);
+      {/* One tile: what the period earned after costs, and against projection */}
+      {!selMonth && hasData && (() => {
+        if (periodMonths.length === 0) return null;
+        const net = periodNetActual;
+        const projected = periodNetTarget;
+        const variance = net - projected;
+        const variancePct = projected !== 0 ? (variance / Math.abs(projected)) * 100 : null;
+        const status = pacingStatus(variancePct);
+
+        // Costs behind the figure, for the same window
+        const revenue = periodMonths.reduce((s, m) => s + (monthStmt(m)?.netRevenue ?? 0), 0);
+        const opex = periodMonths.reduce((s, m) => s + (monthStmt(m)?.totalOperatingExpenses ?? 0), 0);
+        const piti = periodMonths.reduce((s, m) => s + (monthStmt(m)?.piti ?? 0), 0);
+
         return (
-          <div className={`bg-white rounded-xl border px-5 py-4 shadow-sm mb-6 ${curMonthStmt.netIncome < 0 ? 'border-red-200' : 'border-slate-200'}`}>
+          <div className={`bg-white rounded-xl border px-5 py-4 shadow-sm mb-6 ${net < 0 ? 'border-red-200' : 'border-slate-200'}`}>
             <div className="flex items-start gap-4 sm:gap-6">
-              {/* Net revenue */}
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">
-                  {MONTHS_LONG[currentMonthIdx]} Net Revenue
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Net Income</p>
+                <p className={`text-xl font-bold leading-tight mt-0.5 ${net < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
+                  {net >= 0 ? '+' : ''}{fmt(net)}
                 </p>
-                <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{fmt(curMonthStmt.netRevenue)}</p>
-                <p className="text-[11px] text-slate-400 truncate">booked − platform fees</p>
+                <p className="text-[11px] text-slate-400 truncate">{periodLabel}</p>
               </div>
-
-              {/* Net cash flow */}
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Net Cash Flow</p>
-                <p className={`text-xl font-bold leading-tight mt-0.5 ${curMonthStmt.netIncome < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
-                  {curMonthStmt.netIncome >= 0 ? '+' : ''}{fmt(curMonthStmt.netIncome)}
-                </p>
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">After Costs</p>
+                <p className="text-xl font-bold text-red-500 leading-tight mt-0.5">−{fmt(opex + piti)}</p>
                 <p className="text-[11px] text-slate-400 truncate">
-                  after {fmt(curMonthStmt.totalOperatingExpenses)} opex · {fmt(curMonthStmt.piti)} PITI
+                  {fmt(revenue)} net revenue · {fmt(opex)} opex · {fmt(piti)} PITI
                 </p>
               </div>
-
-              {/* Status against breakeven */}
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                 <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
-                <p className={`text-xl font-bold leading-tight mt-0.5 ${cashStatus.color}`}>{cashStatus.label}</p>
+                <p className={`text-xl font-bold leading-tight mt-0.5 ${status.color}`}>{status.label}</p>
                 <p className="text-[11px] text-slate-400 truncate">
-                  {breakevenPct != null
+                  {variancePct != null
                     ? <>
-                        <span className={cashStatus.color}>
-                          {breakevenPct >= 0 ? '▲' : '▼'}{Math.abs(breakevenPct).toFixed(1)}%
-                        </span>
-                        {' vs breakeven'}
+                        <span className={status.color}>{variance >= 0 ? '▲' : '▼'}{fmt(Math.abs(variance))}</span>
+                        {` vs ${fmt(projected)} projected`}
                       </>
-                    : 'no costs recorded'}
+                    : 'no projection for this period'}
                 </p>
               </div>
             </div>
-
-            {curMonthForecastGross > 0 && (
-              <>
-                <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
-                  <div
-                    className={`h-1 rounded-full transition-all ${curMonthCoveragePct >= 80 ? 'bg-emerald-400' : curMonthCoveragePct >= 50 ? 'bg-amber-400' : 'bg-red-400'}`}
-                    style={{ width: `${curMonthCoveragePct}%` }}
-                  />
-                </div>
-                <p className="text-[11px] text-slate-400 mt-1">
-                  {fmt(curMonthConfirmedGross)} on books
-                  {curMonthCashGapToFill > 0
-                    ? ` · ${fmt(curMonthCashGapToFill)} to fill`
-                    : <span className="text-emerald-600"> · covered</span>}
-                </p>
-              </>
-            )}
-          </div>
-        );
-      })()}
-
-      {/* Net income pacing + annual projection — one condensed row */}
-      {hasData && !selMonth && (ytdNetForecast != null || annualNetForecast != null) && (() => {
-        const annualNetPct = annualNetForecast != null && annualNetForecast > 0
-          ? Math.min(100, Math.max(0, (ytdNetIncome / annualNetForecast) * 100))
-          : 0;
-        // Measured against the YTD plan. Not the annual projection — that is
-        // built from YTD actual, so comparing the two is circular.
-        const netStatus = pacingStatus(netPacingVariancePct);
-        return (
-          <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
-            <div className="flex items-start gap-4 sm:gap-6">
-              {ytdNetForecast != null && (
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">YTD Net Income</p>
-                  <p className={`text-xl font-bold leading-tight mt-0.5 ${ytdNetIncome >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
-                    {fmt(ytdNetIncome)}
-                  </p>
-                  <p className="text-[11px] text-slate-400 truncate">of {fmt(ytdNetForecast)} YTD projected</p>
-                </div>
-              )}
-              {annualNetForecast != null && (
-                <div className={`min-w-0 flex-1 ${ytdNetForecast != null ? 'border-l border-slate-100 pl-4 sm:pl-6' : ''}`}>
-                  <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Annual Projection</p>
-                  <p className={`text-xl font-bold leading-tight mt-0.5 ${annualNetForecast >= 0 ? 'text-slate-900' : 'text-red-600'}`}>
-                    {fmt(annualNetForecast)}
-                  </p>
-                  <p className="text-[11px] text-slate-400 truncate">
-                    {fmt(ytdNetIncome)} earned
-                    {projRemainingNet != null && ` · ${fmt(projRemainingNet)} proj. ${MONTHS[currentMonthIdx]}–Dec`}
-                  </p>
-                </div>
-              )}
-              {ytdNetForecast != null && (
-                <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                  <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
-                  <p className={`text-xl font-bold leading-tight mt-0.5 ${netStatus.color}`}>{netStatus.label}</p>
-                  <p className="text-[11px] text-slate-400 truncate">
-                    {netPacingVariance != null
-                      ? <>
-                          <span className={netStatus.color}>
-                            {netPacingVariance >= 0 ? '▲' : '▼'}{fmt(Math.abs(netPacingVariance))}
-                          </span>
-                          {' vs YTD plan'}
-                        </>
-                      : 'no YTD plan'}
-                  </p>
-                </div>
-              )}
-            </div>
-            {annualNetForecast != null && annualNetForecast > 0 && (
+            {projected > 0 && (
               <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
-                <div
-                  className="h-1 rounded-full bg-indigo-500 transition-all"
-                  style={{ width: `${annualNetPct}%` }}
-                />
+                <div className="h-1 rounded-full bg-indigo-500 transition-all"
+                  style={{ width: `${Math.min(100, Math.max(0, (net / projected) * 100))}%` }} />
               </div>
             )}
           </div>
         );
       })()}
+
 
       {/* P&L Chart */}
       {hasData && (
@@ -1093,25 +991,27 @@ export default function Dashboard() {
         <h2 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-3">Occupancy &amp; Pricing</h2>
       )}
 
-      {/* Occupancy — YTD, current month and status against the baseline */}
-      {hasData && !selMonth && (() => {
-        // Variance is in points; express it against the baseline so it shares
-        // the same 5% bands as the revenue and net income tiles.
-        const occVariancePct = occVariance != null && displayOccTarget != null && displayOccTarget > 0
-          ? (occVariance / displayOccTarget) * 100
-          : null;
-        const occStatus = pacingStatus(occVariancePct);
+      {/* One tile: occupancy for the period against the baseline */}
+      {!selMonth && hasData && (() => {
+        if (periodMonths.length === 0) return null;
+        const occ = periodOccActual;
+        const baseline = displayOccTarget;
+        const variancePts = occ != null && baseline != null ? occ - baseline : null;
+        // Variance is in points; express against the baseline so it shares the
+        // same 5% bands as the revenue and net income tiles.
+        const variancePct = variancePts != null && baseline != null && baseline > 0
+          ? (variancePts / baseline) * 100 : null;
+        const status = pacingStatus(variancePct);
+        const nights = periodMonths.reduce((s, m) => s + (monthStmt(m)?.totalNights ?? 0), 0);
+
         return (
           <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
             {editingOccTarget ? (
               <div className="flex items-center gap-2">
                 <span className="text-xs text-slate-500 whitespace-nowrap">Occupancy baseline</span>
-                <input
-                  type="number" value={occTargetInput} onChange={e => setOccTargetInput(e.target.value)}
-                  onBlur={saveOccTarget}
-                  onKeyDown={e => e.key === 'Enter' && saveOccTarget()}
-                  className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="70" autoFocus
-                />
+                <input type="number" value={occTargetInput} onChange={e => setOccTargetInput(e.target.value)}
+                  onBlur={saveOccTarget} onKeyDown={e => e.key === 'Enter' && saveOccTarget()}
+                  className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="70" autoFocus />
                 <span className="text-sm text-slate-400">%</span>
                 <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingOccTarget(false)} className="text-slate-300 hover:text-slate-500">
                   <X className="w-3.5 h-3.5" />
@@ -1120,74 +1020,53 @@ export default function Dashboard() {
             ) : (
               <>
                 <div className="flex items-start gap-4 sm:gap-6">
-                  {/* YTD occupancy */}
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">YTD Occupancy</p>
-                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{ytdOccupancy.toFixed(1)}%</p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      {displayOccTarget != null
-                        ? <>of {displayOccTarget.toFixed(1)}% baseline · {occBaselineLabel}</>
-                        : 'year to date'}
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Occupancy</p>
+                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
+                      {occ != null ? `${occ.toFixed(1)}%` : '—'}
                     </p>
+                    <p className="text-[11px] text-slate-400 truncate">{periodLabel}</p>
                   </div>
-
-                  {/* Current month occupancy */}
                   <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">
-                      {MONTHS_LONG[currentMonthIdx]} Occupancy
-                    </p>
-                    <p className={`text-xl font-bold leading-tight mt-0.5 ${currentMonthOccupancy != null ? 'text-slate-900' : 'text-slate-400'}`}>
-                      {currentMonthOccupancy != null ? `${currentMonthOccupancy.toFixed(1)}%` : '—'}
-                    </p>
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Nights Booked</p>
+                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{nights}</p>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {curMonthOccVariance != null && targetOcc != null
-                        ? <>
-                            <span className={curMonthOccVariance >= 0 ? 'text-emerald-600' : 'text-red-500'}>
-                              {curMonthOccVariance >= 0 ? '▲' : '▼'}{Math.abs(curMonthOccVariance).toFixed(1)}pts
-                            </span>
-                            {' vs '}{targetOcc.toFixed(1)}% target
-                          </>
-                        : 'this month'}
+                      {baseline != null ? `${baseline.toFixed(1)}% baseline · ${occBaselineLabel}` : 'no baseline set'}
                     </p>
                   </div>
-
-                  {/* Status against the baseline */}
                   <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
                       <button
                         onClick={() => { setOccTargetInput(String(settings?.targetOccupancyPct ?? '')); setEditingOccTarget(true); }}
                         className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
-                        title="Override occupancy baseline"
-                      >
+                        title="Override occupancy baseline">
                         <Pencil className="w-3 h-3" />
                       </button>
                     </div>
-                    <p className={`text-xl font-bold leading-tight mt-0.5 ${occStatus.color}`}>{occStatus.label}</p>
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${status.color}`}>{status.label}</p>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {occVariance != null
+                      {variancePts != null
                         ? <>
-                            <span className={occStatus.color}>
-                              {occVariance >= 0 ? '▲' : '▼'}{Math.abs(occVariance).toFixed(1)}pts
-                            </span>
+                            <span className={status.color}>{variancePts >= 0 ? '▲' : '▼'}{Math.abs(variancePts).toFixed(1)}pts</span>
                             {' vs baseline'}
                           </>
                         : 'no baseline set'}
                     </p>
                   </div>
                 </div>
-
-                <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
-                  <div
-                    className={`h-1 rounded-full transition-all ${occStatus.color === 'text-emerald-600' ? 'bg-emerald-500' : 'bg-red-400'}`}
-                    style={{ width: `${Math.min(100, Math.max(0, ytdOccupancy))}%` }}
-                  />
-                </div>
+                {occ != null && (
+                  <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
+                    <div className={`h-1 rounded-full transition-all ${status.color === 'text-emerald-600' ? 'bg-emerald-500' : 'bg-red-400'}`}
+                      style={{ width: `${Math.min(100, Math.max(0, occ))}%` }} />
+                  </div>
+                )}
               </>
             )}
           </div>
         );
       })()}
+
 
       {/* Daily rate — YTD, break-even and status against the target */}
       {hasData && !selMonth && (() => {
