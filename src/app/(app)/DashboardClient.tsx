@@ -523,6 +523,11 @@ export default function DashboardClient() {
   const periodNetActual = periodMonths.reduce((s, m) => s + (monthStmt(m)?.netIncome ?? 0), 0);
 
   // Occupancy is a rate: average across the window rather than a sum.
+  const periodNights = periodMonths.reduce((s, m) => s + (monthStmt(m)?.totalNights ?? 0), 0);
+  // Rate, so it divides the window's revenue by its nights rather than
+  // averaging monthly rates — a month with 2 nights must not weigh the same as
+  // a month with 28.
+  const periodAdr = periodNights > 0 ? periodGrossActual / periodNights : null;
   const periodOccMonths = periodMonths.map(monthStmt).filter((m): m is NonNullable<typeof m> => !!m);
   const periodOccActual = periodOccMonths.length
     ? periodOccMonths.reduce((s, m) => s + m.occupancyRate, 0) / periodOccMonths.length
@@ -576,8 +581,10 @@ export default function DashboardClient() {
 
   const targetOcc = displayOccTarget;
   const occVariance = targetOcc != null ? ytdOccupancy - targetOcc : null;
-  const adrVariance = displayAdrTarget != null && ytdAdr != null ? ytdAdr - displayAdrTarget : null;
-  const adrVariancePct = adrVariance != null && displayAdrTarget ? (adrVariance / displayAdrTarget) * 100 : null;
+  // Rate variance for the selected window, which is what the tile shows
+  const periodAdrVariance = displayAdrTarget != null && periodAdr != null ? periodAdr - displayAdrTarget : null;
+  const periodAdrVariancePct = periodAdrVariance != null && displayAdrTarget
+    ? (periodAdrVariance / displayAdrTarget) * 100 : null;
 
   // Year Health: composite score from the key pacing and coverage signals
   const healthSignals: { label: string; score: HealthScore; detail: string }[] = [];
@@ -1002,7 +1009,6 @@ export default function DashboardClient() {
         const variancePct = variancePts != null && baseline != null && baseline > 0
           ? (variancePts / baseline) * 100 : null;
         const status = pacingStatus(variancePct);
-        const nights = periodMonths.reduce((s, m) => s + (monthStmt(m)?.totalNights ?? 0), 0);
 
         return (
           <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
@@ -1029,7 +1035,7 @@ export default function DashboardClient() {
                   </div>
                   <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                     <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Nights Booked</p>
-                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{nights}</p>
+                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{periodNights}</p>
                     <p className="text-[11px] text-slate-400 truncate">
                       {baseline != null ? `${baseline.toFixed(1)}% baseline · ${occBaselineLabel}` : 'no baseline set'}
                     </p>
@@ -1068,9 +1074,10 @@ export default function DashboardClient() {
       })()}
 
 
-      {/* Daily rate — YTD, break-even and status against the target */}
+      {/* Daily rate — period rate, break-even and status against the target */}
       {hasData && !selMonth && (() => {
-        const adrStatus = pacingStatus(adrVariancePct);
+        if (periodMonths.length === 0) return null;
+        const adrStatus = pacingStatus(periodAdrVariancePct);
         return (
           <div className="bg-white rounded-xl border border-slate-200 px-5 py-4 shadow-sm mb-6">
             {editingAdrTarget && derivedAdrTarget == null ? (
@@ -1092,15 +1099,16 @@ export default function DashboardClient() {
                 <div className="flex items-start gap-4 sm:gap-6">
                   {/* YTD daily rate */}
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">YTD Daily Rate</p>
-                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{ytdAdr != null ? fmt(ytdAdr) : '—'}</p>
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Daily Rate</p>
+                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{periodAdr != null ? fmt(periodAdr) : '—'}</p>
                     <p className="text-[11px] text-slate-400 truncate">
                       {displayAdrTarget != null
                         ? <>
                             of {fmt(displayAdrTarget)} target
                             {derivedAdrTarget != null && ` @ ${displayOccTarget?.toFixed(1)}% occ`}
+                            {` · ${periodLabel}`}
                           </>
-                        : 'per night YTD'}
+                        : `${periodNights} nights · ${periodLabel}`}
                     </p>
                   </div>
 
@@ -1133,10 +1141,10 @@ export default function DashboardClient() {
                     </div>
                     <p className={`text-xl font-bold leading-tight mt-0.5 ${adrStatus.color}`}>{adrStatus.label}</p>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {adrVariancePct != null
+                      {periodAdrVariancePct != null
                         ? <>
                             <span className={adrStatus.color}>
-                              {adrVariancePct >= 0 ? '▲' : '▼'}{Math.abs(adrVariancePct).toFixed(1)}%
+                              {periodAdrVariancePct >= 0 ? '▲' : '▼'}{Math.abs(periodAdrVariancePct).toFixed(1)}%
                             </span>
                             {' vs target'}
                           </>
@@ -1145,11 +1153,11 @@ export default function DashboardClient() {
                   </div>
                 </div>
 
-                {displayAdrTarget != null && displayAdrTarget > 0 && ytdAdr != null && (
+                {displayAdrTarget != null && displayAdrTarget > 0 && periodAdr != null && (
                   <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
                     <div
                       className={`h-1 rounded-full transition-all ${adrStatus.color === 'text-emerald-600' ? 'bg-emerald-500' : 'bg-red-400'}`}
-                      style={{ width: `${Math.min(100, Math.max(0, (ytdAdr / displayAdrTarget) * 100))}%` }}
+                      style={{ width: `${Math.min(100, Math.max(0, (periodAdr / displayAdrTarget) * 100))}%` }}
                     />
                   </div>
                 )}
