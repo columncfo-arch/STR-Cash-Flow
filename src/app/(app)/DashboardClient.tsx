@@ -581,10 +581,6 @@ export default function DashboardClient() {
 
   const targetOcc = displayOccTarget;
   const occVariance = targetOcc != null ? ytdOccupancy - targetOcc : null;
-  // Rate variance for the selected window, which is what the tile shows
-  const periodAdrVariance = displayAdrTarget != null && periodAdr != null ? periodAdr - displayAdrTarget : null;
-  const periodAdrVariancePct = periodAdrVariance != null && displayAdrTarget
-    ? (periodAdrVariance / displayAdrTarget) * 100 : null;
 
   // Year Health: composite score from the key pacing and coverage signals
   const healthSignals: { label: string; score: HealthScore; detail: string }[] = [];
@@ -1007,7 +1003,10 @@ export default function DashboardClient() {
           <h2 className="text-xs uppercase tracking-wide text-slate-400 font-semibold">Occupancy &amp; Pricing</h2>
         </div>
 
-      {/* One tile: occupancy for the period against the baseline */}
+      {/* Occupancy and rate for the period, with one status. Break-even rate,
+          nights booked and a second rate status came out: break-even is a
+          full-year figure that ignores the filter, and two status verdicts in
+          one section left it unclear which one the section was reporting. */}
       {!selMonth && hasData && (() => {
         if (periodMonths.length === 0) return null;
         const occ = periodOccActual;
@@ -1032,23 +1031,58 @@ export default function DashboardClient() {
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
+            ) : editingAdrTarget && derivedAdrTarget == null ? (
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-slate-500 whitespace-nowrap">Daily rate target</span>
+                <span className="text-sm text-slate-400">$</span>
+                <input type="number" value={adrTargetInput} onChange={e => setAdrTargetInput(e.target.value)}
+                  onBlur={saveAdrTarget} onKeyDown={e => e.key === 'Enter' && saveAdrTarget()}
+                  className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="225" autoFocus />
+                <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingAdrTarget(false)} className="text-slate-300 hover:text-slate-500">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
             ) : (
               <>
                 <div className="flex items-start gap-4 sm:gap-6">
+                  {/* Occupancy */}
                   <div className="min-w-0 flex-1">
                     <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Occupancy</p>
                     <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
                       {occ != null ? `${occ.toFixed(1)}%` : '—'}
                     </p>
-                    <p className="text-[11px] text-slate-400 truncate">{periodLabel}</p>
-                  </div>
-                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Nights Booked</p>
-                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{periodNights}</p>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {baseline != null ? `${baseline.toFixed(1)}% baseline · ${occBaselineLabel}` : 'no baseline set'}
+                      {baseline != null ? `of ${baseline.toFixed(1)}% baseline · ${periodLabel}` : periodLabel}
                     </p>
                   </div>
+
+                  {/* Daily rate */}
+                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Daily Rate</p>
+                      {derivedAdrTarget == null && (
+                        <button
+                          onClick={() => { setAdrTargetInput(String(settings?.targetAdr ?? '')); setEditingAdrTarget(true); }}
+                          className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
+                          title="Set daily rate target">
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
+                      {periodAdr != null ? fmt(periodAdr) : '—'}
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {displayAdrTarget != null
+                        ? <>
+                            of {fmt(displayAdrTarget)} target
+                            {derivedAdrTarget != null && ` @ ${displayOccTarget?.toFixed(1)}% occ`}
+                          </>
+                        : `${periodNights} nights booked`}
+                    </p>
+                  </div>
+
+                  {/* Status — occupancy against its baseline */}
                   <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                     <div className="flex items-start justify-between gap-2">
                       <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
@@ -1064,12 +1098,13 @@ export default function DashboardClient() {
                       {variancePts != null
                         ? <>
                             <span className={status.color}>{variancePts >= 0 ? '▲' : '▼'}{Math.abs(variancePts).toFixed(1)}pts</span>
-                            {' vs baseline'}
+                            {` vs baseline · ${occBaselineLabel}`}
                           </>
                         : 'no baseline set'}
                     </p>
                   </div>
                 </div>
+
                 {occ != null && (
                   <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
                     <div className={`h-1 rounded-full transition-all ${status.color === 'text-emerald-600' ? 'bg-emerald-500' : 'bg-red-400'}`}
@@ -1082,100 +1117,6 @@ export default function DashboardClient() {
         );
       })()}
 
-        <div className="border-t border-slate-100">
-      {/* Daily rate — period rate, break-even and status against the target */}
-      {hasData && !selMonth && (() => {
-        if (periodMonths.length === 0) return null;
-        const adrStatus = pacingStatus(periodAdrVariancePct);
-        return (
-          <div className="px-5 py-4">
-            {editingAdrTarget && derivedAdrTarget == null ? (
-              <div className="flex items-center gap-2">
-                <span className="text-xs text-slate-500 whitespace-nowrap">ADR target</span>
-                <span className="text-sm text-slate-400">$</span>
-                <input
-                  type="number" value={adrTargetInput} onChange={e => setAdrTargetInput(e.target.value)}
-                  onBlur={saveAdrTarget}
-                  onKeyDown={e => e.key === 'Enter' && saveAdrTarget()}
-                  className="flex-1 text-sm border border-slate-200 rounded-lg px-3 py-1.5" placeholder="225" autoFocus
-                />
-                <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingAdrTarget(false)} className="text-slate-300 hover:text-slate-500">
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              </div>
-            ) : (
-              <>
-                <div className="flex items-start gap-4 sm:gap-6">
-                  {/* YTD daily rate */}
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Daily Rate</p>
-                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{periodAdr != null ? fmt(periodAdr) : '—'}</p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      {displayAdrTarget != null
-                        ? <>
-                            of {fmt(displayAdrTarget)} target
-                            {derivedAdrTarget != null && ` @ ${displayOccTarget?.toFixed(1)}% occ`}
-                            {` · ${periodLabel}`}
-                          </>
-                        : `${periodNights} nights · ${periodLabel}`}
-                    </p>
-                  </div>
-
-                  {/* Break-even rate on remaining open nights */}
-                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Break-Even Rate</p>
-                    <p className={`text-xl font-bold leading-tight mt-0.5 ${breakEvenAdr == null && stillToBook === 0 ? 'text-emerald-600' : breakEvenAdr != null ? 'text-slate-900' : 'text-slate-400'}`}>
-                      {breakEvenAdr != null ? fmt(breakEvenAdr) : stillToBook === 0 ? 'Covered' : '—'}
-                    </p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      {breakEvenAdr != null
-                        ? `over ${openNights} open nights`
-                        : stillToBook === 0 ? 'bookings exceed target' : 'no target set'}
-                    </p>
-                  </div>
-
-                  {/* Status against the ADR target */}
-                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
-                      {derivedAdrTarget == null && (
-                        <button
-                          onClick={() => { setAdrTargetInput(String(settings?.targetAdr ?? '')); setEditingAdrTarget(true); }}
-                          className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
-                          title="Set ADR target"
-                        >
-                          <Pencil className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                    <p className={`text-xl font-bold leading-tight mt-0.5 ${adrStatus.color}`}>{adrStatus.label}</p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      {periodAdrVariancePct != null
-                        ? <>
-                            <span className={adrStatus.color}>
-                              {periodAdrVariancePct >= 0 ? '▲' : '▼'}{Math.abs(periodAdrVariancePct).toFixed(1)}%
-                            </span>
-                            {' vs target'}
-                          </>
-                        : 'no target set'}
-                    </p>
-                  </div>
-                </div>
-
-                {displayAdrTarget != null && displayAdrTarget > 0 && periodAdr != null && (
-                  <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
-                    <div
-                      className={`h-1 rounded-full transition-all ${adrStatus.color === 'text-emerald-600' ? 'bg-emerald-500' : 'bg-red-400'}`}
-                      style={{ width: `${Math.min(100, Math.max(0, (periodAdr / displayAdrTarget) * 100))}%` }}
-                    />
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-        );
-      })()}
-        </div>
         <div className="border-t border-slate-100">
       {/* ── Pricing & Occupancy chart ── */}
       {hasData && (
