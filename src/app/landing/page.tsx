@@ -86,10 +86,10 @@ export default function LandingPage() {
           14-day free trial · No credit card required
         </div>
         <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 leading-tight mb-4 sm:mb-5 max-w-3xl mx-auto">
-          Start treating your rental like a business.
+          Your Short-Term Rental CFO
         </h1>
         <p className="text-base sm:text-lg text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
-          Platform fees, mortgage, ADR, occupancy rate, expenses — they all eat your payout. HostCFO shows your actual net cash flow, forecasts where you're heading, and tells you what to fix.
+          Stop running your rental like a hobby, start running it like a business — get tools to increase revenue, cut costs, and generate yield.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
           <Link href={`${APP_URL}/onboarding`} className="w-full sm:w-auto bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
