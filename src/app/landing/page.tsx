@@ -72,7 +72,7 @@ export default function LandingPage() {
             <span className="font-bold text-slate-900">HostCFO</span>
           </div>
           <div className="flex items-center gap-3">
-            <Link href={`${APP_URL}/sign-in`} className="hidden sm:block text-sm text-slate-500 hover:text-slate-800 transition-colors">Log in</Link>
+            <Link href={`${APP_URL}/sign-in`} className="text-sm text-slate-500 hover:text-slate-800 transition-colors">Log in</Link>
             <Link href={`${APP_URL}/onboarding`} className="bg-emerald-600 text-white text-sm px-4 py-2 rounded-lg font-medium hover:bg-emerald-700 transition-colors whitespace-nowrap">
               Start free trial
             </Link>
@@ -191,7 +191,7 @@ export default function LandingPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-4">
             <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Simple pricing</h2>
-            <p className="text-slate-500 text-base sm:text-lg">14 days free, then pay by property count. No feature gating.</p>
+            <p className="text-slate-500 text-base sm:text-lg">14 days free, then pay by property count.</p>
           </div>
           <p className="text-center text-sm text-emerald-600 font-medium mb-8 sm:mb-12">Save 20% with annual billing</p>
           <div className="grid sm:grid-cols-3 gap-4 sm:gap-6 max-w-4xl mx-auto">
