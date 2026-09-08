@@ -7,15 +7,15 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 const FEATURES: { icon: React.ComponentType<{ className?: string }>; title: React.ReactNode; description: string; iconColor: string; iconBg: string }[] = [
   {
     icon: TrendingUp,
-    title: 'AirDNA tells you the market average. We map out your unique plan.',
-    description: "Most owners never set a target — they lean on generic AirDNA projections and find out they're behind only when the season's already over. HostCFO tracks your true historical performance, builds your plan against it, and shows you the specific levers — rate, occupancy, length of stay — to close the gap before it becomes one.",
+    title: 'Build a financial forecast — and hit your revenue goals',
+    description: "Most owners never set a real target — they eyeball generic market averages and find out they're behind only when the season's already over. HostCFO builds a forecast from your own historical performance, tracks you against it month by month, and shows you the specific levers — rate, occupancy, length of stay — to close the gap before it becomes one.",
     iconColor: 'text-emerald-600',
     iconBg: 'bg-emerald-50',
   },
   {
     icon: BarChart3,
-    title: 'Know when you\'re behind — and get back on track.',
-    description: "HostCFO tracks your income and expenses automatically, compares them to your plan every month, and tells you exactly what to fix — a rate that's too low, a cost that's crept up — while there's still time to act.",
+    title: 'Plan long-term to increase return on investment',
+    description: "Your rental is an investment, not just a monthly payout. HostCFO projects your equity as your loan pays down and your property appreciates, and tracks your total return — equity plus cash flow — against every dollar you've put in, so you can see the long-term payoff, not just this month's numbers.",
     iconColor: 'text-blue-600',
     iconBg: 'bg-blue-50',
   },
@@ -150,8 +150,8 @@ export default function LandingPage() {
       <section className="bg-slate-50 py-16 sm:py-24">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-10 sm:mb-16">
-            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">The financial layer your STR is missing</h2>
-            <p className="text-slate-500 text-base sm:text-lg max-w-lg mx-auto">Built for operators who treat their rental like a business, not a side project.</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">The financial layer your STR needs to grow</h2>
+            <p className="text-slate-500 text-base sm:text-lg max-w-lg mx-auto">Measure more than payout amount — guide your STR to increased profitability, higher revenue, and lower expenses with CFO-caliber tools.</p>
           </div>
           <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
             {FEATURES.map((f, i) => (
