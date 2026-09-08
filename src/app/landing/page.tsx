@@ -58,8 +58,7 @@ const STEPS = [
   { n: '03', title: 'See your real numbers', body: 'Net income, forecasts, and pacing against your annual target — all in one place.' },
 ];
 
-const BARS = [65, 75, 85, 80, 100, 95, 88, 40, 35, 0, 20, 15];
-const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const PLATFORMS = ['Airbnb', 'Vrbo', 'Booking.com', 'Expedia', 'Agoda', 'Trip.com', 'Houfy', 'Google Vacation Rentals'];
 
 export default function LandingPage() {
   return (
@@ -81,66 +80,80 @@ export default function LandingPage() {
       </header>
 
       {/* Hero */}
-      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 sm:pt-20 pb-12 sm:pb-20 text-center">
-        <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-6 sm:mb-8">
-          14-day free trial · No credit card required
-        </div>
-        <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 leading-tight mb-4 sm:mb-5 max-w-3xl mx-auto">
-          Your Short-Term Rental CFO
-        </h1>
-        <p className="text-base sm:text-lg text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
-          Stop running your rental like a hobby, start running it like a business — get tools to increase revenue, cut costs, and generate yield.
-        </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-          <Link href={`${APP_URL}/onboarding`} className="w-full sm:w-auto bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
-            Start your free trial <ChevronRight className="w-4 h-4" />
-          </Link>
-          <Link href={`${APP_URL}/sign-in`} className="text-slate-400 text-sm hover:text-slate-600 transition-colors">
-            Already have an account? Log in →
-          </Link>
+      <section className="relative overflow-hidden">
+        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
+          <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1600 640" preserveAspectRatio="xMidYMid slice" fill="none">
+            <defs>
+              <linearGradient id="heroLineA" x1="0" y1="1" x2="1" y2="0">
+                <stop offset="0%" stopColor="#a7f3d0" stopOpacity="0" />
+                <stop offset="60%" stopColor="#34d399" stopOpacity="0.07" />
+                <stop offset="100%" stopColor="#047857" stopOpacity="0.14" />
+              </linearGradient>
+              <linearGradient id="heroLineB" x1="0" y1="1" x2="1" y2="0">
+                <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0" />
+                <stop offset="60%" stopColor="#10b981" stopOpacity="0.05" />
+                <stop offset="100%" stopColor="#059669" stopOpacity="0.11" />
+              </linearGradient>
+              <filter id="heroSoftBlur" x="-20%" y="-20%" width="140%" height="140%">
+                <feGaussianBlur stdDeviation="18" />
+              </filter>
+            </defs>
+
+            {/* soft ribbon glow, logarithmic sweep: steep rise then flattening toward upper right */}
+            <path
+              d="M -150 620 C 0 460, 150 350, 320 300 C 550 240, 800 200, 1050 175 C 1300 155, 1500 140, 1800 130"
+              stroke="url(#heroLineA)"
+              strokeWidth="80"
+              strokeLinecap="round"
+              filter="url(#heroSoftBlur)"
+            />
+            <path
+              d="M -150 560 C 0 410, 140 300, 310 255 C 550 195, 800 160, 1040 140 C 1280 120, 1480 108, 1800 100"
+              stroke="url(#heroLineB)"
+              strokeWidth="48"
+              strokeLinecap="round"
+              filter="url(#heroSoftBlur)"
+            />
+
+            {/* crisp ascending chart line, same logarithmic shape */}
+            <path
+              d="M -80 540 C 40 400, 140 300, 300 255 C 520 200, 740 165, 980 140 C 1220 118, 1420 105, 1700 98"
+              stroke="#059669"
+              strokeOpacity="0.16"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+          </svg>
         </div>
 
-        {/* App preview */}
-        <div className="mt-10 sm:mt-16 rounded-2xl border border-slate-200 shadow-2xl overflow-hidden text-left">
-          <div className="bg-slate-900 px-4 py-3 flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-red-400" />
-            <div className="w-3 h-3 rounded-full bg-amber-400" />
-            <div className="w-3 h-3 rounded-full bg-emerald-400" />
-            <span className="text-slate-500 text-xs ml-3">hostcfo.com</span>
+        <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 pt-12 sm:pt-20 pb-12 sm:pb-20 text-center">
+          <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-6 sm:mb-8">
+            14-day free trial · No credit card required
           </div>
-          <div className="bg-slate-50 p-4 sm:p-6 space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-              {[
-                { label: 'This Year Target', value: '$47,211', sub: 'of $44,923 YTD target', tag: '▲ $2,288 (5.1%)', green: true },
-                { label: 'July Target', value: '$8,940', sub: 'of $8,148 target', tag: '▲ $792 (9.7%)', green: true },
-                { label: 'Avg Occupancy', value: '79.9%', sub: 'Target 67%', tag: '▲ 12.9pts', green: true },
-                { label: 'Avg Daily Rate', value: '$254', sub: 'Target $225', tag: '▲ $29 (12.9%)', green: true },
-              ].map(c => (
-                <div key={c.label} className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-sm">
-                  <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1 sm:mb-2 leading-tight">{c.label}</p>
-                  <p className="text-lg sm:text-xl font-bold text-slate-900">{c.value}</p>
-                  <p className="text-xs text-slate-400 mt-0.5 mb-2">{c.sub}</p>
-                  <span className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded-lg ${c.green ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>{c.tag}</span>
-                </div>
+          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 leading-tight mb-4 sm:mb-5 max-w-3xl mx-auto">
+            Your Short-Term Rental CFO
+          </h1>
+          <p className="text-base sm:text-lg text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
+            Stop running your rental like a hobby, start running it like a business — get tools to increase revenue, cut costs, and generate yield.
+          </p>
+          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+            <Link href={`${APP_URL}/onboarding`} className="w-full sm:w-auto bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+              Start your free trial <ChevronRight className="w-4 h-4" />
+            </Link>
+            <Link href={`${APP_URL}/sign-in`} className="text-slate-400 text-sm hover:text-slate-600 transition-colors">
+              Already have an account? Log in →
+            </Link>
+          </div>
+
+          {/* Platform trust bar */}
+          <div className="mt-12 sm:mt-20">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-6 sm:mb-8">
+              Connects with the platforms you already use
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-x-7 gap-y-4 sm:gap-x-10 text-slate-400">
+              {PLATFORMS.map(p => (
+                <span key={p} className="text-base sm:text-lg font-bold tracking-tight">{p}</span>
               ))}
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-              <p className="text-sm font-semibold text-slate-700 mb-4">Monthly Revenue by Platform</p>
-              <div className="flex items-end gap-1 h-24">
-                {BARS.map((h, i) => (
-                  <div key={i} className="flex-1 h-full flex flex-col gap-0.5 justify-end">
-                    <div className="w-full bg-indigo-400 rounded-t-sm" style={{ height: `${h * 0.22}%` }} />
-                    <div className="w-full bg-rose-400 rounded-t-sm" style={{ height: `${h * 0.55}%` }} />
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-3 mt-3 text-xs text-slate-400">
-                {MONTHS_SHORT.map(m => <span key={m} className="flex-1 text-center">{m}</span>)}
-              </div>
-              <div className="flex gap-4 mt-3">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-rose-400 inline-block" />Airbnb</span>
-                <span className="flex items-center gap-1.5 text-slate-400"><span className="w-2.5 h-2.5 rounded-sm bg-indigo-400 inline-block" />VRBO</span>
-              </div>
             </div>
           </div>
         </div>
