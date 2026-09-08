@@ -1,6 +1,7 @@
 'use client';
+import { useState } from 'react';
 import Link from 'next/link';
-import { BookOpen, TrendingUp, Users, BarChart3, ChevronRight, Check } from 'lucide-react';
+import { BookOpen, TrendingUp, Users, BarChart3, Activity, Sliders, UserPlus, ChevronRight, Check } from 'lucide-react';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
@@ -60,7 +61,50 @@ const STEPS = [
 
 const PLATFORMS = ['Airbnb', 'Vrbo', 'Booking.com', 'Expedia', 'Agoda', 'Trip.com', 'Houfy', 'Google Vacation Rentals'];
 
+// Illustrative 12-month net income forecast with realistic STR seasonality (summer peak).
+const FORECAST_1YR_LINE = 'M0,160 L45,156 L91,139 L136,120 L182,93 L227,56 L273,26 L318,20 L364,64 L409,104 L455,135 L500,141';
+const FORECAST_1YR_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// Illustrative 5-year stack: cash flow + principal paydown + equity appreciation, in $k.
+const FORECAST_5YR = [
+  { year: 'Y1', cash: 18, paydown: 6, equity: 9 },
+  { year: 'Y2', cash: 26, paydown: 13, equity: 22 },
+  { year: 'Y3', cash: 34, paydown: 21, equity: 38 },
+  { year: 'Y4', cash: 44, paydown: 30, equity: 58 },
+  { year: 'Y5', cash: 56, paydown: 40, equity: 84 },
+];
+const FORECAST_5YR_MAX = 180;
+
+const PULSE_DATA = {
+  month: { emoji: '🚀', headline: 'Net Income is 8% Ahead of July Target.', actual: 8940, target: 8148 },
+  season: { emoji: '✅', headline: 'Tracking 4% Ahead of Season Plan.', actual: 34200, target: 32900 },
+  ytd: { emoji: '📈', headline: 'YTD Net Income is 5% Ahead of Target.', actual: 47211, target: 44923 },
+} as const;
+type PulseView = keyof typeof PULSE_DATA;
+const PULSE_TABS: { key: PulseView; label: string }[] = [
+  { key: 'month', label: 'This Month' },
+  { key: 'season', label: 'This Season' },
+  { key: 'ytd', label: 'Year-to-Date' },
+];
+
+const GUEST_PROFILE = { initials: 'SJ', name: 'Sarah Jenkins', stays: 3, ltv: 4200 };
+
 export default function LandingPage() {
+  const [forecastYears, setForecastYears] = useState<1 | 5>(1);
+  const [pulseView, setPulseView] = useState<PulseView>('month');
+  const [rateChange, setRateChange] = useState(20);
+  const [ratePulsing, setRatePulsing] = useState(false);
+
+  function handleRateChange(v: number) {
+    setRateChange(v);
+    setRatePulsing(true);
+    window.setTimeout(() => setRatePulsing(false), 200);
+  }
+
+  const rateAnnualImpact = rateChange * 240;
+  const pulse = PULSE_DATA[pulseView];
+  const pulsePct = Math.min(100, Math.round((pulse.actual / pulse.target) * 100));
+
   return (
     <div className="min-h-screen bg-white overflow-x-hidden">
       {/* Top nav */}
@@ -174,7 +218,194 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* How it works */}
+      {/* How It Works — interactive */}
+      <section className="py-16 sm:py-24">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-14 sm:mb-20">
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">How It Works</h2>
+            <p className="text-slate-500 text-base sm:text-lg max-w-lg mx-auto">Every panel below is interactive — try it.</p>
+          </div>
+
+          {/* 1. Target-Based Forecaster */}
+          <div className="grid md:grid-cols-2 gap-10 md:gap-16 items-center mb-16 sm:mb-24">
+            <div className="order-1">
+              <div className="inline-flex items-center gap-2 text-emerald-600 font-semibold text-xs uppercase tracking-wide mb-3">
+                <TrendingUp className="w-4 h-4" /> Financial Forecasting &amp; Long-Term Forecast
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4 leading-snug">
+                Create a Predictive Roadmap for Your Rental, Ditch Your Spreadsheets
+              </h3>
+              <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+                Stop relying on generic market averages that don&rsquo;t reflect your unique home. HostCFO builds an intelligent, multi-year model centered on your actual history, seasonal trends, and true expense rates. Track gross revenue, net income, occupancy, and ADR across a 12-month window or project 5 years out to see how equity appreciation and principal paydown transform your overall return on investment.
+              </p>
+            </div>
+            <div className="order-2 rounded-2xl border border-slate-200 shadow-xl bg-white p-6 sm:p-8">
+              <div className="inline-flex rounded-lg border border-slate-200 p-1 bg-slate-50 mb-6">
+                <button
+                  onClick={() => setForecastYears(1)}
+                  className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-semibold transition-colors ${forecastYears === 1 ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}
+                >
+                  Look Ahead 1 Year
+                </button>
+                <button
+                  onClick={() => setForecastYears(5)}
+                  className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-semibold transition-colors ${forecastYears === 5 ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}
+                >
+                  Look Ahead 5 Years
+                </button>
+              </div>
+
+              {forecastYears === 1 ? (
+                <>
+                  <svg viewBox="0 0 500 180" className="w-full h-32 sm:h-40" preserveAspectRatio="none">
+                    <defs>
+                      <linearGradient id="forecast1Fill" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="0%" stopColor="#10b981" stopOpacity="0.25" />
+                        <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+                      </linearGradient>
+                    </defs>
+                    <path d={`${FORECAST_1YR_LINE} L500,180 L0,180 Z`} fill="url(#forecast1Fill)" />
+                    <path d={FORECAST_1YR_LINE} fill="none" stroke="#059669" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                  <div className="flex justify-between mt-2 text-[10px] sm:text-xs text-slate-400">
+                    {FORECAST_1YR_MONTHS.map(m => <span key={m}>{m}</span>)}
+                  </div>
+                  <p className="text-xs text-slate-400 mt-4">Net Income forecast, built from your own seasonality — not a generic market curve.</p>
+                </>
+              ) : (
+                <>
+                  <div className="flex items-end justify-between gap-3 sm:gap-4 h-40 sm:h-48">
+                    {FORECAST_5YR.map(row => (
+                      <div key={row.year} className="flex-1 flex flex-col items-center gap-2 h-full">
+                        <div className="w-full flex flex-col justify-end flex-1">
+                          <div className="w-full bg-violet-400 rounded-t-sm" style={{ height: `${(row.equity / FORECAST_5YR_MAX) * 100}%` }} />
+                          <div className="w-full bg-indigo-400" style={{ height: `${(row.paydown / FORECAST_5YR_MAX) * 100}%` }} />
+                          <div className="w-full bg-emerald-500 rounded-b-sm" style={{ height: `${(row.cash / FORECAST_5YR_MAX) * 100}%` }} />
+                        </div>
+                        <span className="text-[10px] sm:text-xs text-slate-400">{row.year}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-4 mt-4 text-[10px] sm:text-xs text-slate-500">
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-emerald-500 inline-block" />Cash Flow</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-indigo-400 inline-block" />Principal Paydown</span>
+                    <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-violet-400 inline-block" />Equity Appreciation</span>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+
+          {/* 2. The Real-Time Pulse */}
+          <div className="grid md:grid-cols-2 gap-10 md:gap-16 items-center mb-16 sm:mb-24">
+            <div className="order-2 md:order-1 rounded-2xl border border-slate-200 shadow-xl bg-white p-6 sm:p-8">
+              <div className="inline-flex flex-wrap rounded-lg border border-slate-200 p-1 bg-slate-50 mb-6">
+                {PULSE_TABS.map(t => (
+                  <button
+                    key={t.key}
+                    onClick={() => setPulseView(t.key)}
+                    className={`px-3 py-1.5 rounded-md text-xs sm:text-sm font-semibold transition-colors whitespace-nowrap ${pulseView === t.key ? 'bg-white text-emerald-700 shadow-sm' : 'text-slate-500'}`}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+              <div className="flex items-start gap-3 mb-5">
+                <span className="text-3xl leading-none">{pulse.emoji}</span>
+                <p className="text-lg sm:text-xl font-bold text-slate-900 leading-snug">{pulse.headline}</p>
+              </div>
+              <div className="h-2.5 rounded-full bg-slate-100 overflow-hidden mb-3">
+                <div className="h-full bg-emerald-500 rounded-full transition-all duration-300" style={{ width: `${pulsePct}%` }} />
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-slate-500">Actual <span className="font-semibold text-slate-900">${pulse.actual.toLocaleString()}</span></span>
+                <span className="text-slate-400">Target ${pulse.target.toLocaleString()}</span>
+              </div>
+            </div>
+            <div className="order-1 md:order-2">
+              <div className="inline-flex items-center gap-2 text-emerald-600 font-semibold text-xs uppercase tracking-wide mb-3">
+                <Activity className="w-4 h-4" /> Financial Performance
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4 leading-snug">
+                Track Performance Real-Time, Against Your Planned Forecast
+              </h3>
+              <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+                Know exactly where your rental business stands today without jumping between five different platform tabs. Aggregating live booking data directly from Airbnb, Vrbo, Booking.com, Expedia, and Google Vacation Rentals, HostCFO automatically compares your actual performance against your planned targets. Instantly see your true financial status for this month, this season, or year-to-date so you can make confident, proactive business adjustments.
+              </p>
+            </div>
+          </div>
+
+          {/* 3. The "What-If" Sandbox */}
+          <div className="grid md:grid-cols-2 gap-10 md:gap-16 items-center mb-16 sm:mb-24">
+            <div className="order-1">
+              <div className="inline-flex items-center gap-2 text-emerald-600 font-semibold text-xs uppercase tracking-wide mb-3">
+                <Sliders className="w-4 h-4" /> Optimization &amp; Scenario Analysis
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4 leading-snug">
+                Run &ldquo;What-If&rdquo; Scenarios to Spot Your Next Big Revenue Growth Move
+              </h3>
+              <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+                Test big financial decisions risk-free before you pull the trigger. Our optimization sandbox lets you model infinite financial situations to see exactly how small tweaks yield massive returns. Find out how increasing your ADR by $15, lowering operational fees, or purchasing an additional short-term rental property affects your portfolio&rsquo;s cash flow, cap rate, and bottom line.
+              </p>
+            </div>
+            <div className="order-2 rounded-2xl border border-slate-200 shadow-xl bg-white p-6 sm:p-8">
+              <p className="text-sm font-semibold text-slate-700 mb-4">
+                What if I {rateChange >= 0 ? 'increase' : 'cut'} nightly rates by ${Math.abs(rateChange)}?
+              </p>
+              <input
+                type="range"
+                min={-20}
+                max={50}
+                step={5}
+                value={rateChange}
+                onChange={e => handleRateChange(Number(e.target.value))}
+                className="w-full accent-emerald-600 mb-6"
+              />
+              <div className={`rounded-xl bg-emerald-50 p-5 text-center transition-transform duration-200 ${ratePulsing ? 'scale-105' : 'scale-100'}`}>
+                <p className={`text-2xl sm:text-3xl font-black ${rateAnnualImpact >= 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                  {rateAnnualImpact >= 0 ? '+' : '−'}${Math.abs(rateAnnualImpact).toLocaleString()}
+                </p>
+                <p className="text-xs sm:text-sm text-slate-500 mt-1">
+                  {rateAnnualImpact >= 0 ? 'Adds to' : 'Cuts from'} your annual Net Income
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* 4. The Direct Revenue Engine */}
+          <div className="grid md:grid-cols-2 gap-10 md:gap-16 items-center">
+            <div className="order-2 md:order-1 group rounded-2xl border border-slate-200 shadow-xl bg-white p-6 sm:p-8">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-emerald-100 text-emerald-700 font-bold flex items-center justify-center text-lg flex-shrink-0">
+                  {GUEST_PROFILE.initials}
+                </div>
+                <div>
+                  <p className="font-bold text-slate-900">{GUEST_PROFILE.name}</p>
+                  <p className="text-sm text-slate-500">{GUEST_PROFILE.stays} stays · ${GUEST_PROFILE.ltv.toLocaleString()} lifetime value</p>
+                </div>
+              </div>
+              <div className="mt-6 pt-6 border-t border-slate-100 transition-all duration-200 opacity-100 sm:opacity-0 sm:translate-y-1 sm:group-hover:opacity-100 sm:group-hover:translate-y-0">
+                <button className="w-full text-xs sm:text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 transition-colors px-3.5 py-2.5 rounded-lg">
+                  Invite Back with Direct Booking Discount
+                </button>
+              </div>
+            </div>
+            <div className="order-1 md:order-2">
+              <div className="inline-flex items-center gap-2 text-emerald-600 font-semibold text-xs uppercase tracking-wide mb-3">
+                <UserPlus className="w-4 h-4" /> Guest List &amp; Recurring Revenue
+              </div>
+              <h3 className="text-xl sm:text-2xl font-bold text-slate-900 mb-4 leading-snug">
+                Turn Your Loyal Guests Into Recurring, Valuable Relationships
+              </h3>
+              <p className="text-slate-600 text-sm sm:text-base leading-relaxed">
+                Break free from complete dependency on booking platform algorithms and expensive marketplace fees. HostCFO securely logs guest names, contact details, stay dates, and lifetime spend so you can transition transactional visitors into deep direct-booking relationships. Engage the guests who already love your property, invite them back directly, and build a predictable pipeline of recurring revenue.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Onboarding steps */}
       <section className="py-16 sm:py-24">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-10 sm:mb-16">
