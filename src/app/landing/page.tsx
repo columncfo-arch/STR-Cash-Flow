@@ -87,7 +87,7 @@ export default function LandingPage() {
         <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 leading-tight mb-4 sm:mb-5 max-w-3xl mx-auto">
           Your Short-Term Rental CFO
         </h1>
-        <p className="text-base sm:text-lg text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
+        <p className="text-base sm:text-lg font-medium text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
           Stop running your rental like a hobby, start running it like a business — get tools to increase revenue, cut costs, and generate yield.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
@@ -127,7 +127,7 @@ export default function LandingPage() {
               d="M0,170 L55,160 L109,145 L164,151 L218,129 L273,106 L327,78 L382,57 L436,71 L491,53 L545,41 L600,20"
               fill="none"
               stroke="#059669"
-              strokeWidth="2.5"
+              strokeWidth="3.5"
               strokeLinecap="round"
               strokeLinejoin="round"
             />
