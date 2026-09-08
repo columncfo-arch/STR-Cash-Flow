@@ -7,15 +7,15 @@ const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 const FEATURES: { icon: React.ComponentType<{ className?: string }>; title: React.ReactNode; description: string; iconColor: string; iconBg: string }[] = [
   {
     icon: TrendingUp,
-    title: 'AirDNA tells you the market average. We map out your unique plan.',
-    description: "Most owners never set a target — they lean on generic AirDNA projections and find out they're behind only when the season's already over. HostCFO tracks your true historical performance, builds your plan against it, and shows you the specific levers — rate, occupancy, length of stay — to close the gap before it becomes one.",
+    title: 'Build a financial forecast — and hit your revenue goals',
+    description: "Most owners never set a real target — they eyeball generic market averages and find out they're behind only when the season's already over. HostCFO builds a forecast from your own historical performance, tracks you against it month by month, and shows you the specific levers — rate, occupancy, length of stay — to close the gap before it becomes one.",
     iconColor: 'text-emerald-600',
     iconBg: 'bg-emerald-50',
   },
   {
     icon: BarChart3,
-    title: 'Know when you\'re behind — and get back on track.',
-    description: "HostCFO tracks your income and expenses automatically, compares them to your plan every month, and tells you exactly what to fix — a rate that's too low, a cost that's crept up — while there's still time to act.",
+    title: 'Plan long-term to increase return on investment',
+    description: "Your rental is an investment, not just a monthly payout. HostCFO projects your equity as your loan pays down and your property appreciates, and tracks your total return — equity plus cash flow — against every dollar you've put in, so you can see the long-term payoff, not just this month's numbers.",
     iconColor: 'text-blue-600',
     iconBg: 'bg-blue-50',
   },
@@ -58,8 +58,7 @@ const STEPS = [
   { n: '03', title: 'See your real numbers', body: 'Net income, forecasts, and pacing against your annual target — all in one place.' },
 ];
 
-const BARS = [65, 75, 85, 80, 100, 95, 88, 40, 35, 0, 20, 15];
-const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+const PLATFORMS = ['Airbnb', 'Vrbo', 'Booking.com', 'Expedia', 'Agoda', 'Trip.com', 'Houfy', 'Google Vacation Rentals'];
 
 export default function LandingPage() {
   return (
@@ -88,7 +87,7 @@ export default function LandingPage() {
         <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 leading-tight mb-4 sm:mb-5 max-w-3xl mx-auto">
           Your Short-Term Rental CFO
         </h1>
-        <p className="text-base sm:text-lg text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
+        <p className="text-base sm:text-lg font-medium text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
           Stop running your rental like a hobby, start running it like a business — get tools to increase revenue, cut costs, and generate yield.
         </p>
         <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
@@ -100,48 +99,56 @@ export default function LandingPage() {
           </Link>
         </div>
 
-        {/* App preview */}
-        <div className="mt-10 sm:mt-16 rounded-2xl border border-slate-200 shadow-2xl overflow-hidden text-left">
-          <div className="bg-slate-900 px-4 py-3 flex items-center gap-2">
-            <div className="w-3 h-3 rounded-full bg-red-400" />
-            <div className="w-3 h-3 rounded-full bg-amber-400" />
-            <div className="w-3 h-3 rounded-full bg-emerald-400" />
-            <span className="text-slate-500 text-xs ml-3">hostcfo.com</span>
+        {/* Growth snapshot */}
+        <div className="mt-10 sm:mt-16 max-w-2xl mx-auto rounded-2xl border border-slate-200 shadow-xl p-6 sm:p-8 text-left bg-white">
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Net Income</p>
+              <p className="text-2xl sm:text-3xl font-bold text-slate-900">
+                $9,800<span className="text-sm sm:text-base font-medium text-slate-400"> /mo</span>
+              </p>
+            </div>
+            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 whitespace-nowrap">
+              ▲ 28% YoY
+            </span>
           </div>
-          <div className="bg-slate-50 p-4 sm:p-6 space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3">
-              {[
-                { label: 'This Year Target', value: '$47,211', sub: 'of $44,923 YTD target', tag: '▲ $2,288 (5.1%)', green: true },
-                { label: 'July Target', value: '$8,940', sub: 'of $8,148 target', tag: '▲ $792 (9.7%)', green: true },
-                { label: 'Avg Occupancy', value: '79.9%', sub: 'Target 67%', tag: '▲ 12.9pts', green: true },
-                { label: 'Avg Daily Rate', value: '$254', sub: 'Target $225', tag: '▲ $29 (12.9%)', green: true },
-              ].map(c => (
-                <div key={c.label} className="bg-white rounded-xl border border-slate-200 p-3 sm:p-4 shadow-sm">
-                  <p className="text-xs text-slate-400 uppercase tracking-wide font-semibold mb-1 sm:mb-2 leading-tight">{c.label}</p>
-                  <p className="text-lg sm:text-xl font-bold text-slate-900">{c.value}</p>
-                  <p className="text-xs text-slate-400 mt-0.5 mb-2">{c.sub}</p>
-                  <span className={`inline-flex text-xs font-semibold px-2 py-0.5 rounded-lg ${c.green ? 'bg-emerald-50 text-emerald-700' : 'bg-red-50 text-red-600'}`}>{c.tag}</span>
-                </div>
-              ))}
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-5 shadow-sm">
-              <p className="text-sm font-semibold text-slate-700 mb-4">Monthly Revenue by Platform</p>
-              <div className="flex items-end gap-1 h-24">
-                {BARS.map((h, i) => (
-                  <div key={i} className="flex-1 h-full flex flex-col gap-0.5 justify-end">
-                    <div className="w-full bg-indigo-400 rounded-t-sm" style={{ height: `${h * 0.22}%` }} />
-                    <div className="w-full bg-rose-400 rounded-t-sm" style={{ height: `${h * 0.55}%` }} />
-                  </div>
-                ))}
-              </div>
-              <div className="flex gap-3 mt-3 text-xs text-slate-400">
-                {MONTHS_SHORT.map(m => <span key={m} className="flex-1 text-center">{m}</span>)}
-              </div>
-              <div className="flex gap-4 mt-3">
-                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm bg-rose-400 inline-block" />Airbnb</span>
-                <span className="flex items-center gap-1.5 text-slate-400"><span className="w-2.5 h-2.5 rounded-sm bg-indigo-400 inline-block" />VRBO</span>
-              </div>
-            </div>
+          <svg viewBox="0 0 600 180" className="w-full h-28 sm:h-36" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="growthFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
+                <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M0,170 L55,160 L109,145 L164,151 L218,129 L273,106 L327,78 L382,57 L436,71 L491,53 L545,41 L600,20 L600,180 L0,180 Z"
+              fill="url(#growthFill)"
+            />
+            <path
+              d="M0,170 L55,160 L109,145 L164,151 L218,129 L273,106 L327,78 L382,57 L436,71 L491,53 L545,41 L600,20"
+              fill="none"
+              stroke="#059669"
+              strokeWidth="3.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle cx="600" cy="20" r="4" fill="#059669" />
+          </svg>
+          <div className="flex justify-between mt-2 text-[10px] sm:text-xs text-slate-400">
+            {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(m => (
+              <span key={m}>{m}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* Platform trust bar */}
+        <div className="mt-12 sm:mt-16">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-6 sm:mb-8">
+            Connects with the platforms you already use
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-7 gap-y-4 sm:gap-x-10 text-slate-400">
+            {PLATFORMS.map(p => (
+              <span key={p} className="text-base sm:text-lg font-bold tracking-tight">{p}</span>
+            ))}
           </div>
         </div>
       </section>
@@ -150,8 +157,8 @@ export default function LandingPage() {
       <section className="bg-slate-50 py-16 sm:py-24">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-10 sm:mb-16">
-            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">The financial layer your STR is missing</h2>
-            <p className="text-slate-500 text-base sm:text-lg max-w-lg mx-auto">Built for operators who treat their rental like a business, not a side project.</p>
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">The financial layer your STR needs to grow</h2>
+            <p className="text-slate-500 text-base sm:text-lg max-w-lg mx-auto">Measure more than payout amount — guide your STR to increased profitability, higher revenue, and lower expenses with CFO-caliber tools.</p>
           </div>
           <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
             {FEATURES.map((f, i) => (
