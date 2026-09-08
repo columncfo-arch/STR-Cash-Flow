@@ -80,81 +80,75 @@ export default function LandingPage() {
       </header>
 
       {/* Hero */}
-      <section className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden="true">
-          <svg className="absolute inset-0 h-full w-full" viewBox="0 0 1600 640" preserveAspectRatio="xMidYMid slice" fill="none">
-            <defs>
-              <linearGradient id="heroLineA" x1="0" y1="1" x2="1" y2="0">
-                <stop offset="0%" stopColor="#a7f3d0" stopOpacity="0" />
-                <stop offset="60%" stopColor="#34d399" stopOpacity="0.07" />
-                <stop offset="100%" stopColor="#047857" stopOpacity="0.14" />
-              </linearGradient>
-              <linearGradient id="heroLineB" x1="0" y1="1" x2="1" y2="0">
-                <stop offset="0%" stopColor="#6ee7b7" stopOpacity="0" />
-                <stop offset="60%" stopColor="#10b981" stopOpacity="0.05" />
-                <stop offset="100%" stopColor="#059669" stopOpacity="0.11" />
-              </linearGradient>
-              <filter id="heroSoftBlur" x="-20%" y="-20%" width="140%" height="140%">
-                <feGaussianBlur stdDeviation="18" />
-              </filter>
-            </defs>
-
-            {/* soft ribbon glow, logarithmic sweep: steep rise then flattening toward upper right */}
-            <path
-              d="M -150 620 C 0 460, 150 350, 320 300 C 550 240, 800 200, 1050 175 C 1300 155, 1500 140, 1800 130"
-              stroke="url(#heroLineA)"
-              strokeWidth="80"
-              strokeLinecap="round"
-              filter="url(#heroSoftBlur)"
-            />
-            <path
-              d="M -150 560 C 0 410, 140 300, 310 255 C 550 195, 800 160, 1040 140 C 1280 120, 1480 108, 1800 100"
-              stroke="url(#heroLineB)"
-              strokeWidth="48"
-              strokeLinecap="round"
-              filter="url(#heroSoftBlur)"
-            />
-
-            {/* crisp ascending chart line, same logarithmic shape */}
-            <path
-              d="M -80 540 C 40 400, 140 300, 300 255 C 520 200, 740 165, 980 140 C 1220 118, 1420 105, 1700 98"
-              stroke="#059669"
-              strokeOpacity="0.16"
-              strokeWidth="2"
-              strokeLinecap="round"
-            />
-          </svg>
+      <section className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 sm:pt-20 pb-12 sm:pb-20 text-center">
+        <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-6 sm:mb-8">
+          14-day free trial · No credit card required
+        </div>
+        <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 leading-tight mb-4 sm:mb-5 max-w-3xl mx-auto">
+          Your Short-Term Rental CFO
+        </h1>
+        <p className="text-base sm:text-lg text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
+          Stop running your rental like a hobby, start running it like a business — get tools to increase revenue, cut costs, and generate yield.
+        </p>
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
+          <Link href={`${APP_URL}/onboarding`} className="w-full sm:w-auto bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+            Start your free trial <ChevronRight className="w-4 h-4" />
+          </Link>
+          <Link href={`${APP_URL}/sign-in`} className="text-slate-400 text-sm hover:text-slate-600 transition-colors">
+            Already have an account? Log in →
+          </Link>
         </div>
 
-        <div className="relative z-10 max-w-6xl mx-auto px-4 sm:px-6 pt-12 sm:pt-20 pb-12 sm:pb-20 text-center">
-          <div className="inline-flex items-center gap-2 bg-emerald-50 text-emerald-700 text-xs font-semibold px-3 py-1.5 rounded-full mb-6 sm:mb-8">
-            14-day free trial · No credit card required
-          </div>
-          <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-5xl font-bold text-slate-900 leading-tight mb-4 sm:mb-5 max-w-3xl mx-auto">
-            Your Short-Term Rental CFO
-          </h1>
-          <p className="text-base sm:text-lg text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
-            Stop running your rental like a hobby, start running it like a business — get tools to increase revenue, cut costs, and generate yield.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-            <Link href={`${APP_URL}/onboarding`} className="w-full sm:w-auto bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
-              Start your free trial <ChevronRight className="w-4 h-4" />
-            </Link>
-            <Link href={`${APP_URL}/sign-in`} className="text-slate-400 text-sm hover:text-slate-600 transition-colors">
-              Already have an account? Log in →
-            </Link>
-          </div>
-
-          {/* Platform trust bar */}
-          <div className="mt-12 sm:mt-20">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-6 sm:mb-8">
-              Connects with the platforms you already use
-            </p>
-            <div className="flex flex-wrap items-center justify-center gap-x-7 gap-y-4 sm:gap-x-10 text-slate-400">
-              {PLATFORMS.map(p => (
-                <span key={p} className="text-base sm:text-lg font-bold tracking-tight">{p}</span>
-              ))}
+        {/* Growth snapshot */}
+        <div className="mt-10 sm:mt-16 max-w-2xl mx-auto rounded-2xl border border-slate-200 shadow-xl p-6 sm:p-8 text-left bg-white">
+          <div className="flex items-start justify-between mb-6">
+            <div>
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Net Income</p>
+              <p className="text-2xl sm:text-3xl font-bold text-slate-900">
+                $9,800<span className="text-sm sm:text-base font-medium text-slate-400"> /mo</span>
+              </p>
             </div>
+            <span className="inline-flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 whitespace-nowrap">
+              ▲ 28% YoY
+            </span>
+          </div>
+          <svg viewBox="0 0 600 180" className="w-full h-28 sm:h-36" preserveAspectRatio="none">
+            <defs>
+              <linearGradient id="growthFill" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#10b981" stopOpacity="0.28" />
+                <stop offset="100%" stopColor="#10b981" stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path
+              d="M0,170 L55,160 L109,145 L164,151 L218,129 L273,106 L327,78 L382,57 L436,71 L491,53 L545,41 L600,20 L600,180 L0,180 Z"
+              fill="url(#growthFill)"
+            />
+            <path
+              d="M0,170 L55,160 L109,145 L164,151 L218,129 L273,106 L327,78 L382,57 L436,71 L491,53 L545,41 L600,20"
+              fill="none"
+              stroke="#059669"
+              strokeWidth="2.5"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+            <circle cx="600" cy="20" r="4" fill="#059669" />
+          </svg>
+          <div className="flex justify-between mt-2 text-[10px] sm:text-xs text-slate-400">
+            {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(m => (
+              <span key={m}>{m}</span>
+            ))}
+          </div>
+        </div>
+
+        {/* Platform trust bar */}
+        <div className="mt-12 sm:mt-16">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-6 sm:mb-8">
+            Connects with the platforms you already use
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-x-7 gap-y-4 sm:gap-x-10 text-slate-400">
+            {PLATFORMS.map(p => (
+              <span key={p} className="text-base sm:text-lg font-bold tracking-tight">{p}</span>
+            ))}
           </div>
         </div>
       </section>
