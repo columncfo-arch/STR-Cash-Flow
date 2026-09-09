@@ -143,17 +143,8 @@ export default function LandingPage() {
         <p className="text-base sm:text-lg font-medium text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
           Stop running your rental like a hobby, start running it like a business — get tools to increase revenue, cut costs, and generate yield.
         </p>
-        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4">
-          <Link href={`${APP_URL}/onboarding`} className="w-full sm:w-auto bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
-            Start your free trial <ChevronRight className="w-4 h-4" />
-          </Link>
-          <Link href={`${APP_URL}/sign-in`} className="text-slate-400 text-sm hover:text-slate-600 transition-colors">
-            Already have an account? Log in →
-          </Link>
-        </div>
-
         {/* Growth snapshot */}
-        <div className="mt-10 sm:mt-16 max-w-2xl mx-auto rounded-2xl border border-slate-200 shadow-xl p-6 sm:p-8 text-left bg-white">
+        <div className="mt-8 sm:mt-10 max-w-2xl mx-auto rounded-2xl border border-slate-200 shadow-xl p-6 sm:p-8 text-left bg-white">
           <div className="flex items-start justify-between mb-6">
             <div>
               <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Net Income</p>
@@ -193,14 +184,26 @@ export default function LandingPage() {
           </div>
         </div>
 
-        {/* Platform trust bar */}
-        <div className="mt-12 sm:mt-16">
-          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-6 sm:mb-8">
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 mt-8 sm:mt-10">
+          <Link href={`${APP_URL}/onboarding`} className="w-full sm:w-auto bg-emerald-600 text-white px-7 py-3 rounded-xl font-semibold text-sm hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2">
+            Start your free trial <ChevronRight className="w-4 h-4" />
+          </Link>
+          <Link href={`${APP_URL}/sign-in`} className="text-slate-400 text-sm hover:text-slate-600 transition-colors">
+            Already have an account? Log in →
+          </Link>
+        </div>
+
+      </section>
+
+      {/* Platform trust bar */}
+      <section className="bg-slate-50 border-y border-slate-100 py-10 sm:py-14">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 text-center">
+          <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide mb-6 sm:mb-8">
             Connects with the platforms you already use
           </p>
-          <div className="flex flex-wrap items-center justify-center gap-x-7 gap-y-4 sm:gap-x-10 text-slate-400">
+          <div className="flex flex-wrap items-center justify-center gap-x-8 gap-y-4 sm:gap-x-12 text-slate-700">
             {PLATFORMS.map(p => (
-              <span key={p} className="text-base sm:text-lg font-bold tracking-tight">{p}</span>
+              <span key={p} className="text-lg sm:text-xl font-bold tracking-tight">{p}</span>
             ))}
           </div>
         </div>
