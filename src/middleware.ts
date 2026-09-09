@@ -14,6 +14,9 @@ const isPublicRoute = createRouteMatcher([
   '/welcome(.*)',
   '/book(.*)',
   '/book-direct(.*)',
+  '/privacy(.*)',
+  '/terms(.*)',
+  '/security(.*)',
   '/api/welcome(.*)',
   '/api/direct-booking(.*)',
   '/api/calendar(.*)',
@@ -47,7 +50,10 @@ export const middleware = clerkMiddleware(async (auth, request) => {
 
   if (isMarketingHost) {
     if (pathname === '/') return NextResponse.rewrite(new URL('/landing', request.url));
-    if (pathname.startsWith('/onboarding') || pathname.startsWith('/landing') || pathname.startsWith('/sign-')) {
+    if (
+      pathname.startsWith('/onboarding') || pathname.startsWith('/landing') || pathname.startsWith('/sign-') ||
+      pathname.startsWith('/privacy') || pathname.startsWith('/terms') || pathname.startsWith('/security')
+    ) {
       return NextResponse.next();
     }
     return NextResponse.redirect(new URL(`${APP_URL}${pathname}`, request.url));

@@ -1,7 +1,7 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { BookOpen, TrendingUp, Activity, Sliders, UserPlus, ChevronRight, Check } from 'lucide-react';
+import { BookOpen, TrendingUp, Activity, Sliders, UserPlus, ChevronRight, ChevronDown, Check } from 'lucide-react';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
@@ -58,6 +58,29 @@ const STEPS = [
 
 const PLATFORMS = ['Airbnb', 'Vrbo', 'Booking.com', 'Expedia', 'Agoda', 'Trip.com', 'Houfy', 'Google Vacation Rentals'];
 
+const FAQS = [
+  {
+    q: 'Is it safe to connect my booking accounts?',
+    a: "Yes. HostCFO connects to your booking platforms the same secure way their own apps do — we never see or store your platform passwords. Your financial data is encrypted both in transit and at rest.",
+  },
+  {
+    q: 'Do I need any accounting experience?',
+    a: "None at all. HostCFO was built for hosts, not accountants. If you can read a bank statement, you can read your HostCFO dashboard — no CPA, spreadsheets, or finance background required.",
+  },
+  {
+    q: 'Can I cancel my trial at any time?',
+    a: "Yes — cancel anytime, no questions asked. Your 14-day trial doesn't require a credit card to start, so there's nothing to cancel if it's not for you.",
+  },
+  {
+    q: 'Which property management tools do you sync with?',
+    a: 'HostCFO syncs directly with Airbnb, Vrbo, Booking.com, Expedia, Agoda, Trip.com, Houfy, and Google Vacation Rentals. You can also import from any platform via CSV in under a minute.',
+  },
+  {
+    q: 'What if I manage more than one property?',
+    a: "No problem — HostCFO scales from a single property to a full portfolio. Pricing is based on property count, and every plan includes the same full toolset.",
+  },
+];
+
 // Illustrative 12-month net income forecast with realistic STR seasonality (summer peak).
 const FORECAST_1YR_LINE = 'M0,160 L45,156 L91,139 L136,120 L182,93 L227,56 L273,26 L318,20 L364,64 L409,104 L455,135 L500,141';
 const FORECAST_1YR_MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
@@ -91,6 +114,7 @@ export default function LandingPage() {
   const [pulseView, setPulseView] = useState<PulseView>('month');
   const [rateChange, setRateChange] = useState(20);
   const [ratePulsing, setRatePulsing] = useState(false);
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   function handleRateChange(v: number) {
     setRateChange(v);
@@ -424,12 +448,23 @@ export default function LandingPage() {
         </div>
       </section>
 
+      {/* Social proof */}
+      <section className="py-16 sm:py-24 border-t border-slate-100">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 text-center">
+          <span className="text-5xl text-emerald-200 font-black leading-none block mb-2">&ldquo;</span>
+          <p className="text-xl sm:text-2xl font-medium text-slate-800 leading-relaxed mb-6">
+            I used to spend every Sunday night stressing over an Excel sheet. Now I check HostCFO on my morning coffee break and know exactly where my business stands.
+          </p>
+          <p className="text-sm font-semibold text-slate-500">Chris, Cocoa Beach, FL</p>
+        </div>
+      </section>
+
       {/* Pricing */}
       <section className="bg-slate-50 py-16 sm:py-24">
         <div className="max-w-6xl mx-auto px-4 sm:px-6">
           <div className="text-center mb-4">
             <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Simple pricing</h2>
-            <p className="text-slate-500 text-base sm:text-lg">14 days free, then pay by property count.</p>
+            <p className="text-slate-500 text-base sm:text-lg">Pay for your software with just one extra night booked per year.</p>
           </div>
           <p className="text-center text-sm text-emerald-600 font-medium mb-8 sm:mb-12">Save 20% with annual billing</p>
           <div className="grid sm:grid-cols-3 gap-4 sm:gap-6 max-w-4xl mx-auto">
@@ -462,6 +497,37 @@ export default function LandingPage() {
             ))}
           </div>
           <p className="text-center text-xs text-slate-400 mt-8">All plans include a 14-day free trial · Cancel anytime · No credit card required</p>
+          <p className="text-center text-sm text-slate-500 mt-4">
+            Have more than 10 properties?{' '}
+            <a href="mailto:column.cfo@gmail.com?subject=Portfolio%20demo%20request" className="text-emerald-600 font-semibold hover:underline">
+              Book a 1-on-1 demo with an STR finance specialist.
+            </a>
+          </p>
+        </div>
+      </section>
+
+      {/* FAQ */}
+      <section className="py-16 sm:py-24">
+        <div className="max-w-2xl mx-auto px-4 sm:px-6">
+          <div className="text-center mb-10 sm:mb-16">
+            <h2 className="text-2xl sm:text-3xl font-bold text-slate-900 mb-4">Frequently asked questions</h2>
+          </div>
+          <div className="space-y-3">
+            {FAQS.map((item, i) => (
+              <div key={item.q} className="rounded-xl border border-slate-200 overflow-hidden">
+                <button
+                  onClick={() => setOpenFaq(openFaq === i ? null : i)}
+                  className="w-full flex items-center justify-between gap-4 text-left px-5 py-4 font-semibold text-slate-900 text-sm sm:text-base hover:bg-slate-50 transition-colors"
+                >
+                  {item.q}
+                  <ChevronDown className={`w-4 h-4 flex-shrink-0 text-slate-400 transition-transform ${openFaq === i ? 'rotate-180' : ''}`} />
+                </button>
+                {openFaq === i && (
+                  <p className="px-5 pb-4 text-slate-500 text-sm leading-relaxed">{item.a}</p>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
@@ -477,10 +543,15 @@ export default function LandingPage() {
       </section>
 
       <footer className="border-t border-slate-100 py-8">
-        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-2">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
             <BookOpen className="w-4 h-4 text-emerald-600" />
             <span className="font-semibold text-sm text-slate-700">HostCFO</span>
+          </div>
+          <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 text-xs text-slate-400">
+            <Link href="/privacy" className="hover:text-slate-600 transition-colors">Privacy Policy</Link>
+            <Link href="/terms" className="hover:text-slate-600 transition-colors">Terms of Service</Link>
+            <Link href="/security" className="hover:text-slate-600 transition-colors">Security Statement</Link>
           </div>
           <p className="text-xs text-slate-400">© 2026 HostCFO · Financial intelligence for STR operators</p>
         </div>
