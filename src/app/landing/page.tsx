@@ -415,7 +415,7 @@ export default function LandingPage() {
           <div className="grid sm:grid-cols-3 gap-8 sm:gap-10">
             {STEPS.map(s => (
               <div key={s.n} className="text-center">
-                <div className="text-6xl font-black text-emerald-100 mb-3 leading-none">{s.n}</div>
+                <div className="text-6xl font-black text-emerald-500 mb-3 leading-none">{s.n}</div>
                 <h3 className="text-lg font-bold text-slate-900 mb-2">{s.title}</h3>
                 <p className="text-slate-500 text-sm leading-relaxed">{s.body}</p>
               </div>
