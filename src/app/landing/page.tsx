@@ -5,36 +5,24 @@ import { BookOpen, TrendingUp, Activity, Sliders, UserPlus, ChevronRight, Check 
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
-const BENEFITS: { emoji: string; title: string; iconBg: string; bullets: { bold: string; rest: string }[] }[] = [
+const BENEFITS: { emoji: string; title: string; iconBg: string; benefit: string }[] = [
   {
     emoji: '💡',
     title: 'From Guesswork to Certainty',
     iconBg: 'bg-emerald-50',
-    bullets: [
-      { bold: 'Stop managing by bank balance.', rest: ' Know your true profitability after accounting for platform fees, cleaning, and hidden operational costs.' },
-      { bold: 'Predict slow seasons months in advance.', rest: ' Never get caught off guard by predictable dips in seasonal tourist traffic.' },
-      { bold: 'Keep a finger on your pulse.', rest: ' Instantly see if your business is healthier today than it was this time last year.' },
-    ],
+    benefit: 'Know exactly how your business is doing — real profit, seasonal dips, and year-over-year progress — without touching a spreadsheet.',
   },
   {
     emoji: '📈',
     title: 'From Passive Income to Active Wealth',
     iconBg: 'bg-blue-50',
-    bullets: [
-      { bold: 'Track your true equity.', rest: ' Watch your net worth climb as guests pay down your property mortgages month after month.' },
-      { bold: 'Measure real cash-on-cash return.', rest: ' Stop looking at simple payouts and start looking at your actual cap rate and return on investment.' },
-      { bold: 'Plan your next acquisition.', rest: ' Know exactly when your current cash flow gives you the leverage to buy property number two or three.' },
-    ],
+    benefit: "Watch your net worth grow every month, see your true return on investment, and know exactly when you're ready to buy your next property.",
   },
   {
     emoji: '🔒',
     title: 'From Marketplace Dependent to Independent Brand',
     iconBg: 'bg-violet-50',
-    bullets: [
-      { bold: 'Own your guest relationships.', rest: ' Securely build a private database of guest contact info that you actually control.' },
-      { bold: 'Ditch expensive platform fees.', rest: ' Keep more profit by easily inviting past guests back to book directly with you.' },
-      { bold: 'Bulletproof your distribution.', rest: ' Spread your listings smoothly across Airbnb, Vrbo, and Booking.com without losing your financial sanity.' },
-    ],
+    benefit: 'Own your guest relationships, keep more of every dollar you earn, and list everywhere — Airbnb, Vrbo, and Booking.com — without the headache.',
   },
 ];
 
@@ -222,14 +210,8 @@ export default function LandingPage() {
                 <div className={`w-12 h-12 ${b.iconBg} rounded-xl flex items-center justify-center mb-6 text-2xl`}>
                   {b.emoji}
                 </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-4">{b.title}</h3>
-                <ul className="space-y-3">
-                  {b.bullets.map(item => (
-                    <li key={item.bold} className="text-slate-500 leading-relaxed text-sm">
-                      <strong className="text-slate-900 font-semibold">{item.bold}</strong>{item.rest}
-                    </li>
-                  ))}
-                </ul>
+                <h3 className="text-lg font-bold text-slate-900 mb-3">{b.title}</h3>
+                <p className="text-slate-500 leading-relaxed text-sm">{b.benefit}</p>
               </div>
             ))}
           </div>
