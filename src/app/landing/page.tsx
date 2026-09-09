@@ -1,31 +1,40 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { BookOpen, TrendingUp, Users, BarChart3, Activity, Sliders, UserPlus, ChevronRight, Check } from 'lucide-react';
+import { BookOpen, TrendingUp, Activity, Sliders, UserPlus, ChevronRight, Check } from 'lucide-react';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
-const FEATURES: { icon: React.ComponentType<{ className?: string }>; title: React.ReactNode; description: string; iconColor: string; iconBg: string }[] = [
+const BENEFITS: { emoji: string; title: string; iconBg: string; bullets: { bold: string; rest: string }[] }[] = [
   {
-    icon: TrendingUp,
-    title: 'Build a financial forecast — and hit your revenue goals',
-    description: "Most owners never set a real target — they eyeball generic market averages and find out they're behind only when the season's already over. HostCFO builds a forecast from your own historical performance, tracks you against it month by month, and shows you the specific levers — rate, occupancy, length of stay — to close the gap before it becomes one.",
-    iconColor: 'text-emerald-600',
+    emoji: '💡',
+    title: 'From Guesswork to Certainty',
     iconBg: 'bg-emerald-50',
+    bullets: [
+      { bold: 'Stop managing by bank balance.', rest: ' Know your true profitability after accounting for platform fees, cleaning, and hidden operational costs.' },
+      { bold: 'Predict slow seasons months in advance.', rest: ' Never get caught off guard by predictable dips in seasonal tourist traffic.' },
+      { bold: 'Keep a finger on your pulse.', rest: ' Instantly see if your business is healthier today than it was this time last year.' },
+    ],
   },
   {
-    icon: BarChart3,
-    title: 'Plan long-term to increase return on investment',
-    description: "Your rental is an investment, not just a monthly payout. HostCFO projects your equity as your loan pays down and your property appreciates, and tracks your total return — equity plus cash flow — against every dollar you've put in, so you can see the long-term payoff, not just this month's numbers.",
-    iconColor: 'text-blue-600',
+    emoji: '📈',
+    title: 'From Passive Income to Active Wealth',
     iconBg: 'bg-blue-50',
+    bullets: [
+      { bold: 'Track your true equity.', rest: ' Watch your net worth climb as guests pay down your property mortgages month after month.' },
+      { bold: 'Measure real cash-on-cash return.', rest: ' Stop looking at simple payouts and start looking at your actual cap rate and return on investment.' },
+      { bold: 'Plan your next acquisition.', rest: ' Know exactly when your current cash flow gives you the leverage to buy property number two or three.' },
+    ],
   },
   {
-    icon: Users,
-    title: <>Higher rates lose bookings. <strong>Guest List</strong> helps you win them back.</>,
-    description: 'Airbnb limits how you can contact past guests, so most hosts lose the relationship the moment checkout ends. HostCFO gives you a direct guest list, so next season\'s booking doesn\'t start from zero.',
-    iconColor: 'text-violet-600',
+    emoji: '🔒',
+    title: 'From Marketplace Dependent to Independent Brand',
     iconBg: 'bg-violet-50',
+    bullets: [
+      { bold: 'Own your guest relationships.', rest: ' Securely build a private database of guest contact info that you actually control.' },
+      { bold: 'Ditch expensive platform fees.', rest: ' Keep more profit by easily inviting past guests back to book directly with you.' },
+      { bold: 'Bulletproof your distribution.', rest: ' Spread your listings smoothly across Airbnb, Vrbo, and Booking.com without losing your financial sanity.' },
+    ],
   },
 ];
 
@@ -205,13 +214,19 @@ export default function LandingPage() {
             <p className="text-slate-500 text-base sm:text-lg max-w-lg mx-auto">Measure more than payout amount — guide your STR to increased profitability, higher revenue, and lower expenses with CFO-caliber tools.</p>
           </div>
           <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-            {FEATURES.map((f, i) => (
+            {BENEFITS.map((b, i) => (
               <div key={i} className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
-                <div className={`w-12 h-12 ${f.iconBg} rounded-xl flex items-center justify-center mb-6`}>
-                  <f.icon className={`w-6 h-6 ${f.iconColor}`} />
+                <div className={`w-12 h-12 ${b.iconBg} rounded-xl flex items-center justify-center mb-6 text-2xl`}>
+                  {b.emoji}
                 </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-3">{f.title}</h3>
-                <p className="text-slate-500 leading-relaxed text-sm">{f.description}</p>
+                <h3 className="text-lg font-bold text-slate-900 mb-4">{b.title}</h3>
+                <ul className="space-y-3">
+                  {b.bullets.map(item => (
+                    <li key={item.bold} className="text-slate-500 leading-relaxed text-sm">
+                      <strong className="text-slate-900 font-semibold">{item.bold}</strong>{item.rest}
+                    </li>
+                  ))}
+                </ul>
               </div>
             ))}
           </div>
