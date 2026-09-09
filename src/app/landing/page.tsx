@@ -141,7 +141,7 @@ export default function LandingPage() {
           Your Short-Term Rental CFO
         </h1>
         <p className="text-base sm:text-lg font-medium text-slate-500 mb-8 sm:mb-10 max-w-xl mx-auto leading-relaxed">
-          Stop running your rental like a hobby, start running it like a business — get tools to increase revenue, cut costs, and generate yield.
+          Stop running your rental like a hobby, start running it like a business — increase revenue, cut costs, improve returns, and build equity.
         </p>
         {/* Growth snapshot */}
         <div className="mt-8 sm:mt-10 max-w-2xl mx-auto rounded-2xl border border-slate-200 shadow-xl p-6 sm:p-8 text-left bg-white">
