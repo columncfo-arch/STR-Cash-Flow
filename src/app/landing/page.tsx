@@ -1,26 +1,29 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { BookOpen, TrendingUp, Activity, Sliders, UserPlus, ChevronRight, ChevronDown, Check } from 'lucide-react';
+import { BookOpen, TrendingUp, Activity, Sliders, UserPlus, ChevronRight, ChevronDown, Check, Target, PiggyBank, Lock } from 'lucide-react';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
-const BENEFITS: { emoji: string; title: string; iconBg: string; benefit: string }[] = [
+const BENEFITS: { icon: React.ComponentType<{ className?: string }>; title: string; iconColor: string; iconBg: string; benefit: string }[] = [
   {
-    emoji: '💡',
+    icon: Target,
     title: 'From Guesswork to Certainty',
+    iconColor: 'text-emerald-600',
     iconBg: 'bg-emerald-50',
     benefit: 'Know exactly how your business is doing — real profit, seasonal dips, and year-over-year progress — without touching a spreadsheet.',
   },
   {
-    emoji: '📈',
+    icon: PiggyBank,
     title: 'From Passive Income to Active Wealth',
+    iconColor: 'text-blue-600',
     iconBg: 'bg-blue-50',
     benefit: "Watch your net worth grow every month, see your true return on investment, and know exactly when you're ready to buy your next property.",
   },
   {
-    emoji: '🔒',
+    icon: Lock,
     title: 'From Marketplace Dependent to Independent Brand',
+    iconColor: 'text-violet-600',
     iconBg: 'bg-violet-50',
     benefit: 'Own your guest relationships, keep more of every dollar you earn, and list everywhere — Airbnb, Vrbo, and Booking.com — without the headache.',
   },
@@ -231,8 +234,8 @@ export default function LandingPage() {
           <div className="grid sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
             {BENEFITS.map((b, i) => (
               <div key={i} className="bg-white rounded-2xl border border-slate-200 p-8 shadow-sm">
-                <div className={`w-12 h-12 ${b.iconBg} rounded-xl flex items-center justify-center mb-6 text-2xl`}>
-                  {b.emoji}
+                <div className={`w-12 h-12 ${b.iconBg} rounded-xl flex items-center justify-center mb-6`}>
+                  <b.icon className={`w-6 h-6 ${b.iconColor}`} />
                 </div>
                 <h3 className="text-lg font-bold text-slate-900 mb-3">{b.title}</h3>
                 <p className="text-slate-500 leading-relaxed text-sm">{b.benefit}</p>
