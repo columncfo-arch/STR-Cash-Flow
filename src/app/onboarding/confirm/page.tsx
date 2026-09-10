@@ -35,6 +35,7 @@ function ConfirmContent() {
       airbnbIcalUrl?: string;
       piti?: number;
       occTarget?: number;
+      targetAdr?: number;
       annualTarget?: number;
     };
     if (data.propertyName) setPropertyName(data.propertyName);
@@ -51,6 +52,7 @@ function ConfirmContent() {
           ...(data.airbnbIcalUrl ? { airbnbIcalUrl: data.airbnbIcalUrl } : {}),
           ...(data.piti ? { monthlyPITI: data.piti } : {}),
           ...(data.occTarget ? { targetOccupancyPct: data.occTarget } : {}),
+          ...(data.targetAdr ? { targetAdr: data.targetAdr } : {}),
           ...(data.annualTarget ? {
             forecastOverrides: {
               ...(current.forecastOverrides ?? {}),
