@@ -563,6 +563,52 @@ export default function DashboardClient() {
     ? periodOccMonths.reduce((s, m) => s + m.occupancyRate, 0) / periodOccMonths.length
     : null;
 
+  // Cumulative net income through the selected month, shown in place of the year
+  // view when the period is This Month.
+  //
+  // Only the revenue side has dates: bookings carry them, expenses reach the
+  // dashboard as monthly category totals and PITI as one figure. So rather than
+  // invent a daily cost, the month opens in the red by its whole committed cost
+  // and climbs as bookings land. The line crossing zero is the breakeven day.
+  //
+  // Mirrors buildPnL so the last point equals the month's netIncome:
+  //   netIncome = gross − platformFees − fastPay − tax − refunds − opex − piti
+  // Per-booking terms are dated; refunds, opex and piti form the opening debt.
+  const cumulativeNetData = (() => {
+    if (period !== 'month') return [];
+    const m = statement?.months[currentMonthIdx];
+    if (!m) return [];
+    const daysInMonth = new Date(year, currentMonthIdx + 1, 0).getDate();
+    const committed = m.totalOperatingExpenses + m.piti + m.refunds;
+
+    const byDay = new Array<number>(daysInMonth).fill(0);
+    for (const b of m.bookings) {
+      // Slice the day out of YYYY-MM-DD; Date would shift it across timezones
+      const d = Number(b.checkIn.slice(8, 10));
+      if (d < 1 || d > daysInMonth) continue;
+      byDay[d - 1] += (b.income ?? 0) - (b.platformFee ?? 0) - (b.fastPayFee ?? 0)
+        - (b.taxRemitted ?? 0) - (b.taxWithheld ?? 0);
+    }
+
+    const now = new Date();
+    const isLiveMonth = now.getFullYear() === year && now.getMonth() === currentMonthIdx;
+    const todayDay = isLiveMonth ? now.getDate() : daysInMonth;
+
+    let running = -committed;
+    return byDay.map((v, i) => {
+      running += v;
+      const day = i + 1;
+      const value = Math.round(running);
+      // Solid to today, dashed beyond — the tail is confirmed bookings not yet
+      // checked in. Both carry today's point so the lines meet.
+      return {
+        day: String(day),
+        actual: day <= todayDay ? value : null,
+        projected: day >= todayDay ? value : null,
+      };
+    });
+  })();
+
   const pnlChartData = statement?.months.map((m, i) => {
     const isActual = i <= currentMonthIdx;
     return {
@@ -1044,8 +1090,35 @@ export default function DashboardClient() {
       {/* P&L Chart */}
       {hasData && (
         <div className="px-5 py-4">
-          <p className="text-xs font-medium text-slate-500 mb-1">By month</p>
-          <p className="text-xs text-slate-400 mb-4">Actuals and projected</p>
+          <p className="text-xs font-medium text-slate-500 mb-1">
+            {period === 'month' ? `${MONTHS_LONG[currentMonthIdx]} cumulative` : 'By month'}
+          </p>
+          <p className="text-xs text-slate-400 mb-4">
+            {period === 'month'
+              ? 'Opens at the month\u2019s committed costs and climbs as bookings land \u00b7 crossing zero is breakeven'
+              : 'Actuals and projected'}
+          </p>
+          {period === 'month' ? (
+            <ResponsiveContainer width="100%" height={280}>
+              <ComposedChart data={cumulativeNetData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8' }} interval={1} />
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(1)}k`} />
+                <Tooltip
+                  formatter={(v) => [fmt(typeof v === 'number' ? v : 0), 'Cumulative net']}
+                  labelFormatter={(d) => `${MONTHS_LONG[currentMonthIdx]} ${d}`}
+                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
+                />
+                {/* Breakeven: above this line the month has covered its costs */}
+                <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={1}
+                  label={{ value: 'breakeven', position: 'insideTopLeft', fontSize: 10, fill: '#94a3b8' }} />
+                <Line dataKey="actual" stroke="#6366f1" strokeWidth={2} dot={false} connectNulls={false} />
+                {/* Confirmed bookings not yet checked in */}
+                <Line dataKey="projected" stroke="#6366f1" strokeWidth={2} strokeDasharray="5 3"
+                  dot={false} connectNulls={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          ) : (
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart data={pnlChartData} barGap={4} barCategoryGap="30%">
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1085,6 +1158,7 @@ export default function DashboardClient() {
               />
             </ComposedChart>
           </ResponsiveContainer>
+          )}
         </div>
       )}
         </div>
