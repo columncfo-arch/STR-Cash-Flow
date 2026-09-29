@@ -705,11 +705,18 @@ export default function DashboardClient() {
         }
         const earned = periodGrossActual;
         const target = periodGrossTarget;
+        const hasTargetForPeriod = target > 0;
         const stillNeeded = Math.max(0, target - earned);
+        // Beating the target is worth reporting, so keep the surplus rather than
+        // clamping it to zero and showing only "Covered".
+        const surplus = hasTargetForPeriod ? Math.max(0, earned - target) : 0;
         const variance = earned - target;
-        const variancePct = target > 0 ? (variance / target) * 100 : null;
-        const pctOfTarget = target > 0 ? Math.min(100, (earned / target) * 100) : 0;
-        const status = pacingStatus(variancePct, { reached: stillNeeded === 0 && target > 0, label: 'Target Met' });
+        const variancePct = hasTargetForPeriod ? (variance / target) * 100 : null;
+        // Uncapped for the caption — 112% of target is the fact. The bar is
+        // capped separately so it cannot overflow its track.
+        const pctOfTarget = hasTargetForPeriod ? (earned / target) * 100 : null;
+        const barPct = pctOfTarget != null ? Math.min(100, pctOfTarget) : 0;
+        const status = pacingStatus(variancePct, { reached: stillNeeded === 0 && hasTargetForPeriod, label: 'Target Met' });
         return (
           <div className="px-5 py-4">
             <div className="flex items-start gap-4 sm:gap-6">
@@ -719,11 +726,22 @@ export default function DashboardClient() {
                 <p className="text-[11px] text-slate-400 truncate">of {fmt(target)} target · {periodLabel}</p>
               </div>
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Still Needed</p>
-                <p className={`text-xl font-bold leading-tight mt-0.5 ${stillNeeded === 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
-                  {stillNeeded === 0 ? 'Covered' : fmt(stillNeeded)}
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">
+                  {surplus > 0 ? 'Over Target' : 'Still Needed'}
                 </p>
-                <p className="text-[11px] text-slate-400 truncate">{pctOfTarget.toFixed(0)}% of target earned</p>
+                <p className={`text-xl font-bold leading-tight mt-0.5 ${
+                  !hasTargetForPeriod ? 'text-slate-400'
+                    : surplus > 0 || stillNeeded === 0 ? 'text-emerald-600'
+                    : 'text-slate-900'
+                }`}>
+                  {!hasTargetForPeriod ? '—'
+                    : surplus > 0 ? `+${fmt(surplus)}`
+                    : stillNeeded === 0 ? 'Covered'
+                    : fmt(stillNeeded)}
+                </p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  {pctOfTarget != null ? `${pctOfTarget.toFixed(0)}% of target earned` : 'no target for this period'}
+                </p>
               </div>
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                 <div className="flex items-start justify-between gap-2">
@@ -766,8 +784,8 @@ export default function DashboardClient() {
               </div>
             </div>
             <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
-              <div className={`h-1 rounded-full transition-all ${variance >= 0 ? 'bg-emerald-500' : pctOfTarget >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
-                style={{ width: `${pctOfTarget}%` }} />
+              <div className={`h-1 rounded-full transition-all ${variance >= 0 ? 'bg-emerald-500' : barPct >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
+                style={{ width: `${barPct}%` }} />
             </div>
           </div>
         );
