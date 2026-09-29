@@ -426,6 +426,31 @@ export default function DashboardClient() {
   const hasDirectIncome = statement?.months.some(m => m.byPlatform.direct.income > 0) ?? false;
   const hasOtherIncome = statement?.months.some(m => m.byPlatform.other.income > 0) ?? false;
 
+  // Day-by-day revenue for the selected month, shown in place of the year view
+  // when the period is This Month.
+  //
+  // A booking's whole income lands on its check-in day, matching how the API
+  // assigns revenue to months (checkIn prefix). Spreading it across nights would
+  // leak revenue into adjacent months and the bars would stop summing to the
+  // Earned figure in the tile above.
+  const dailyChartData = (() => {
+    if (period !== 'month') return [];
+    const daysInMonth = new Date(year, currentMonthIdx + 1, 0).getDate();
+    const byDay = new Array<number>(daysInMonth).fill(0);
+    for (const b of statement?.months[currentMonthIdx]?.bookings ?? []) {
+      // Slice the day out of YYYY-MM-DD rather than parsing — Date would shift it
+      const d = Number(b.checkIn.slice(8, 10));
+      if (d >= 1 && d <= daysInMonth) byDay[d - 1] += b.income;
+    }
+    const now = new Date();
+    const isLiveMonth = now.getFullYear() === year && now.getMonth() === currentMonthIdx;
+    return byDay.map((revenue, i) => ({
+      day: String(i + 1),
+      revenue,
+      isFuture: isLiveMonth && i + 1 > now.getDate(),
+    }));
+  })();
+
   const chartData = statement?.months.map((m, i) => {
     const isActual = i <= currentMonthIdx;
     return {
@@ -517,6 +542,11 @@ export default function DashboardClient() {
   const periodGrossTarget = periodMonths.reduce((s, m) =>
     s + (m.year === year ? (monthlyForecasts[m.mi] ?? 0) : (effectivePriorMonthly?.[m.mi] ?? 0)), 0);
   const periodGrossActual = periodMonths.reduce((s, m) => s + (monthStmt(m)?.grossRevenue ?? 0), 0);
+
+  // The even daily rate that would hit the month's target, for a pacing line.
+  const dailyPaceTarget = period === 'month' && periodGrossTarget > 0
+    ? periodGrossTarget / new Date(year, currentMonthIdx + 1, 0).getDate()
+    : null;
 
   const periodNetTarget = periodMonths.reduce((s, m) =>
     s + (m.year === year ? (monthlyNetForecasts[m.mi] ?? 0) : (monthStmt(m)?.netIncome ?? 0)), 0);
@@ -839,10 +869,48 @@ export default function DashboardClient() {
       <div className="px-5 py-4">
         <p className="text-xs font-medium text-slate-500 mb-1 flex items-center gap-1.5">
           <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-          Target vs actual by month
+          {period === 'month'
+            ? `${MONTHS_LONG[currentMonthIdx]} day by day`
+            : 'Target vs actual by month'}
         </p>
-        <p className="text-xs text-slate-400 mb-4">Click a month to drill into its P&amp;L</p>
-        {hasData ? (
+        <p className="text-xs text-slate-400 mb-4">
+          {period === 'month'
+            ? 'Revenue by check-in date · dashed line is the daily pace needed to hit target'
+            : 'Click a month to drill into its P&L'}
+        </p>
+        {!hasData ? (
+          <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
+            No data yet. Import your earnings CSV to get started.
+          </div>
+        ) : period === 'month' ? (
+          <ResponsiveContainer width="100%" height={300}>
+            <ComposedChart data={dailyChartData} barCategoryGap="15%">
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8' }} interval={1} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(1)}k`} />
+              <Tooltip
+                formatter={(v) => [fmt(typeof v === 'number' ? v : 0), 'Revenue']}
+                labelFormatter={(d) => `${MONTHS_LONG[currentMonthIdx]} ${d}`}
+                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
+              />
+              {dailyPaceTarget != null && (
+                <ReferenceLine
+                  y={dailyPaceTarget}
+                  stroke="#94a3b8"
+                  strokeDasharray="4 3"
+                  label={{ value: `${fmt(dailyPaceTarget)}/day needed`, position: 'insideTopRight', fontSize: 10, fill: '#94a3b8' }}
+                />
+              )}
+              <Bar dataKey="revenue" radius={[3, 3, 0, 0]}>
+                {dailyChartData.map((d, i) => (
+                  // Days still to come are greyed so an empty bar reads as "not yet"
+                  // rather than "earned nothing"
+                  <Cell key={i} fill={d.isFuture ? '#e2e8f0' : '#10b981'} />
+                ))}
+              </Bar>
+            </ComposedChart>
+          </ResponsiveContainer>
+        ) : (
           <>
             <ResponsiveContainer width="100%" height={300}>
               <ComposedChart data={chartData} onClick={handleChartClick} style={{ cursor: 'pointer' }}>
@@ -908,10 +976,6 @@ export default function DashboardClient() {
               </p>
             )}
           </>
-        ) : (
-          <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
-            No data yet. Import your earnings CSV to get started.
-          </div>
         )}
       </div>
         </div>
