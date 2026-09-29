@@ -43,7 +43,7 @@ const CONNECT_OPTIONS = [
   },
 ];
 
-const STEP_LABELS = ['Your property', 'Platforms', 'Connect', 'Set targets', 'Create account'];
+const STEP_LABELS = ['Your property', 'Platforms', 'Set targets', 'Connect', 'Create account'];
 
 const LAST_STEP = 3;
 
@@ -58,10 +58,24 @@ export default function OnboardingPage() {
   const [airbnbIcalUrl, setAirbnbIcalUrl] = useState('');
   const [piti, setPiti] = useState('');
   const [annualTarget, setAnnualTarget] = useState('');
+  const [annualTargetTouched, setAnnualTargetTouched] = useState(false);
   const [occTarget, setOccTarget] = useState('');
+  const [targetAdr, setTargetAdr] = useState('');
 
   function togglePlatform(id: string) {
     setPlatforms(prev => prev.includes(id) ? prev.filter(p => p !== id) : [...prev, id]);
+  }
+
+  // Most new hosts don't know an annual revenue number off the top of their
+  // head, but they do know roughly what a night goes for and how full
+  // they'd like to be — so derive the target from those instead of asking
+  // for it blind. Once they edit the target directly, stop overwriting it.
+  const computedTarget = Math.round((parseFloat(targetAdr) || 0) * ((parseFloat(occTarget) || 0) / 100) * 365);
+  const displayedAnnualTarget = annualTargetTouched ? annualTarget : (computedTarget > 0 ? String(computedTarget) : '');
+
+  function handleAnnualTargetChange(value: string) {
+    setAnnualTarget(value);
+    setAnnualTargetTouched(true);
   }
 
   const canAdvance = [
@@ -80,7 +94,10 @@ export default function OnboardingPage() {
       airbnbIcalUrl: airbnbIcalUrl.trim() || undefined,
       piti: piti ? parseFloat(piti) : undefined,
       occTarget: occTarget ? parseFloat(occTarget) : undefined,
-      annualTarget: annualTarget ? parseFloat(annualTarget) : undefined,
+      targetAdr: targetAdr ? parseFloat(targetAdr) : undefined,
+      annualTarget: annualTargetTouched
+        ? (annualTarget ? parseFloat(annualTarget) : undefined)
+        : (computedTarget > 0 ? computedTarget : undefined),
     }));
     router.push('/sign-up');
   }
@@ -170,7 +187,7 @@ export default function OnboardingPage() {
             {step === 1 && (
               <>
                 <h1 className="text-2xl font-bold text-slate-900 mb-1">Where do you list?</h1>
-                <p className="text-slate-500 text-sm mb-8">Select all platforms you use. You'll import earnings from each one.</p>
+                <p className="text-slate-500 text-sm mb-8">Select all platforms you use. You&apos;ll import earnings from each one.</p>
                 <div className="space-y-3">
                   {PLATFORMS.map(p => (
                     <button
@@ -193,8 +210,8 @@ export default function OnboardingPage() {
               </>
             )}
 
-            {/* ── Step 2: Connect bookings ── */}
-            {step === 2 && (
+            {/* ── Step 3: Connect bookings ── */}
+            {step === 3 && (
               <>
                 <h1 className="text-2xl font-bold text-slate-900 mb-1">Connect your bookings</h1>
                 <p className="text-slate-500 text-sm mb-6">
@@ -254,12 +271,76 @@ export default function OnboardingPage() {
               </>
             )}
 
-            {/* ── Step 3: Targets ── */}
-            {step === 3 && (
+            {/* ── Step 2: Targets ── */}
+            {step === 2 && (
               <>
-                <h1 className="text-2xl font-bold text-slate-900 mb-1">Set your targets</h1>
-                <p className="text-slate-500 text-sm mb-8">Optional — you can set these any time in the app.</p>
+                <h1 className="text-2xl font-bold text-slate-900 mb-1">Set your target</h1>
+                <p className="text-slate-500 text-sm mb-8">
+                  Not sure what number to use? Estimate it from your nightly rate and how full you expect to
+                  be — we&apos;ll do the math.
+                </p>
                 <div className="space-y-5">
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 block mb-1.5">Average nightly rate</label>
+                    <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-emerald-500 bg-white">
+                      <span className="text-slate-400 text-sm px-3 border-r border-slate-200 py-3">$</span>
+                      <input
+                        autoFocus
+                        type="number"
+                        value={targetAdr}
+                        onChange={e => setTargetAdr(e.target.value)}
+                        className="flex-1 py-3 px-3 text-sm outline-none"
+                        placeholder="225"
+                      />
+                      <span className="text-slate-400 text-xs pr-3">/night</span>
+                    </div>
+                  </div>
+                  <div>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <label className="text-sm font-medium text-slate-700">Occupancy target</label>
+                      <span className="text-sm font-semibold text-emerald-700">{occTarget || 0}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="100"
+                      step="5"
+                      value={occTarget || 0}
+                      onChange={e => setOccTarget(e.target.value)}
+                      className="w-full accent-emerald-600"
+                    />
+                    <p className="text-xs text-slate-400 mt-1">Percent of nights booked over the year</p>
+                  </div>
+
+                  <div className="rounded-xl bg-emerald-50 border border-emerald-100 p-4">
+                    <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide mb-1">
+                      Suggested annual revenue target
+                    </p>
+                    <p className="text-2xl font-bold text-slate-900">
+                      {computedTarget > 0 ? `$${computedTarget.toLocaleString()}` : '—'}
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      ${targetAdr || 0}/night × {occTarget || 0}% occupancy × 365 nights
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="text-sm font-medium text-slate-700 block mb-1.5">Annual revenue target</label>
+                    <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-emerald-500 bg-white">
+                      <span className="text-slate-400 text-sm px-3 border-r border-slate-200 py-3">$</span>
+                      <input
+                        type="number"
+                        value={displayedAnnualTarget}
+                        onChange={e => handleAnnualTargetChange(e.target.value)}
+                        className="flex-1 py-3 px-3 text-sm outline-none"
+                        placeholder="68,500"
+                      />
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Auto-filled from the estimate above — type your own number to override it.
+                    </p>
+                  </div>
+
                   <div>
                     <label className="text-sm font-medium text-slate-700 block mb-1.5">Monthly mortgage (PITI)</label>
                     <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-emerald-500 bg-white">
@@ -273,33 +354,7 @@ export default function OnboardingPage() {
                       />
                       <span className="text-slate-400 text-xs pr-3">/mo</span>
                     </div>
-                    <p className="text-xs text-slate-400 mt-1">Principal, interest, taxes &amp; insurance</p>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 block mb-1.5">Annual revenue target</label>
-                    <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-emerald-500 bg-white">
-                      <span className="text-slate-400 text-sm px-3 border-r border-slate-200 py-3">$</span>
-                      <input
-                        type="number"
-                        value={annualTarget}
-                        onChange={e => setAnnualTarget(e.target.value)}
-                        className="flex-1 py-3 px-3 text-sm outline-none"
-                        placeholder="68,500"
-                      />
-                    </div>
-                  </div>
-                  <div>
-                    <label className="text-sm font-medium text-slate-700 block mb-1.5">Occupancy target</label>
-                    <div className="flex items-center border border-slate-200 rounded-xl overflow-hidden focus-within:ring-2 focus-within:ring-emerald-500 bg-white">
-                      <input
-                        type="number"
-                        value={occTarget}
-                        onChange={e => setOccTarget(e.target.value)}
-                        className="flex-1 py-3 pl-4 text-sm outline-none"
-                        placeholder="70"
-                      />
-                      <span className="text-slate-400 text-sm px-3 border-l border-slate-200 py-3">%</span>
-                    </div>
+                    <p className="text-xs text-slate-400 mt-1">Principal, interest, taxes &amp; insurance — optional</p>
                   </div>
                 </div>
               </>
