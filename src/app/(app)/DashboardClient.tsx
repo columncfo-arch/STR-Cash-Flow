@@ -1073,17 +1073,24 @@ export default function DashboardClient() {
           <div className={`px-5 py-4 ${net < 0 ? 'bg-red-50/40' : ''}`}>
             <div className="flex items-start gap-4 sm:gap-6">
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Net Income</p>
+                {/* Named for what it is inside the section, the way Gross Revenue's
+                    first column is "Earned" — repeating the section title told the
+                    reader nothing. */}
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Bottom Line</p>
                 <p className={`text-xl font-bold leading-tight mt-0.5 ${net < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
                   {net >= 0 ? '+' : ''}{fmt(net)}
                 </p>
-                <p className="text-[11px] text-slate-400 truncate">{periodLabel}</p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  {periodLabel} · {fmt(revenue)} revenue after fees
+                </p>
               </div>
+              {/* The costs subtracted to get there. Headed "After Costs" this read
+                  as a second result rather than the deduction behind the first. */}
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">After Costs</p>
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Costs</p>
                 <p className="text-xl font-bold text-red-500 leading-tight mt-0.5">−{fmt(opex + piti)}</p>
                 <p className="text-[11px] text-slate-400 truncate">
-                  {fmt(revenue)} net revenue · {fmt(opex)} opex · {fmt(piti)} PITI
+                  {fmt(opex)} operating · {fmt(piti)} PITI
                 </p>
               </div>
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
