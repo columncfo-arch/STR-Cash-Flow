@@ -208,7 +208,7 @@ export default function DashboardClient() {
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null); // 0-indexed
   // Which span the revenue tile reports on. Months, not days — targets are
   // distributed monthly.
-  const [period, setPeriod] = useState<'month' | 'ytd' | 'last12' | 'custom'>('month');
+  const [period, setPeriod] = useState<'month' | 'ytd' | 'custom'>('month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [editingTarget, setEditingTarget] = useState(false);
@@ -560,12 +560,6 @@ export default function DashboardClient() {
   const periodMonths: { year: number; mi: number }[] = (() => {
     if (period === 'month') return [{ year, mi: currentMonthIdx }];
     if (period === 'ytd') return Array.from({ length: currentMonthIdx + 1 }, (_, i) => ({ year, mi: i }));
-    if (period === 'last12') {
-      return Array.from({ length: 12 }, (_, k) => {
-        const off = currentMonthIdx - 11 + k;
-        return off < 0 ? { year: year - 1, mi: off + 12 } : { year, mi: off };
-      });
-    }
     if (!customFrom || !customTo || customFrom > customTo) return [];
     const out: { year: number; mi: number }[] = [];
     for (const y of [year - 1, year]) {
@@ -582,7 +576,6 @@ export default function DashboardClient() {
 
   const periodLabel = period === 'month' ? MONTHS_LONG[currentMonthIdx]
     : period === 'ytd' ? `${year} to date`
-    : period === 'last12' ? 'last 12 months'
     : customFrom && customTo ? `${customFrom} to ${customTo}` : 'custom range';
 
   // Only current-year months carry a target; closed prior-year months are their
@@ -777,7 +770,6 @@ export default function DashboardClient() {
             {([
               ['month', 'This Month'],
               ['ytd', 'YTD'],
-              ['last12', 'Last 12 Months'],
               ['custom', 'Custom'],
             ] as const).map(([id, label]) => (
               <button
