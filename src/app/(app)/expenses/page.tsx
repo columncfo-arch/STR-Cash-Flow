@@ -1,11 +1,12 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Expense, ExpenseCategory, EXPENSE_CATEGORIES, Settings } from '@/types';
+import { Expense, ExpenseCategory, EXPENSE_CATEGORIES, RecurrenceFrequency, Settings } from '@/types';
 import { format } from 'date-fns';
 import { Plus, Pencil, Trash2, Check, X, TrendingUp, TrendingDown, Minus } from 'lucide-react';
+import { RANGE_PRESETS, presetRange, type RangePreset } from '@/lib/dateRange';
 import {
-  RANGE_PRESETS, presetRange, inRange, recurrenceOverlapsRange, type RangePreset,
-} from '@/lib/dateRange';
+  RECURRENCE_FREQUENCIES, DEFAULT_FREQUENCY, frequencyLabel, occursInMonth, occursInRange,
+} from '@/lib/recurrence';
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -136,6 +137,7 @@ interface FormState {
   description: string;
   amount: string;
   recurring: boolean;
+  recurrenceFrequency: RecurrenceFrequency;
   recurrenceEnd: string;
 }
 
@@ -146,6 +148,7 @@ function emptyForm(): FormState {
     description: '',
     amount: '',
     recurring: false,
+    recurrenceFrequency: DEFAULT_FREQUENCY,
     recurrenceEnd: '',
   };
 }
@@ -202,14 +205,31 @@ function ExpenseForm({ f, onChange, onSave, onCancel, submitLabel = 'Add' }: {
       <div className="col-span-2 md:col-span-4 flex flex-wrap items-end gap-4">
         <label className="flex items-center gap-2 text-sm text-slate-600">
           <input type="checkbox" checked={f.recurring} onChange={e => onChange({ recurring: e.target.checked })} />
-          Recurring monthly expense
+          Repeats
         </label>
         {f.recurring && (
-          <div>
-            <label className="text-xs text-slate-500 block mb-1">Ends (optional)</label>
-            <input type="date" value={f.recurrenceEnd} onChange={e => onChange({ recurrenceEnd: e.target.value })}
-              className="text-sm border border-slate-200 rounded-lg px-3 py-2" />
-          </div>
+          <>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">How often</label>
+              <select
+                value={f.recurrenceFrequency}
+                onChange={e => onChange({ recurrenceFrequency: e.target.value as RecurrenceFrequency })}
+                className="text-sm border border-slate-200 rounded-lg px-3 py-2"
+              >
+                {RECURRENCE_FREQUENCIES.map(o => <option key={o.id} value={o.id}>{o.label}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="text-xs text-slate-500 block mb-1">Ends (optional)</label>
+              <input type="date" value={f.recurrenceEnd} onChange={e => onChange({ recurrenceEnd: e.target.value })}
+                className="text-sm border border-slate-200 rounded-lg px-3 py-2" />
+            </div>
+            <p className="text-xs text-slate-400 basis-full">
+              Charged in the month of the date above, then every{' '}
+              {f.recurrenceFrequency === 'monthly' ? 'month'
+                : f.recurrenceFrequency === 'quarterly' ? 'three months' : 'year'} after it.
+            </p>
+          </>
         )}
       </div>
       <div className="flex items-end gap-2 col-span-2 md:col-span-4">
@@ -286,13 +306,10 @@ export default function ExpensesPage() {
   const expenses = allExpenses.filter(e => e.date.startsWith(String(activeYear)));
   const prevExpenses = allExpenses.filter(e => e.date.startsWith(String(activeYear - 1)));
 
-  // Recurring costs apply every month from their start until recurrenceEnd, so
-  // a monthly bill begun in January must still show in a September range.
-  const visible = allExpenses.filter(e =>
-    e.recurring
-      ? recurrenceOverlapsRange(e.date, e.recurrenceEnd, range)
-      : inRange(e.date, range)
-  );
+  // A recurring cost belongs to the range when one of its occurrences lands in
+  // it: a monthly bill begun in January still shows in a September range, an
+  // annual one only in the month it is actually charged.
+  const visible = allExpenses.filter(e => occursInRange(e, range));
 
   const rangeLabel = preset === 'all'
     ? 'across all dates'
@@ -309,6 +326,7 @@ export default function ExpensesPage() {
         description: form.description,
         amount: parseFloat(form.amount) || 0,
         recurring: form.recurring,
+        recurrenceFrequency: form.recurring ? form.recurrenceFrequency : undefined,
         recurrenceEnd: form.recurring && form.recurrenceEnd ? form.recurrenceEnd : undefined,
       }),
     });
@@ -327,6 +345,7 @@ export default function ExpensesPage() {
         description: editForm.description,
         amount: parseFloat(editForm.amount) || 0,
         recurring: editForm.recurring,
+        recurrenceFrequency: editForm.recurring ? editForm.recurrenceFrequency : undefined,
         recurrenceEnd: editForm.recurring && editForm.recurrenceEnd ? editForm.recurrenceEnd : null,
       }),
     });
@@ -348,6 +367,7 @@ export default function ExpensesPage() {
       description: e.description,
       amount: String(e.amount),
       recurring: e.recurring ?? false,
+      recurrenceFrequency: e.recurrenceFrequency ?? DEFAULT_FREQUENCY,
       recurrenceEnd: e.recurrenceEnd ?? '',
     });
   }
@@ -372,8 +392,7 @@ export default function ExpensesPage() {
 
   const monthRows: MonthRow[] = EXPENSE_CATEGORIES.map(({ value, label }) => {
     const recurring = allExpenses.filter(e =>
-      e.category === value && e.recurring &&
-      recurrenceOverlapsRange(e.date, e.recurrenceEnd, { from: `${gridMonth}-01`, to: `${gridMonth}-31` })
+      e.category === value && e.recurring && occursInMonth(e, gridMonth)
     );
     const oneOffs = allExpenses.filter(e =>
       e.category === value && !e.recurring && e.date.startsWith(gridMonth)
@@ -426,6 +445,7 @@ export default function ExpensesPage() {
               description: row.editable.description,
               amount: value,
               recurring: row.editable.recurring ?? false,
+              recurrenceFrequency: row.editable.recurrenceFrequency,
               recurrenceEnd: row.editable.recurrenceEnd ?? null,
             }),
           }));
@@ -669,7 +689,7 @@ export default function ExpensesPage() {
                     {e.description}
                     {e.recurring && (
                       <span className="ml-2 text-[10px] uppercase tracking-wide bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">
-                        Recurring
+                        {frequencyLabel(e)}
                       </span>
                     )}
                   </td>

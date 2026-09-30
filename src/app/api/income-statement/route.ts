@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { loadBookings, loadExpenses, loadSettings } from '@/lib/storage';
 import { requireAuth, unauthorized } from '@/lib/auth';
 import { AnnualStatement, Booking, Expense, ExpenseCategory, MonthlyStatement, Platform, PnLSummary } from '@/types';
+import { occurrencesIn } from '@/lib/recurrence';
 import { getYear, getDaysInMonth } from 'date-fns';
 
 const PLATFORMS: Platform[] = ['airbnb', 'booking', 'vrbo', 'direct', 'other'];
@@ -17,22 +18,10 @@ function emptyExpensesByCategory(): Record<ExpenseCategory, number> {
   return Object.fromEntries(EXPENSE_CATS.map(c => [c, 0])) as Record<ExpenseCategory, number>;
 }
 
-// Expands recurring expenses into one occurrence per applicable month (YYYY-MM prefix)
-// so their amount is counted once per month rather than once total.
+// Expands expenses into one copy per month they land in (YYYY-MM prefix), so a
+// recurring cost is counted once per occurrence rather than once in total.
 function expandExpenses(expenses: Expense[], monthPrefixes: string[]): Expense[] {
-  const result: Expense[] = [];
-  for (const e of expenses) {
-    if (!e.recurring) {
-      if (monthPrefixes.some(p => e.date.startsWith(p))) result.push(e);
-      continue;
-    }
-    const startPrefix = e.date.slice(0, 7);
-    const endPrefix = e.recurrenceEnd ? e.recurrenceEnd.slice(0, 7) : null;
-    for (const p of monthPrefixes) {
-      if (p >= startPrefix && (!endPrefix || p <= endPrefix)) result.push(e);
-    }
-  }
-  return result;
+  return expenses.flatMap(e => occurrencesIn(e, monthPrefixes).map(() => e));
 }
 
 function buildPnL(

@@ -75,6 +75,8 @@ export interface Booking {
   updatedAt: string;
 }
 
+export type RecurrenceFrequency = 'monthly' | 'quarterly' | 'annual';
+
 export interface Expense {
   id: string;
   date: string;          // YYYY-MM-DD, first occurrence for recurring expenses
@@ -83,7 +85,10 @@ export interface Expense {
   description: string;
   amount: number;
   bookingId?: string;    // optional link to a specific booking
-  recurring?: boolean;       // repeats monthly starting at `date`
+  recurring?: boolean;       // repeats from `date` at recurrenceFrequency
+  // How often it repeats. Absent on records saved before frequencies existed,
+  // which were all monthly — so absent means monthly.
+  recurrenceFrequency?: RecurrenceFrequency;
   recurrenceEnd?: string | null; // YYYY-MM-DD, optional last month it applies to
   createdAt: string;
   updatedAt: string;
