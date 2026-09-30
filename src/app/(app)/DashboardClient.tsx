@@ -1246,48 +1246,39 @@ export default function DashboardClient() {
               </div>
             ) : (
               <>
+                {/* Same sequence as the other two sections: the measure, the gap
+                    to what it is held to, then the verdict. The daily rate moves
+                    under the occupancy it was earned at — it is context for the
+                    figure, not a second thing to compare. */}
                 <div className="flex items-start gap-4 sm:gap-6">
-                  {/* Occupancy */}
                   <div className="min-w-0 flex-1">
                     <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Occupancy</p>
                     <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
                       {occ != null ? `${occ.toFixed(1)}%` : '—'}
                     </p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      {baseline != null ? `of ${baseline.toFixed(1)}% baseline · ${periodLabel}` : periodLabel}
-                    </p>
-                  </div>
-
-                  {/* Daily rate */}
-                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Daily Rate</p>
+                    <div className="flex items-center gap-1 min-w-0">
+                      <p className="text-[11px] text-slate-400 truncate">
+                        {periodLabel}
+                        {periodAdr != null && ` · ${fmt(periodAdr)}/night`}
+                        {periodAdr != null && displayAdrTarget != null && ` of ${fmt(displayAdrTarget)} target`}
+                      </p>
                       {derivedAdrTarget == null && (
                         <button
                           onClick={() => { setAdrTargetInput(String(settings?.targetAdr ?? '')); setEditingAdrTarget(true); }}
-                          className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
+                          className="text-slate-300 hover:text-slate-500 transition-colors shrink-0"
                           title="Set daily rate target">
                           <Pencil className="w-3 h-3" />
                         </button>
                       )}
                     </div>
-                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
-                      {periodAdr != null ? fmt(periodAdr) : '—'}
-                    </p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      {displayAdrTarget != null
-                        ? <>
-                            of {fmt(displayAdrTarget)} target
-                            {derivedAdrTarget != null && ` @ ${displayOccTarget?.toFixed(1)}% occ`}
-                          </>
-                        : `${periodNights} nights booked`}
-                    </p>
                   </div>
 
-                  {/* Status — occupancy against its baseline */}
+                  {/* Gap to the baseline, carrying the pencil that sets it */}
                   <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">
+                        {variancePts != null && variancePts >= 0 ? 'Over Baseline' : 'Still Needed'}
+                      </p>
                       <button
                         onClick={() => { setOccTargetInput(String(settings?.targetOccupancyPct ?? '')); setEditingOccTarget(true); }}
                         className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
@@ -1295,15 +1286,26 @@ export default function DashboardClient() {
                         <Pencil className="w-3 h-3" />
                       </button>
                     </div>
-                    <p className={`text-xl font-bold leading-tight mt-0.5 ${status.color}`}>{status.label}</p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      {variancePts != null
-                        ? <>
-                            <span className={status.color}>{variancePts >= 0 ? '▲' : '▼'}{Math.abs(variancePts).toFixed(1)}pts</span>
-                            {` vs baseline · ${occBaselineLabel}`}
-                          </>
-                        : 'no baseline set'}
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${
+                      variancePts == null ? 'text-slate-400'
+                        : variancePts >= 0 ? 'text-emerald-600'
+                        : 'text-slate-900'
+                    }`}>
+                      {variancePts == null ? '—'
+                        : variancePts >= 0 ? `+${variancePts.toFixed(1)} pts`
+                        : `${Math.abs(variancePts).toFixed(1)} pts`}
                     </p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {baseline != null ? `of ${baseline.toFixed(1)}% baseline` : 'no baseline set'}
+                    </p>
+                  </div>
+
+                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${status.color}`}>{status.label}</p>
+                    {/* Where the baseline comes from, the way Gross Revenue's status
+                        caption names the annual target behind it. */}
+                    <p className="text-[11px] text-slate-400 truncate">baseline · {occBaselineLabel}</p>
                   </div>
                 </div>
 
