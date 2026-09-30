@@ -5,6 +5,8 @@ import StatCard from '@/components/StatCard';
 import { TrendingUp, X, Pencil, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
 import { pacingStatus } from '@/lib/pacing';
+import { addDays } from '@/lib/dateRange';
+import DayRevenueChart, { DayDatum } from '@/components/DayRevenueChart';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Legend, Cell, ReferenceLine,
@@ -433,22 +435,58 @@ export default function DashboardClient() {
   // assigns revenue to months (checkIn prefix). Spreading it across nights would
   // leak revenue into adjacent months and the bars would stop summing to the
   // Earned figure in the tile above.
-  const dailyChartData = (() => {
+  //
+  // Revenue alone reads wrong though: the rest of a multi-night stay has no bar,
+  // which looks identical to a vacant night. So each night also carries its
+  // occupancy, and the bar for a stay is drawn as one block spanning its nights
+  // (see DayBar) over a shaded "booked" band.
+  const dailyChartData: DayDatum[] = (() => {
     if (period !== 'month') return [];
     const daysInMonth = new Date(year, currentMonthIdx + 1, 0).getDate();
-    const byDay = new Array<number>(daysInMonth).fill(0);
-    for (const b of statement?.months[currentMonthIdx]?.bookings ?? []) {
-      // Slice the day out of YYYY-MM-DD rather than parsing — Date would shift it
-      const d = Number(b.checkIn.slice(8, 10));
-      if (d >= 1 && d <= daysInMonth) byDay[d - 1] += b.income;
-    }
-    const now = new Date();
+    const monthPrefix = `${year}-${String(currentMonthIdx + 1).padStart(2, '0')}-`;
     const isLiveMonth = now.getFullYear() === year && now.getMonth() === currentMonthIdx;
-    return byDay.map((revenue, i) => ({
+
+    const days: DayDatum[] = Array.from({ length: daysInMonth }, (_, i) => ({
       day: String(i + 1),
-      revenue,
+      revenue: 0,
+      spanNights: 0,
+      occupied: false,
+      stayNight: 0,
+      stayNights: 0,
+      guest: '',
+      // Days still to come are greyed so an empty bar reads as "not yet"
+      // rather than "earned nothing"
       isFuture: isLiveMonth && i + 1 > now.getDate(),
     }));
+
+    // Every booking, not just this month's: a stay that checked in last month can
+    // still occupy the first nights of this one.
+    for (const b of statement?.months.flatMap(m => m.bookings) ?? []) {
+      const nights = Math.max(1, b.nights || 0);
+      const guest = b.guestName?.trim() || b.summary || '';
+
+      for (let n = 0; n < nights; n++) {
+        const night = addDays(b.checkIn, n);
+        if (!night.startsWith(monthPrefix)) continue;
+        // Slice the day out of YYYY-MM-DD rather than parsing — Date would shift it
+        const day = days[Number(night.slice(8, 10)) - 1];
+        if (!day) continue;
+        day.occupied = true;
+        day.stayNight = n + 1;
+        day.stayNights = nights;
+        day.guest = guest;
+      }
+
+      if (!b.checkIn.startsWith(monthPrefix)) continue;
+      const checkInDay = Number(b.checkIn.slice(8, 10));
+      const day = days[checkInDay - 1];
+      if (!day) continue;
+      day.revenue += b.income;
+      // Clipped to the month so a stay running into next month stops at the edge
+      day.spanNights = Math.max(day.spanNights, Math.min(nights, daysInMonth - checkInDay + 1));
+    }
+
+    return days;
   })();
 
   const chartData = statement?.months.map((m, i) => {
@@ -921,7 +959,7 @@ export default function DashboardClient() {
         </p>
         <p className="text-xs text-slate-400 mb-4">
           {period === 'month'
-            ? 'Revenue by check-in date · dashed line is the daily pace needed to hit target'
+            ? 'Each stay is one block across the nights it covers · dashed line is the daily pace needed to hit target'
             : 'Click a month to drill into its P&L'}
         </p>
         {!hasData ? (
@@ -929,33 +967,12 @@ export default function DashboardClient() {
             No data yet. Import your earnings CSV to get started.
           </div>
         ) : period === 'month' ? (
-          <ResponsiveContainer width="100%" height={300}>
-            <ComposedChart data={dailyChartData} barCategoryGap="15%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8' }} interval={1} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(1)}k`} />
-              <Tooltip
-                formatter={(v) => [fmt(typeof v === 'number' ? v : 0), 'Revenue']}
-                labelFormatter={(d) => `${MONTHS_LONG[currentMonthIdx]} ${d}`}
-                contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
-              />
-              {dailyPaceTarget != null && (
-                <ReferenceLine
-                  y={dailyPaceTarget}
-                  stroke="#94a3b8"
-                  strokeDasharray="4 3"
-                  label={{ value: `${fmt(dailyPaceTarget)}/day needed`, position: 'insideTopRight', fontSize: 10, fill: '#94a3b8' }}
-                />
-              )}
-              <Bar dataKey="revenue" radius={[3, 3, 0, 0]}>
-                {dailyChartData.map((d, i) => (
-                  // Days still to come are greyed so an empty bar reads as "not yet"
-                  // rather than "earned nothing"
-                  <Cell key={i} fill={d.isFuture ? '#e2e8f0' : '#10b981'} />
-                ))}
-              </Bar>
-            </ComposedChart>
-          </ResponsiveContainer>
+          <DayRevenueChart
+            data={dailyChartData}
+            monthLabel={MONTHS_LONG[currentMonthIdx]}
+            fmt={fmt}
+            paceTarget={dailyPaceTarget}
+          />
         ) : (
           <>
             <ResponsiveContainer width="100%" height={300}>
