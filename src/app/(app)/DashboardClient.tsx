@@ -6,7 +6,7 @@ import { TrendingUp, X, Pencil, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
 import { pacingStatus } from '@/lib/pacing';
 import { addDays } from '@/lib/dateRange';
-import DayRevenueChart, { DayDatum } from '@/components/DayRevenueChart';
+import { DayRevenueChart, DayOccupancyChart, DayDatum } from '@/components/DayCharts';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Legend, Cell, ReferenceLine,
@@ -428,8 +428,9 @@ export default function DashboardClient() {
   const hasDirectIncome = statement?.months.some(m => m.byPlatform.direct.income > 0) ?? false;
   const hasOtherIncome = statement?.months.some(m => m.byPlatform.other.income > 0) ?? false;
 
-  // Day-by-day revenue for the selected month, shown in place of the year view
-  // when the period is This Month.
+  // Day-by-day view of the selected month, shown in place of the year charts when
+  // the period is This Month. Both the revenue chart and the occupancy chart read
+  // from this: revenue is what the day earned, rate is what the night sold for.
   //
   // A booking's whole income lands on its check-in day, matching how the API
   // assigns revenue to months (checkIn prefix). Spreading it across nights would
@@ -451,6 +452,7 @@ export default function DashboardClient() {
       revenue: 0,
       spanNights: 0,
       occupied: false,
+      rate: 0,
       stayNight: 0,
       stayNights: 0,
       guest: '',
@@ -464,6 +466,9 @@ export default function DashboardClient() {
     for (const b of statement?.months.flatMap(m => m.bookings) ?? []) {
       const nights = Math.max(1, b.nights || 0);
       const guest = b.guestName?.trim() || b.summary || '';
+      // What the night sold for. The stay's gross spread evenly over its nights —
+      // the same basis as the ADR figures elsewhere on the page.
+      const nightlyRate = b.income / nights;
 
       for (let n = 0; n < nights; n++) {
         const night = addDays(b.checkIn, n);
@@ -472,6 +477,7 @@ export default function DashboardClient() {
         const day = days[Number(night.slice(8, 10)) - 1];
         if (!day) continue;
         day.occupied = true;
+        day.rate = nightlyRate;
         day.stayNight = n + 1;
         day.stayNights = nights;
         day.guest = guest;
@@ -1305,14 +1311,30 @@ export default function DashboardClient() {
       {hasData && (
         <div className="px-5 py-4">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-slate-500">Rate and occupancy by month</p>
+            <p className="text-xs font-medium text-slate-500">
+              {period === 'month'
+                ? `${MONTHS_LONG[currentMonthIdx]} night by night`
+                : 'Rate and occupancy by month'}
+            </p>
             {targetOcc != null && (
               <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${perfColor(occVariance ?? 0, occVariance != null ? Math.abs(occVariance) : null, true)}`}>
                 YTD {ytdOccupancy.toFixed(1)}% {occVariance != null ? `(${occVariance >= 0 ? '+' : ''}${occVariance.toFixed(1)}pts vs target)` : ''}
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 mb-4">Monthly occupancy (bars) · faded = confirmed bookings only · ADR per night (line) · baseline {targetOcc != null ? `${targetOcc.toFixed(1)}%` : 'not set'}</p>
+          <p className="text-xs text-slate-400 mb-4">
+            {period === 'month'
+              ? `Which nights sold and what they sold for · gaps are open nights${displayAdrTarget != null ? ` · target rate ${fmt(displayAdrTarget)}` : ''}`
+              : `Monthly occupancy (bars) · faded = confirmed bookings only · ADR per night (line) · baseline ${targetOcc != null ? `${targetOcc.toFixed(1)}%` : 'not set'}`}
+          </p>
+          {period === 'month' ? (
+          <DayOccupancyChart
+            data={dailyChartData}
+            monthLabel={MONTHS_LONG[currentMonthIdx]}
+            fmt={fmt}
+            adrTarget={displayAdrTarget}
+          />
+          ) : (
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart data={occChartData} barCategoryGap="35%">
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1368,6 +1390,7 @@ export default function DashboardClient() {
               <Line yAxisId="adr" dataKey="ADR" type="monotone" stroke="#6366f1" strokeWidth={2} dot={{ r: 3, fill: '#6366f1' }} activeDot={{ r: 5 }} connectNulls={false} />
             </ComposedChart>
           </ResponsiveContainer>
+          )}
         </div>
       )}
         </div>
