@@ -176,9 +176,13 @@ function PnLTable({ m, fmt }: { m: PnLData; fmt: (n: number) => string }) {
         {rows.map((r, i) => (
           <tr key={i} className={`${r.separator ? 'border-t-2 border-slate-200' : 'border-t border-slate-50'} ${r.bold ? 'font-semibold' : ''}`}>
             <td className={`py-2 text-slate-700 ${r.indent ? 'pl-6 text-slate-500 text-xs' : ''}`}>{r.label}</td>
+            {/* Only the accented rows — operating and net income — are a verdict.
+                Deductions are set in slate and already read as deductions from the
+                parentheses; red on every one of them made routine costs look like
+                losses. */}
             <td className={`py-2 text-right text-sm ${
               r.accent ? (r.value >= 0 ? 'text-emerald-700' : 'text-red-600') :
-              r.negative ? 'text-red-500' :
+              r.negative ? 'text-slate-500' :
               r.bold ? 'text-slate-800' : 'text-slate-600'
             }`}>
               {(r.negative && r.value > 0) ? `(${fmt(r.value)})` : fmt(r.value)}
@@ -1088,7 +1092,11 @@ export default function DashboardClient() {
                   as a second result rather than the deduction behind the first. */}
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                 <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Costs</p>
-                <p className="text-xl font-bold text-red-500 leading-tight mt-0.5">−{fmt(opex + piti)}</p>
+                {/* Slate, not red: spending on a rental is expected, and colouring
+                    it like a problem competes with the two figures that do carry a
+                    verdict — the bottom line and the status. The minus sign already
+                    says it is subtracted. */}
+                <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">−{fmt(opex + piti)}</p>
                 <p className="text-[11px] text-slate-400 truncate">
                   {fmt(opex)} operating · {fmt(piti)} PITI
                 </p>
