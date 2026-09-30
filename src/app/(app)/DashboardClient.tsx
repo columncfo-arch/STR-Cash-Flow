@@ -1057,7 +1057,8 @@ export default function DashboardClient() {
         const net = periodNetActual;
         const projected = periodNetTarget;
         const variance = net - projected;
-        const variancePct = projected !== 0 ? (variance / Math.abs(projected)) * 100 : null;
+        const hasProjection = projected !== 0;
+        const variancePct = hasProjection ? (variance / Math.abs(projected)) * 100 : null;
         const status = pacingStatus(variancePct);
 
         // Costs behind the figure, for the same window
@@ -1068,41 +1069,46 @@ export default function DashboardClient() {
         return (
           <div className={`px-5 py-4 ${net < 0 ? 'bg-red-50/40' : ''}`}>
             <div className="flex items-start gap-4 sm:gap-6">
+              {/* Same sequence as Gross Revenue: the total, the gap to what was
+                  projected, then the verdict. Named for what it is inside the
+                  section, the way that section's first column is "Earned" —
+                  repeating the section title told the reader nothing. */}
               <div className="min-w-0 flex-1">
-                {/* Named for what it is inside the section, the way Gross Revenue's
-                    first column is "Earned" — repeating the section title told the
-                    reader nothing. */}
                 <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Bottom Line</p>
                 <p className={`text-xl font-bold leading-tight mt-0.5 ${net < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
                   {net >= 0 ? '+' : ''}{fmt(net)}
                 </p>
+                {/* The costs that produced it, sitting under the figure they explain
+                    rather than in a column of their own. */}
                 <p className="text-[11px] text-slate-400 truncate">
-                  {periodLabel} · {fmt(revenue)} revenue after fees
+                  {periodLabel} · {fmt(revenue)} revenue − {fmt(opex + piti)} costs
                 </p>
               </div>
-              {/* The costs subtracted to get there. Headed "After Costs" this read
-                  as a second result rather than the deduction behind the first. */}
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Costs</p>
-                {/* Slate, not red: spending on a rental is expected, and colouring
-                    it like a problem competes with the two figures that do carry a
-                    verdict — the bottom line and the status. The minus sign already
-                    says it is subtracted. */}
-                <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">−{fmt(opex + piti)}</p>
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">
+                  {hasProjection && variance >= 0 ? 'Over Projection' : 'Still Needed'}
+                </p>
+                <p className={`text-xl font-bold leading-tight mt-0.5 ${
+                  !hasProjection ? 'text-slate-400' : variance >= 0 ? 'text-emerald-600' : 'text-slate-900'
+                }`}>
+                  {!hasProjection ? '—'
+                    : variance >= 0 ? `+${fmt(variance)}`
+                    : fmt(Math.abs(variance))}
+                </p>
                 <p className="text-[11px] text-slate-400 truncate">
-                  {fmt(opex)} operating · {fmt(piti)} PITI
+                  {hasProjection ? `of ${fmt(projected)} projected` : 'no projection for this period'}
                 </p>
               </div>
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                 <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
                 <p className={`text-xl font-bold leading-tight mt-0.5 ${status.color}`}>{status.label}</p>
+                {/* The annual anchor, matching Gross Revenue's status caption. No
+                    percentage: a month projected at $120 turns a $1,553 miss into
+                    1,294%, which reads as a data error rather than a shortfall. */}
                 <p className="text-[11px] text-slate-400 truncate">
-                  {variancePct != null
-                    ? <>
-                        <span className={status.color}>{variance >= 0 ? '▲' : '▼'}{fmt(Math.abs(variance))}</span>
-                        {` vs ${fmt(projected)} projected`}
-                      </>
-                    : 'no projection for this period'}
+                  {annualNetForecast != null
+                    ? `${fmt(annualNetForecast)} annual projection`
+                    : periodLabel}
                 </p>
               </div>
             </div>
