@@ -295,8 +295,8 @@ export default function GuestRosterPage() {
                       </div>
                       <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
                         {guest.platforms.map(p => <PlatformBadge key={p} platform={p} />)}
-                        {isRepeat && <span className="text-xs bg-emerald-100 text-emerald-700 rounded-full px-2 py-0.5 font-medium">Repeat</span>}
-                        {guest.leadOnly && <span className="text-xs bg-blue-100 text-blue-700 rounded-full px-2 py-0.5 font-medium">WiFi sign-up</span>}
+                        {isRepeat && <span className="text-xs text-emerald-700 rounded-full px-2 py-0.5 font-medium">Repeat</span>}
+                        {guest.leadOnly && <span className="text-xs text-blue-700 rounded-full px-2 py-0.5 font-medium">WiFi sign-up</span>}
                       </div>
                     </td>
                     <td className="px-4 py-3">
@@ -338,7 +338,7 @@ export default function GuestRosterPage() {
                   </tr>
 
                   {isEditingContact && (
-                    <tr key={`${guest.key}-edit`} className="border-b border-slate-200 bg-emerald-50/40">
+                    <tr key={`${guest.key}-edit`} className="border-b border-slate-200 ">
                       <td />
                       <td colSpan={7} className="px-4 pb-3 pt-1">
                         <div className="grid grid-cols-3 gap-3">

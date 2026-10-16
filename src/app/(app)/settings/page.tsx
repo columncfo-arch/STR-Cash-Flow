@@ -165,7 +165,7 @@ export default function SettingsPage() {
             Import 2025 Baseline Data
           </button>
         </div>
-        {migrateResult && <p className="text-xs text-slate-600 mt-3 p-3 bg-blue-50 rounded-lg">{migrateResult}</p>}
+        {migrateResult && <p className="text-xs text-slate-600 mt-3 p-3 rounded-lg">{migrateResult}</p>}
         {seeded && <p className="text-xs text-slate-600 mt-3 p-3 bg-slate-50 rounded-lg">{seeded}</p>}
       </section>
 

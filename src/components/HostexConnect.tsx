@@ -85,7 +85,7 @@ export default function HostexConnect({ heading, subheading, onSynced }: Props) 
       )}
 
       {tokenStatus === 'set' && (
-        <p className="text-xs text-emerald-700 bg-emerald-50 rounded-lg px-3 py-2 mb-3">
+        <p className="text-xs text-emerald-700 rounded-lg px-3 py-2 mb-3">
           Token configured.
           <button
             onClick={() => { setTokenStatus(''); setTokenInput(''); }}
@@ -106,7 +106,7 @@ export default function HostexConnect({ heading, subheading, onSynced }: Props) 
       </button>
 
       {result && (
-        <div className="flex items-start gap-3 mt-4 bg-emerald-50 border border-emerald-200 rounded-lg p-3">
+        <div className="flex items-start gap-3 mt-4 border border-emerald-200 rounded-lg p-3">
           <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
           <div>
             <p className="text-sm text-emerald-800">
@@ -119,7 +119,7 @@ export default function HostexConnect({ heading, subheading, onSynced }: Props) 
         </div>
       )}
       {error && (
-        <div className="flex items-start gap-2 mt-4 text-sm text-red-600 bg-red-50 rounded-lg p-3">
+        <div className="flex items-start gap-2 mt-4 text-sm text-red-600 rounded-lg p-3">
           <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
           <span className="whitespace-pre-wrap break-all">{error}</span>
         </div>

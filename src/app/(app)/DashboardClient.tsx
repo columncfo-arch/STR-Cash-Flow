@@ -65,11 +65,12 @@ type PnLData = Pick<MonthlyStatement,
 
 // Green = on/above target · Amber = missing by ≤25 · Red = missing by >25
 // missMagnitude: absolute pct or pts below target (pass null → defaults to red)
-function perfColor(variance: number, missMagnitude: number | null, withBg: boolean): string {
-  if (variance >= 0) return withBg ? 'bg-emerald-50 text-emerald-700' : 'text-emerald-600';
+// `strong` picks the darker shade; it used to add a tinted pill behind the text.
+function perfColor(variance: number, missMagnitude: number | null, strong: boolean): string {
+  if (variance >= 0) return strong ? 'text-emerald-700' : 'text-emerald-600';
   const miss = missMagnitude ?? Infinity;
-  if (miss <= 25) return withBg ? 'bg-amber-50 text-amber-700' : 'text-amber-600';
-  return withBg ? 'bg-red-50 text-red-600' : 'text-red-500';
+  if (miss <= 25) return strong ? 'text-amber-700' : 'text-amber-600';
+  return strong ? 'text-red-600' : 'text-red-500';
 }
 
 function PnLTable({ m, fmt }: { m: PnLData; fmt: (n: number) => string }) {
@@ -815,7 +816,7 @@ export default function DashboardClient() {
               onSelect={handleChartClick}
             />
             {!prevHasData && manualTarget == null && (
-              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+              <p className="text-xs text-amber-700 border border-amber-200 rounded-lg px-3 py-2 mt-3">
                 No prior-year data — set an annual target on the pacing card above to enable the forecast line, or{' '}
                 <a href="/settings" className="underline font-medium">import 2025 baseline data</a>.
               </p>

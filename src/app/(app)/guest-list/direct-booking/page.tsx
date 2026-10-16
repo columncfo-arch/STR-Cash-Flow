@@ -131,7 +131,7 @@ export default function DirectBookingPage() {
         >
           Leads
           {leads.length > 0 && (
-            <span className="bg-emerald-100 text-emerald-700 text-xs rounded-full px-2 py-0.5 font-semibold">
+            <span className="text-emerald-700 text-xs rounded-full px-2 py-0.5 font-semibold">
               {leads.length}
             </span>
           )}
@@ -229,15 +229,15 @@ export default function DirectBookingPage() {
                         <td className="px-4 py-3">
                           <span className={`text-xs rounded-full px-2 py-0.5 font-medium ${
                             lead.source === 'direct_booking'
-                              ? 'bg-blue-100 text-blue-700'
-                              : 'bg-emerald-100 text-emerald-700'
+                              ? 'text-blue-700'
+                              : 'text-emerald-700'
                           }`}>
                             {lead.source === 'direct_booking' ? 'Book page' : 'Welcome'}
                           </span>
                         </td>
                         <td className="px-4 py-3 text-center">
                           {lead.tcpaConsent
-                            ? <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-700 text-xs rounded-full px-2 py-0.5"><Check className="w-3 h-3" /> Yes</span>
+                            ? <span className="inline-flex items-center gap-1 text-emerald-700 text-xs rounded-full px-2 py-0.5"><Check className="w-3 h-3" /> Yes</span>
                             : <span className="text-slate-300 text-xs">—</span>}
                         </td>
                         <td className="px-4 py-3 text-right text-xs text-slate-400">

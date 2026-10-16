@@ -971,7 +971,7 @@ export default function ForecastPage() {
 
               if (isEditing) {
                 return (
-                  <tr key={row.year} className="border-b border-slate-100 bg-emerald-50">
+                  <tr key={row.year} className="border-b border-slate-100 ">
                     <td className="px-4 py-3 font-bold text-slate-800">{row.year}</td>
                     <td className="px-4 py-3"><TypeBadge type={row.type} manual={row.isManualEntry} blended={row.blended} /></td>
                     <td className="px-4 py-3 text-right text-slate-400 text-xs">recalc on save</td>
@@ -1009,7 +1009,7 @@ export default function ForecastPage() {
 
               return (
                 <tr key={row.year}
-                  className={`border-b border-slate-50 ${isCurrent ? 'bg-blue-50/40' : row.type === 'forecast' ? 'bg-slate-50/50' : ''}`}
+                  className={`border-b border-slate-50 ${isCurrent ? '' : row.type === 'forecast' ? 'bg-slate-50/50' : ''}`}
                 >
                   <td className="px-4 py-3 font-bold text-slate-800">
                     {row.year}
@@ -1211,18 +1211,18 @@ function EditCell({ value, placeholder, onChange, onBlur, onFocus }: {
 
 function TypeBadge({ type, manual, blended }: { type: ForecastYear['type']; manual?: boolean; blended?: boolean }) {
   if (manual) return (
-    <span className="text-[10px] uppercase tracking-wide bg-amber-50 text-amber-700 px-1.5 py-0.5 rounded font-medium">Manual</span>
+    <span className="text-[10px] uppercase tracking-wide text-amber-700 px-1.5 py-0.5 rounded font-medium">Manual</span>
   );
   if (blended) return (
     <span className="text-[10px] uppercase tracking-wide bg-violet-50 text-violet-700 px-1.5 py-0.5 rounded font-medium">YTD+Proj</span>
   );
   if (type === 'actual') return (
-    <span className="text-[10px] uppercase tracking-wide bg-emerald-50 text-emerald-700 px-1.5 py-0.5 rounded font-medium">Actual</span>
+    <span className="text-[10px] uppercase tracking-wide text-emerald-700 px-1.5 py-0.5 rounded font-medium">Actual</span>
   );
   if (type === 'partial') return (
-    <span className="text-[10px] uppercase tracking-wide bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded font-medium">Partial</span>
+    <span className="text-[10px] uppercase tracking-wide text-blue-600 px-1.5 py-0.5 rounded font-medium">Partial</span>
   );
   return (
-    <span className="text-[10px] uppercase tracking-wide bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-medium">Forecast</span>
+    <span className="text-[10px] uppercase tracking-wide text-slate-500 px-1.5 py-0.5 rounded font-medium">Forecast</span>
   );
 }

@@ -35,12 +35,12 @@ function AnomalyBadge({ pctChange, inverse = false }: { pctChange: number; inver
   const isBad = inverse ? !isIncrease : isIncrease;
   if (abs >= 50) {
     return isBad
-      ? <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-red-100 text-red-700"><TrendingUp className="w-2.5 h-2.5" />High</span>
-      : <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-100 text-emerald-700"><TrendingDown className="w-2.5 h-2.5" />Low</span>;
+      ? <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded text-red-700"><TrendingUp className="w-2.5 h-2.5" />High</span>
+      : <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-bold px-1.5 py-0.5 rounded text-emerald-700"><TrendingDown className="w-2.5 h-2.5" />Low</span>;
   }
   return isBad
-    ? <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700"><TrendingUp className="w-2.5 h-2.5" />Up</span>
-    : <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-600"><TrendingDown className="w-2.5 h-2.5" />Down</span>;
+    ? <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded text-amber-700"><TrendingUp className="w-2.5 h-2.5" />Up</span>
+    : <span className="ml-1.5 inline-flex items-center gap-0.5 text-[10px] font-semibold px-1.5 py-0.5 rounded text-emerald-600"><TrendingDown className="w-2.5 h-2.5" />Down</span>;
 }
 
 function AnalysisTable({
@@ -91,8 +91,8 @@ function AnalysisTable({
               <tr key={cat} className="border-b border-slate-50 hover:bg-slate-50">
                 <td className="py-2.5 pr-4 text-slate-700 font-medium">
                   {label}
-                  {isNew && <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-100 text-amber-700">New</span>}
-                  {isGone && <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">Gone</span>}
+                  {isNew && <span className="ml-1.5 text-[10px] font-bold px-1.5 py-0.5 rounded text-amber-700">New</span>}
+                  {isGone && <span className="ml-1.5 text-[10px] font-semibold px-1.5 py-0.5 rounded text-slate-500">Gone</span>}
                 </td>
                 <td className="py-2.5 px-3 text-right font-medium text-slate-800">{curr > 0 ? fmt(curr) : '—'}</td>
                 <td className="py-2.5 px-3 text-right text-slate-500">{curr > 0 ? `${pct(curr, currTotal).toFixed(1)}%` : '—'}</td>
@@ -193,7 +193,7 @@ function ExpenseForm({ f, onChange, onSave, onCancel, submitLabel = 'Add' }: {
         </label>
         <input type="text" value={f.description} onChange={e => onChange({ description: e.target.value })}
           placeholder="e.g. April electric bill"
-          className={`w-full text-sm border rounded-lg px-3 py-2 ${err.description ? 'border-red-400 bg-red-50' : 'border-slate-200'}`} />
+          className={`w-full text-sm border rounded-lg px-3 py-2 ${err.description ? 'border-red-400 ' : 'border-slate-200'}`} />
       </div>
       <div>
         <label className="text-xs text-slate-500 block mb-1">
@@ -201,7 +201,7 @@ function ExpenseForm({ f, onChange, onSave, onCancel, submitLabel = 'Add' }: {
         </label>
         <input type="number" value={f.amount} onChange={e => onChange({ amount: e.target.value })}
           placeholder="0.00" min="0" step="0.01"
-          className={`w-full text-sm border rounded-lg px-3 py-2 ${err.amount ? 'border-red-400 bg-red-50' : 'border-slate-200'}`} />
+          className={`w-full text-sm border rounded-lg px-3 py-2 ${err.amount ? 'border-red-400 ' : 'border-slate-200'}`} />
       </div>
       <div className="col-span-2 md:col-span-4 flex flex-wrap items-end gap-4">
         <label className="flex items-center gap-2 text-sm text-slate-600">
@@ -549,7 +549,7 @@ export default function ExpensesPage() {
                 <span className="text-sm text-slate-700 flex-1 min-w-0 truncate">
                   {row.label}
                   {hasRecurring && (
-                    <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded bg-blue-50 text-blue-700">
+                    <span className="ml-2 text-[10px] font-semibold px-1.5 py-0.5 rounded text-blue-700">
                       {fmt(row.recurringTotal)} recurring
                     </span>
                   )}
@@ -671,7 +671,7 @@ export default function ExpensesPage() {
               </tr>
             ) : visible.map(e => (
               editId === e.id ? (
-                <tr key={e.id} className="border-b border-slate-100 bg-emerald-50">
+                <tr key={e.id} className="border-b border-slate-100 ">
                   <td colSpan={5} className="px-4 py-3">
                     <ExpenseForm
                       f={editForm}
@@ -691,7 +691,7 @@ export default function ExpensesPage() {
                   <td className="px-4 py-3 text-slate-700">
                     {e.description}
                     {e.recurring && (
-                      <span className="ml-2 text-[10px] uppercase tracking-wide bg-blue-50 text-blue-600 px-1.5 py-0.5 rounded">
+                      <span className="ml-2 text-[10px] uppercase tracking-wide text-blue-600 px-1.5 py-0.5 rounded">
                         {frequencyLabel(e)}
                       </span>
                     )}
@@ -724,7 +724,7 @@ export default function ExpensesPage() {
                   <td />
                 </tr>
               ))}
-              <tr className="bg-red-50 border-t-2 border-red-200 font-bold">
+              <tr className="border-t-2 border-red-200 font-bold">
                 <td colSpan={3} className="px-4 py-3 text-slate-800">Total Operating Expenses</td>
                 <td className="px-4 py-3 text-right text-red-700 text-base">({fmt(grandTotal)})</td>
                 <td />
@@ -799,11 +799,11 @@ export default function ExpensesPage() {
             )}
 
             <p className="text-xs text-slate-400 mt-3">
-              <span className="inline-flex items-center gap-1 text-amber-700 bg-amber-50 px-1.5 py-0.5 rounded mr-2">↑ Up</span>
+              <span className="inline-flex items-center gap-1 text-amber-700 px-1.5 py-0.5 rounded mr-2">↑ Up</span>
               ≥15% increase &nbsp;
-              <span className="inline-flex items-center gap-1 text-red-700 bg-red-50 px-1.5 py-0.5 rounded mr-2">↑ High</span>
+              <span className="inline-flex items-center gap-1 text-red-700 px-1.5 py-0.5 rounded mr-2">↑ High</span>
               ≥50% increase &nbsp;
-              <span className="inline-flex items-center gap-1 text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded mr-2">↓ Down/Low</span>
+              <span className="inline-flex items-center gap-1 text-emerald-700 px-1.5 py-0.5 rounded mr-2">↓ Down/Low</span>
               decrease
             </p>
           </div>

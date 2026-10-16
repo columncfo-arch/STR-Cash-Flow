@@ -120,7 +120,7 @@ export default function WelcomeSettingsPage() {
           </button>
         </div>
         <p className="text-xs text-slate-400 mt-3">Print as a QR code and place it on the kitchen counter or inside the front door.</p>
-        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+        <p className="text-xs text-amber-700 border border-amber-200 rounded-lg px-3 py-2 mt-3">
           Use this exact link — the <code className="font-mono">?u=</code> is what files sign-ups under your account.
           A link without it cannot be saved. If you printed a QR code before today, reprint it from here.
         </p>

@@ -162,7 +162,7 @@ export default function ImportEarnings() {
         </label>
         {loading && <p className="mt-3 text-sm text-slate-500 text-center">Parsing…</p>}
         {error && (
-          <div className="mt-3 flex items-start gap-2 text-sm text-red-600 bg-red-50 rounded-lg p-3">
+          <div className="mt-3 flex items-start gap-2 text-sm text-red-600 rounded-lg p-3">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" /> {error}
           </div>
         )}
@@ -170,7 +170,7 @@ export default function ImportEarnings() {
 
       {/* Success */}
       {result && (
-        <div className="flex items-center gap-3 bg-emerald-50 border border-emerald-200 rounded-xl p-5 mb-6">
+        <div className="flex items-center gap-3 border border-emerald-200 rounded-xl p-5 mb-6">
           <CheckCircle className="w-6 h-6 text-emerald-600 shrink-0" />
           <div>
             <p className="font-semibold text-emerald-800">Import complete</p>
@@ -196,7 +196,7 @@ export default function ImportEarnings() {
                 No bookings found. Make sure you&apos;re exporting the correct file and the right platform is selected.
               </p>
               {debugHeaders.length > 0 && (
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3 space-y-2">
+                <div className="border border-amber-200 rounded-lg p-3 space-y-2">
                   {debugFormat && <p className="text-xs font-mono text-amber-600 break-all">format: {debugFormat}</p>}
                   <p className="text-xs font-semibold text-amber-800">Columns detected ({debugHeaders.length}):</p>
                   <p className="text-xs text-amber-700 font-mono break-all">{debugHeaders.join(' | ')}</p>
@@ -241,7 +241,7 @@ export default function ImportEarnings() {
                   </tbody>
                   {totals && (
                     <tfoot>
-                      <tr className="bg-emerald-50 border-t-2 border-emerald-200 font-semibold text-sm">
+                      <tr className="border-t-2 border-emerald-200 font-semibold text-sm">
                         <td colSpan={3} className="px-3 py-2 text-slate-700">Total</td>
                         <td className="px-3 py-2 text-right text-slate-700">{fmt(totals.gross)}</td>
                         <td className="px-3 py-2 text-right text-red-500">{totals.fee > 0 ? `(${fmt(totals.fee)})` : '—'}</td>

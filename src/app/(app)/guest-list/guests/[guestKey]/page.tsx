@@ -179,12 +179,12 @@ export default function GuestDetailPage() {
             <div className="flex items-center gap-2 mt-2 flex-wrap">
               {guest.platforms.map(p => <PlatformBadge key={p} platform={p} />)}
               {guest.bookings.length > 1 && (
-                <span className="inline-flex items-center gap-1 bg-emerald-50 text-emerald-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                <span className="inline-flex items-center gap-1 text-emerald-700 text-xs font-semibold px-2 py-0.5 rounded-full">
                   <Star className="w-3 h-3" /> Repeat guest
                 </span>
               )}
               {guest.tcpaConsent && (
-                <span className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                <span className="inline-flex items-center gap-1 text-blue-700 text-xs font-semibold px-2 py-0.5 rounded-full">
                   <ShieldCheck className="w-3 h-3" /> Marketing consent
                 </span>
               )}
@@ -367,8 +367,8 @@ export default function GuestDetailPage() {
                     </td>
                     <td className="px-4 py-3">
                       {isCancelled
-                        ? <span className="text-xs bg-red-50 text-red-600 px-2 py-0.5 rounded-full font-medium">Cancelled</span>
-                        : <span className="text-xs bg-emerald-50 text-emerald-700 px-2 py-0.5 rounded-full font-medium">Completed</span>}
+                        ? <span className="text-xs text-red-600 px-2 py-0.5 rounded-full font-medium">Cancelled</span>
+                        : <span className="text-xs text-emerald-700 px-2 py-0.5 rounded-full font-medium">Completed</span>}
                     </td>
                     <td className="px-4 py-3 text-slate-400 text-xs max-w-[160px]">
                       <span className="line-clamp-2">{b.notes ?? '—'}</span>

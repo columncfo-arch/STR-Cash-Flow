@@ -491,7 +491,7 @@ export default function OptimizationPage() {
       </div>
 
       {!hasData && (
-        <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 text-sm text-amber-800">
+        <div className="border border-amber-200 rounded-xl p-6 text-sm text-amber-800">
           No booking data found for {year}. Import earnings to see optimization insights.
         </div>
       )}
@@ -618,7 +618,7 @@ export default function OptimizationPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  <tr className="border-b border-slate-100 bg-emerald-50">
+                  <tr className="border-b border-slate-100 ">
                     <td className="px-5 py-2.5 text-xs font-semibold text-emerald-700 uppercase tracking-wide">Target Net Cash Flow</td>
                     {scenarios.map((s, i) => (
                       <td key={i} className="px-5 py-2.5 text-right font-bold text-emerald-700">
@@ -907,7 +907,7 @@ export default function OptimizationPage() {
                 <p className="text-xs text-slate-500 mt-1">Nights Booked YTD</p>
                 <p className="text-[10px] text-slate-400 mt-1">across {ytdMonths} months</p>
               </div>
-              <div className={`border rounded-xl p-4 text-center ${nightsAtRisk > 60 ? 'bg-red-50 border-red-200' : nightsAtRisk > 0 ? 'bg-amber-50 border-amber-200' : 'bg-emerald-50 border-emerald-200'}`}>
+              <div className={`border rounded-xl p-4 text-center ${nightsAtRisk > 60 ? 'border-red-200' : nightsAtRisk > 0 ? 'border-amber-200' : 'border-emerald-200'}`}>
                 <p className={`text-2xl font-bold ${nightsAtRisk > 60 ? 'text-red-600' : nightsAtRisk > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>{nightsAtRisk}</p>
                 <p className="text-xs text-slate-500 mt-1">Nights at Risk</p>
                 <p className="text-[10px] text-slate-400 mt-1">calendar days left in {year}</p>
@@ -916,7 +916,7 @@ export default function OptimizationPage() {
 
             {/* Price suppression flags */}
             {flaggedMonths.length > 0 && (
-              <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4 flex items-start gap-3">
+              <div className="border border-amber-200 rounded-xl px-4 py-3 mb-4 flex items-start gap-3">
                 <AlertTriangle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
                 <div>
                   <p className="text-xs font-semibold text-amber-700 mb-1">Price-Suppression Flags</p>
@@ -1067,7 +1067,7 @@ export default function OptimizationPage() {
                     </div>
                   </div>
                   {refiSavings05 != null && (
-                    <div className="mt-4 bg-blue-50 border border-blue-200 rounded-lg px-4 py-3">
+                    <div className="mt-4 border border-blue-200 rounded-lg px-4 py-3">
                       <p className="text-xs font-semibold text-blue-700 mb-1">Refinance Scenarios</p>
                       <p className="text-xs text-blue-600">−0.5% rate → save {fmt(refiSavings05)}/month ({fmt(refiSavings05 * 12)}/yr)</p>
                       {refiSavings10 && <p className="text-xs text-blue-600">−1.0% rate → save {fmt(refiSavings10)}/month ({fmt(refiSavings10 * 12)}/yr)</p>}
