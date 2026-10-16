@@ -155,11 +155,10 @@ export default function DashboardClient() {
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: settings?.currency ?? 'USD', maximumFractionDigits: 0 }).format(n);
 
-  // YTD stats — tile/pacing metrics filter current month to check-ins on or before today;
-  // ytdMonths (full current month) is kept for the P&L and platform tables below.
+  // YTD stats — tile and pacing metrics filter the current month to check-ins on
+  // or before today.
   const todayStr = `${year}-${String(currentMonthIdx + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const completedMonths = statement?.months.slice(0, currentMonthIdx) ?? [];
-  const ytdMonths = statement?.months.slice(0, currentMonthIdx + 1) ?? [];
 
   const curMonthStmt = statement?.months[currentMonthIdx] ?? null;
   const curActualBookings = curMonthStmt?.bookings.filter(b => b.checkIn <= todayStr) ?? [];
@@ -202,30 +201,8 @@ export default function DashboardClient() {
   const daysRemainingInYear = Math.round((yearEnd.getTime() - now.getTime()) / 86400000) + 1;
   const openNights = Math.max(0, daysRemainingInYear - futureConfirmedNights);
   // P&L table uses completed months only — the only period where revenue and expenses are both fully settled
-  const ytdPnL: PnLData = {
-    grossRevenue: completedMonths.reduce((s, m) => s + m.grossRevenue, 0),
-    platformFees: completedMonths.reduce((s, m) => s + m.platformFees, 0),
-    fastPayFees: completedMonths.reduce((s, m) => s + m.fastPayFees, 0),
-    taxRemitted: completedMonths.reduce((s, m) => s + m.taxRemitted, 0),
-    refunds: completedMonths.reduce((s, m) => s + m.refunds, 0),
-    netRevenue: completedMonths.reduce((s, m) => s + m.netRevenue, 0),
-    ownerTaxes: completedMonths.reduce((s, m) => s + m.ownerTaxes, 0),
-    totalOperatingExpenses: completedMonths.reduce((s, m) => s + m.totalOperatingExpenses, 0),
-    operatingIncome: completedMonths.reduce((s, m) => s + m.operatingIncome, 0),
-    piti: completedMonths.reduce((s, m) => s + m.piti, 0),
-    netIncome: ytdNetIncome,
-  };
 
   // Aggregate YTD byPlatform for the platform table
-  const ytdByPlatform = ytdMonths.reduce((acc, m) => {
-    (Object.keys(m.byPlatform) as Platform[]).forEach(p => {
-      if (!acc[p]) acc[p] = { income: 0, nights: 0, bookings: 0 };
-      acc[p].income += m.byPlatform[p].income;
-      acc[p].nights += m.byPlatform[p].nights;
-      acc[p].bookings += m.byPlatform[p].bookings;
-    });
-    return acc;
-  }, {} as Record<Platform, { income: number; nights: number; bookings: number }>);
 
   // Selected month data
   const selMonth: MonthlyStatement | null = (selectedMonth !== null && statement) ? statement.months[selectedMonth] : null;
@@ -418,16 +395,20 @@ export default function DashboardClient() {
   // books is a forecast, not a shortfall.
   const varianceChartData: VarianceDatum[] = statement?.months.map((m, i) => {
     const isCurrent = i === currentMonthIdx;
+    // A month still ahead is measured on what is booked so far against its full
+    // target — the gap is what is left to sell, so the bar is drawn grey.
+    const isForecast = i > currentMonthIdx;
     const target = isCurrent ? curMonthForecastProrated : monthlyForecasts[i];
     const actual = isCurrent ? curActualGross : m.grossRevenue;
-    const comparable = i <= currentMonthIdx && target != null && target > 0;
+    const hasTarget = target != null && target > 0;
     return {
       name: MONTHS[i],
-      variance: comparable ? actual - target : null,
+      variance: hasTarget ? actual - target : null,
       actual,
-      actualLine: comparable ? actual : null,
+      actualLine: hasTarget ? actual : null,
       target: target ?? null,
       isCurrent,
+      isForecast,
     };
   }) ?? [];
 
@@ -889,7 +870,7 @@ export default function DashboardClient() {
         <p className="text-xs text-slate-400 mb-4">
           {period === 'month'
             ? 'Revenue adding up through the month · dashed where it is booked but not yet earned'
-            : 'Bars: how far each month landed above or below target · line: revenue earned · click a month to drill into its P&L'}
+            : 'Bars: how far each month landed above or below target, grey where the month is still ahead and the gap is left to sell · line: revenue booked · click a month to drill into its P&L'}
         </p>
         {!hasData ? (
           <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
@@ -1274,16 +1255,16 @@ export default function DashboardClient() {
               </div>
             </div>
           )}
-          <div className="space-y-6 mb-8">
-            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-              <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Year-to-Date P&amp;L (Jan–{MONTHS[currentMonthIdx - 1] ?? MONTHS[0]})</h3>
-              <PnLTable m={ytdPnL} fmt={fmt} />
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-              <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Platform Breakdown</h3>
-              <PlatformTable byPlatform={ytdByPlatform} totalRevenue={ytdGross} fmt={fmt} />
-            </div>
-          </div>
+          {/* The year-to-date P&L and the platform split used to sit here as two
+              bare tables, in a page that is otherwise sections of tiles. The
+              Income Statement tab already presents both, over any period and
+              with a CSV export, so they live there and this points at them. */}
+          <p className="text-xs text-slate-400 mb-8">
+            Full profit &amp; loss and revenue by platform live in the{' '}
+            <a href="/income-statement" className="text-slate-500 hover:text-slate-700 underline underline-offset-2">
+              Income Statement
+            </a>.
+          </p>
         </>
       )}
 

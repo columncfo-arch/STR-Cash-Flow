@@ -14,6 +14,8 @@ export type VarianceDatum = {
   actualLine: number | null;
   target: number | null;
   isCurrent: boolean;
+  /** A month still ahead: `actual` is what is booked, not what was earned. */
+  isForecast?: boolean;
 };
 
 /** The level axis, in thousands, with the sign in front of the symbol. */
@@ -77,8 +79,9 @@ function VarianceTooltip({
  * number, below it the month missed.
  *
  * The level still matters for reading the shape of a year, so it runs behind as
- * a faint line on its own scale. Months with no comparison get no bar, because
- * what is on their books is a forecast rather than a shortfall.
+ * a faint line on its own scale. Months still ahead can show what is already
+ * booked against their target, drawn grey: that gap is revenue not yet sold
+ * rather than revenue missed.
  */
 export function YearVarianceChart({
   data, fmt, selectedIndex, onSelect, actualLabel = 'Earned', pendingNote = 'Not reached yet',
@@ -153,7 +156,9 @@ export function YearVarianceChart({
           {data.map((d, i) => (
             <Cell
               key={i}
-              fill={(d.variance ?? 0) >= 0 ? '#10b981' : '#f43f5e'}
+              // Grey for months still ahead: that gap is revenue not yet sold,
+              // not revenue missed
+              fill={d.isForecast ? '#e2e8f0' : (d.variance ?? 0) >= 0 ? '#10b981' : '#f43f5e'}
               opacity={selectedIndex === null || selectedIndex === i ? 1 : 0.25}
             />
           ))}
