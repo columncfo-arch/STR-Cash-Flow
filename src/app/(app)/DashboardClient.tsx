@@ -448,7 +448,6 @@ export default function DashboardClient() {
     const days: DayDatum[] = Array.from({ length: daysInMonth }, (_, i) => ({
       day: String(i + 1),
       revenue: 0,
-      spanNights: 0,
       occupied: false,
       rate: 0,
       stayNight: 0,
@@ -486,8 +485,6 @@ export default function DashboardClient() {
       const day = days[checkInDay - 1];
       if (!day) continue;
       day.revenue += b.income;
-      // Clipped to the month so a stay running into next month stops at the edge
-      day.spanNights = Math.max(day.spanNights, Math.min(nights, daysInMonth - checkInDay + 1));
     }
 
     return days;
@@ -586,11 +583,6 @@ export default function DashboardClient() {
   const periodGrossTarget = periodMonths.reduce((s, m) =>
     s + (m.year === year ? (monthlyForecasts[m.mi] ?? 0) : (effectivePriorMonthly?.[m.mi] ?? 0)), 0);
   const periodGrossActual = periodMonths.reduce((s, m) => s + (monthStmt(m)?.grossRevenue ?? 0), 0);
-
-  // The even daily rate that would hit the month's target, for a pacing line.
-  const dailyPaceTarget = period === 'month' && periodGrossTarget > 0
-    ? periodGrossTarget / new Date(year, currentMonthIdx + 1, 0).getDate()
-    : null;
 
   const periodNetTarget = periodMonths.reduce((s, m) =>
     s + (m.year === year ? (monthlyNetForecasts[m.mi] ?? 0) : (monthStmt(m)?.netIncome ?? 0)), 0);
@@ -959,12 +951,12 @@ export default function DashboardClient() {
         <p className="text-xs font-medium text-slate-500 mb-1 flex items-center gap-1.5">
           <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
           {period === 'month'
-            ? `${MONTHS_LONG[currentMonthIdx]} day by day`
+            ? `${MONTHS_LONG[currentMonthIdx]} against target`
             : 'Over or under target by month'}
         </p>
         <p className="text-xs text-slate-400 mb-4">
           {period === 'month'
-            ? 'Each stay is one block across the nights it covers · dashed line is the daily pace needed to hit target'
+            ? 'Revenue adding up through the month · dashed where it is booked but not yet earned'
             : 'Bars: how far each month landed above or below target · line: revenue earned · click a month to drill into its P&L'}
         </p>
         {!hasData ? (
@@ -976,7 +968,7 @@ export default function DashboardClient() {
             data={dailyChartData}
             monthLabel={MONTHS_LONG[currentMonthIdx]}
             fmt={fmt}
-            paceTarget={dailyPaceTarget}
+            target={periodGrossTarget}
           />
         ) : (
           <>
