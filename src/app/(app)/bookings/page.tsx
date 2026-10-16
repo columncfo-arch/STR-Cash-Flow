@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Booking, Platform, Settings } from '@/types';
 import PlatformBadge from '@/components/PlatformBadge';
 import { format } from 'date-fns';
-import { Pencil, Trash2, Plus, X, Check, AlertTriangle, Download } from 'lucide-react';
+import { Pencil, Plus, X, Check, AlertTriangle, Download } from 'lucide-react';
 import { RANGE_PRESETS, presetRange, inRange, type RangePreset } from '@/lib/dateRange';
 
 const PLATFORM_OPTIONS: { value: Platform; label: string }[] = [
@@ -146,12 +146,6 @@ export default function BookingsPage() {
       }),
     });
     setEditState(null);
-    load();
-  }
-
-  async function deleteBooking(id: string) {
-    if (!confirm('Delete this booking?')) return;
-    await fetch(`/api/bookings/${id}`, { method: 'DELETE' });
     load();
   }
 
@@ -599,13 +593,6 @@ export default function BookingsPage() {
                                 title="Edit booking"
                               >
                                 <Pencil className="w-3.5 h-3.5" />
-                              </button>
-                              <button
-                                onClick={() => deleteBooking(b.id)}
-                                className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-500"
-                                title="Delete"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </>
                           )}
