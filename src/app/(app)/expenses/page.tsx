@@ -7,6 +7,7 @@ import { RANGE_PRESETS, presetRange, type RangePreset } from '@/lib/dateRange';
 import {
   RECURRENCE_FREQUENCIES, DEFAULT_FREQUENCY, frequencyLabel, occursInMonth, occursInRange,
 } from '@/lib/recurrence';
+import InfoTip from '@/components/InfoTip';
 
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -210,7 +211,14 @@ function ExpenseForm({ f, onChange, onSave, onCancel, submitLabel = 'Add' }: {
         {f.recurring && (
           <>
             <div>
-              <label className="text-xs text-slate-500 block mb-1">How often</label>
+              <label className="text-xs text-slate-500 mb-1 flex items-center gap-1">
+                How often
+                <InfoTip label="How a repeat is charged">
+                  Charged in the month of the date above, then every{' '}
+                  {f.recurrenceFrequency === 'monthly' ? 'month'
+                    : f.recurrenceFrequency === 'quarterly' ? 'three months' : 'year'} after it.
+                </InfoTip>
+              </label>
               <select
                 value={f.recurrenceFrequency}
                 onChange={e => onChange({ recurrenceFrequency: e.target.value as RecurrenceFrequency })}
@@ -224,11 +232,6 @@ function ExpenseForm({ f, onChange, onSave, onCancel, submitLabel = 'Add' }: {
               <input type="date" value={f.recurrenceEnd} onChange={e => onChange({ recurrenceEnd: e.target.value })}
                 className="text-sm border border-slate-200 rounded-lg px-3 py-2" />
             </div>
-            <p className="text-xs text-slate-400 basis-full">
-              Charged in the month of the date above, then every{' '}
-              {f.recurrenceFrequency === 'monthly' ? 'month'
-                : f.recurrenceFrequency === 'quarterly' ? 'three months' : 'year'} after it.
-            </p>
           </>
         )}
       </div>

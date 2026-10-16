@@ -3,6 +3,7 @@ import { useEffect, useState, useMemo } from 'react';
 import { DirectLead, Settings } from '@/types';
 import { format } from 'date-fns';
 import { Zap, Check, Mail, Phone, Download, Search, ExternalLink, Copy, RefreshCw } from 'lucide-react';
+import InfoTip from '@/components/InfoTip';
 
 type Tab = 'leads' | 'site';
 
@@ -257,8 +258,13 @@ export default function DirectBookingPage() {
         <div className="space-y-6">
 
           <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-            <h2 className="font-semibold text-slate-800 mb-1">Pricing</h2>
-            <p className="text-xs text-slate-400 mb-4">Shown on the public booking page. Guests pay nightly rate × nights + cleaning fee + 3% if paying by card.</p>
+            <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-1.5">
+              Pricing
+              <InfoTip label="Where this is shown">
+                Shown on the public booking page. Guests pay nightly rate × nights + cleaning fee + 3% if
+                paying by card.
+              </InfoTip>
+            </h2>
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="text-xs text-slate-500 block mb-1">Nightly Rate ($)</label>
@@ -300,8 +306,12 @@ export default function DirectBookingPage() {
           </section>
 
           <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm">
-            <h2 className="font-semibold text-slate-800 mb-1">Property Description</h2>
-            <p className="text-xs text-slate-400 mb-4">Shown on the booking page. Keep it short — guests already know the property.</p>
+            <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-1.5">
+              Property Description
+              <InfoTip label="Where this is shown">
+                Shown on the booking page. Keep it short — guests already know the property.
+              </InfoTip>
+            </h2>
             <textarea
               value={settings.directDescription ?? ''}
               onChange={e => setSettings({ ...settings, directDescription: e.target.value || undefined })}

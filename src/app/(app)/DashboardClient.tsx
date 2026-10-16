@@ -5,6 +5,7 @@ import StatCard from '@/components/StatCard';
 import { TrendingUp, X, Pencil, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
 import { pacingStatus } from '@/lib/pacing';
+import InfoTip from '@/components/InfoTip';
 import { addDays } from '@/lib/dateRange';
 import {
   DayRevenueChart, DayOccupancyChart, MonthProgressChart, DayDatum, ProgressPoint,
@@ -788,6 +789,11 @@ export default function DashboardClient() {
           {period === 'month'
             ? `${MONTHS_LONG[currentMonthIdx]} against target`
             : 'Over or under target by month'}
+          <InfoTip label="How to read this chart">
+            {period === 'month'
+              ? 'Revenue adding up through the month, dashed where it is booked but not yet earned. The flat line is the month\u2019s target.'
+              : 'Each bar is how far a month landed above or below its target, grey where the month is still ahead and the gap is left to sell. The faint line is revenue booked. Click a month to drill into its P&L.'}
+          </InfoTip>
         </p>
         {!hasData ? (
           <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
@@ -852,7 +858,15 @@ export default function DashboardClient() {
                   section, the way that section's first column is "Earned" —
                   repeating the section title told the reader nothing. */}
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Bottom Line</p>
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold flex items-center gap-1">
+                  Bottom Line
+                  {principal > 0 && (
+                    <InfoTip label="How cash flow differs from net income">
+                      Net income was {fmt(net + principal)}. Cash flow is {fmt(principal)} lower because that much
+                      of the mortgage payment repaid principal — equity built rather than money spent.
+                    </InfoTip>
+                  )}
+                </p>
                 <p className={`text-xl font-bold leading-tight mt-0.5 ${net < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
                   {net >= 0 ? '+' : ''}{fmt(net)}
                 </p>
@@ -890,12 +904,6 @@ export default function DashboardClient() {
                 </p>
               </div>
             </div>
-            {principal > 0 && (
-              <p className="text-[11px] text-slate-400 mt-3">
-                Net income was {fmt(net + principal)}. Cash flow is {fmt(principal)} lower because that
-                much of the mortgage payment repaid principal — equity built rather than money spent.
-              </p>
-            )}
             {projected > 0 && (
               <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
                 <div className="h-1 rounded-full bg-indigo-500 transition-all"
@@ -910,10 +918,15 @@ export default function DashboardClient() {
       {/* P&L Chart */}
       {hasData && (
         <div className="px-5 py-4">
-          <p className="text-xs font-medium text-slate-500 mb-4">
+          <p className="text-xs font-medium text-slate-500 mb-4 flex items-center gap-1.5">
             {period === 'month'
               ? `${MONTHS_LONG[currentMonthIdx]} against plan`
               : 'Over or under plan by month'}
+            <InfoTip label="How to read this chart">
+              {period === 'month'
+                ? 'Opens at the month\u2019s committed costs and climbs as bookings land. Crossing zero is breakeven.'
+                : 'Each bar is how far a month landed above or below its projection. The faint line is net income itself. Months still open have no bar — their costs land before their revenue does.'}
+            </InfoTip>
           </p>
           {period === 'month' ? (
             <MonthProgressChart
@@ -1065,10 +1078,15 @@ export default function DashboardClient() {
       {hasData && (
         <div className="px-5 py-4">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-slate-500 mb-3">
+            <p className="text-xs font-medium text-slate-500 mb-3 flex items-center gap-1.5">
               {period === 'month'
                 ? `${MONTHS_LONG[currentMonthIdx]} night by night`
                 : 'Rate and occupancy by month'}
+              <InfoTip label="How to read this chart">
+                {period === 'month'
+                  ? `Which nights sold and what they sold for; gaps are open nights.${displayAdrTarget != null ? ` The dashed line is the ${fmt(displayAdrTarget)} target rate.` : ''}`
+                  : `Bars are occupancy, faded where they are confirmed bookings rather than nights already stayed. The line is the rate per night.${targetOcc != null ? ` The dashed line is the ${targetOcc.toFixed(1)}% baseline.` : ''}`}
+              </InfoTip>
             </p>
             {targetOcc != null && (
               <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${perfColor(occVariance ?? 0, occVariance != null ? Math.abs(occVariance) : null, true)}`}>

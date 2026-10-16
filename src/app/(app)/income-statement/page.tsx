@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { AnnualStatement, MonthlyStatement, Platform, PnLSummary, Settings } from '@/types';
 import { getMonth, getYear } from 'date-fns';
 import { Download } from 'lucide-react';
+import InfoTip from '@/components/InfoTip';
 import {
   ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine, Cell,
@@ -372,10 +373,12 @@ export default function IncomeStatementPage() {
       {/* Monthly cash flow overview chart */}
       {statement && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
-          <h2 className="font-semibold text-slate-800 mb-1">Monthly Cash Flow — {fetchYear}</h2>
-          <p className="text-xs text-slate-400 mb-4">
-            After every cost including the whole mortgage payment — the figure the dashboard reports
-          </p>
+          <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-1.5">
+            Monthly Cash Flow — {fetchYear}
+            <InfoTip label="What this chart shows">
+              After every cost including the whole mortgage payment — the same figure the dashboard reports.
+            </InfoTip>
+          </h2>
           <ResponsiveContainer width="100%" height={200}>
             <ComposedChart data={statement.months.map(m => ({
               name: MONTHS_SHORT[m.month - 1],

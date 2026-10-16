@@ -3,6 +3,7 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { ForecastYear, Settings, ForecastOverride } from '@/types';
 import { pacingStatus } from '@/lib/pacing';
 import { balanceAfterMonths } from '@/lib/mortgage';
+import InfoTip from '@/components/InfoTip';
 import { Pencil, Check, X, Plus, Trash2, TrendingUp } from 'lucide-react';
 import {
   ComposedChart, Bar, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -654,8 +655,12 @@ export default function ForecastPage() {
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
           <div className="flex items-start justify-between mb-1">
             <div>
-              <h2 className="font-semibold text-slate-800">Cumulative Net Cash Flow</h2>
-              <p className="text-xs text-slate-400 mt-0.5">Total cash this property has put in your pocket, accumulating over time</p>
+              <h2 className="font-semibold text-slate-800 flex items-center gap-1.5">
+                Cumulative Net Cash Flow
+                <InfoTip label="What this chart shows">
+                  Total cash this property has put in your pocket, accumulating over time.
+                </InfoTip>
+              </h2>
             </div>
             {finalRow && (
               <div className="text-right">
@@ -722,8 +727,13 @@ export default function ForecastPage() {
       {/* ── Annual Net Cash Flow Chart ── */}
       {hasData && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
-          <h2 className="font-semibold text-slate-800 mb-0.5">Annual Net Cash Flow</h2>
-          <p className="text-xs text-slate-400 mb-4">Revenue minus all expenses and PITI — what actually hits the bank each year</p>
+          <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-1.5">
+            Annual Net Cash Flow
+            <InfoTip label="What this chart shows">
+              Revenue minus all expenses and PITI — what actually hits the bank each year. Green is positive,
+              red negative, lighter bars are forecast.
+            </InfoTip>
+          </h2>
           <ResponsiveContainer width="100%" height={220}>
             <ComposedChart data={annualData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -743,7 +753,6 @@ export default function ForecastPage() {
               </Bar>
             </ComposedChart>
           </ResponsiveContainer>
-          <p className="text-xs text-slate-400 mt-2">Green = positive · Red = negative · Lighter = forecasted</p>
         </div>
       )}
 
@@ -775,8 +784,12 @@ export default function ForecastPage() {
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
             <div className="flex items-start justify-between mb-1">
               <div>
-                <h2 className="font-semibold text-slate-800">Property Equity Projection</h2>
-                <p className="text-xs text-slate-400 mt-0.5">Equity grows as your property appreciates and your loan balance declines</p>
+                <h2 className="font-semibold text-slate-800 flex items-center gap-1.5">
+                  Property Equity Projection
+                  <InfoTip label="What this chart shows">
+                    Equity grows as your property appreciates and your loan balance declines.
+                  </InfoTip>
+                </h2>
               </div>
               {equityData.length > 0 && (
                 <div className="text-right">
@@ -871,8 +884,12 @@ export default function ForecastPage() {
 
         return (
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
-            <h2 className="font-semibold text-slate-800 mb-0.5">Total Return on Investment</h2>
-            <p className="text-xs text-slate-400 mb-5">Equity position + cumulative cash flow measured against all capital deployed</p>
+            <h2 className="font-semibold text-slate-800 mb-5 flex items-center gap-1.5">
+              Total Return on Investment
+              <InfoTip label="How this is measured">
+                Equity position plus cumulative cash flow, measured against all capital deployed.
+              </InfoTip>
+            </h2>
 
             {/* Capital stack */}
             <div className="grid grid-cols-3 gap-4 mb-5 pb-5 border-b border-slate-100">
