@@ -910,16 +910,11 @@ export default function DashboardClient() {
       {/* P&L Chart */}
       {hasData && (
         <div className="px-5 py-4">
-          <p className={`text-xs font-medium text-slate-500 ${period === 'month' ? 'mb-1' : 'mb-4'}`}>
+          <p className="text-xs font-medium text-slate-500 mb-4">
             {period === 'month'
               ? `${MONTHS_LONG[currentMonthIdx]} against plan`
               : 'Over or under plan by month'}
           </p>
-          {period === 'month' && (
-            <p className="text-xs text-slate-400 mb-4">
-              Opens at the month’s committed costs and climbs as bookings land · crossing zero is breakeven
-            </p>
-          )}
           {period === 'month' ? (
             <MonthProgressChart
               points={cumulativeNetData}
@@ -1070,7 +1065,7 @@ export default function DashboardClient() {
       {hasData && (
         <div className="px-5 py-4">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-slate-500">
+            <p className="text-xs font-medium text-slate-500 mb-3">
               {period === 'month'
                 ? `${MONTHS_LONG[currentMonthIdx]} night by night`
                 : 'Rate and occupancy by month'}
@@ -1081,11 +1076,6 @@ export default function DashboardClient() {
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 mb-4">
-            {period === 'month'
-              ? `Which nights sold and what they sold for · gaps are open nights${displayAdrTarget != null ? ` · target rate ${fmt(displayAdrTarget)}` : ''}`
-              : `Monthly occupancy (bars) · faded = confirmed bookings only · ADR per night (line) · baseline ${targetOcc != null ? `${targetOcc.toFixed(1)}%` : 'not set'}`}
-          </p>
           {period === 'month' ? (
           <DayOccupancyChart
             data={dailyChartData}
