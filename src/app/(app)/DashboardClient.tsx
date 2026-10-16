@@ -15,63 +15,57 @@ import {
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
-const PLATFORM_COLORS: Record<string, string> = {
-  airbnb: '#f43f5e',
-  booking: '#3b82f6',
-  vrbo: '#6366f1',
-  direct: '#0d9488',
-  other: '#9ca3af',
+/** A month's gross revenue measured against its target, for the year chart. */
+type VarianceDatum = {
+  name: string;
+  /** actual \u2212 target, or null for a month not reached yet. */
+  variance: number | null;
+  actual: number;
+  target: number | null;
+  isCurrent: boolean;
 };
 
-type TooltipEntry = { payload: Record<string, number | null> };
+/** Axis ticks that read as a gap: signed, and in whole dollars while small. */
+const signedMoneyTick = (v: number) => {
+  const abs = Math.abs(v);
+  const s = abs >= 1000 ? `$${(abs / 1000).toFixed(abs >= 10000 ? 0 : 1)}k` : `$${Math.round(abs)}`;
+  return v < 0 ? `\u2212${s}` : s;
+};
 
-function ChartTooltip({
-  active, payload, label, fmt,
+function VarianceTooltip({
+  active, payload, fmt,
 }: {
   active?: boolean;
-  payload?: TooltipEntry[];
-  label?: string;
+  payload?: { payload: VarianceDatum }[];
   fmt: (n: number) => string;
 }) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
-  const gross = d._gross as number | null;
-  const target = d['Monthly Target'] as number | null;
-  const bookedRevenue = ((d.Airbnb ?? 0) as number) + ((d['Booking.com'] ?? 0) as number) + ((d.VRBO ?? 0) as number) + ((d.Direct ?? 0) as number) + ((d.Other ?? 0) as number);
-  const hasActual = gross != null;
-  const hasPreBooked = !hasActual && bookedRevenue > 0;
-  if (!hasActual && !hasPreBooked && target == null) return null;
-
-  const variance = hasActual && target ? gross! - target : null;
 
   return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm min-w-[190px]">
-      <p className="font-semibold text-slate-800 mb-2">{label}</p>
-      {hasActual && (
-        <div className="flex justify-between gap-6">
-          <span className="text-slate-500">Revenue</span>
-          <span className="font-medium">{fmt(gross!)}</span>
-        </div>
-      )}
-      {hasPreBooked && (
-        <div className="flex justify-between gap-6">
-          <span className="text-slate-500">On books</span>
-          <span className="font-medium text-slate-600">{fmt(bookedRevenue)}</span>
-        </div>
-      )}
-      {target != null && (
-        <div className={`flex justify-between gap-6 ${hasActual || hasPreBooked ? 'border-t border-slate-100 mt-2 pt-2' : ''}`}>
-          <span className="text-slate-500">Monthly Target</span>
-          <span className="font-medium text-slate-600">{fmt(target)}</span>
-        </div>
-      )}
-      {variance != null && (
-        <div className="flex justify-between gap-6">
-          <span className="text-slate-500">vs. Target</span>
-          <span className={`font-semibold ${variance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-            {variance >= 0 ? '+' : ''}{fmt(variance)}
-          </span>
-        </div>
+    <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm min-w-[200px]">
+      <p className="font-semibold text-slate-800 mb-2">{d.name}{d.isCurrent ? ' \u00b7 so far' : ''}</p>
+      {d.variance == null ? (
+        <p className="text-slate-500">
+          Not reached yet{d.actual > 0 ? ` \u00b7 ${fmt(d.actual)} on the books` : ''}
+        </p>
+      ) : (
+        <>
+          <div className="flex justify-between gap-6">
+            <span className="text-slate-500">{d.variance >= 0 ? 'Over target' : 'Under target'}</span>
+            <span className={`font-semibold ${d.variance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+              {d.variance >= 0 ? '+' : '\u2212'}{fmt(Math.abs(d.variance))}
+            </span>
+          </div>
+          <div className="flex justify-between gap-6 border-t border-slate-100 mt-2 pt-2">
+            <span className="text-slate-500">Earned</span>
+            <span className="font-medium">{fmt(d.actual)}</span>
+          </div>
+          <div className="flex justify-between gap-6">
+            <span className="text-slate-500">Target</span>
+            <span className="font-medium text-slate-600">{fmt(d.target ?? 0)}</span>
+          </div>
+        </>
       )}
     </div>
   );
@@ -429,9 +423,6 @@ export default function DashboardClient() {
   const pacingVariance = ytdForecast != null ? ytdGross - ytdForecast : null;
   const pacingVariancePct = ytdForecast && ytdForecast > 0 ? (pacingVariance! / ytdForecast) * 100 : null;
 
-  const hasDirectIncome = statement?.months.some(m => m.byPlatform.direct.income > 0) ?? false;
-  const hasOtherIncome = statement?.months.some(m => m.byPlatform.other.income > 0) ?? false;
-
   // Day-by-day view of the selected month, shown in place of the year charts when
   // the period is This Month. Both the revenue chart and the occupancy chart read
   // from this: revenue is what the day earned, rate is what the night sold for.
@@ -499,17 +490,25 @@ export default function DashboardClient() {
     return days;
   })();
 
-  const chartData = statement?.months.map((m, i) => {
-    const isActual = i <= currentMonthIdx;
+  // Gross revenue as the gap to target rather than the level. The section reports
+  // pacing, and a stack split five ways by platform asked the reader to add up
+  // twelve comparisons to find it — the platform mix is already a table below.
+  //
+  // The current month compares like with like: revenue booked to date against
+  // the target prorated to today, so a month half elapsed does not read as a
+  // miss. Months not yet reached have no variance at all — what is on their
+  // books is a forecast, not a shortfall.
+  const varianceChartData: VarianceDatum[] = statement?.months.map((m, i) => {
+    const isCurrent = i === currentMonthIdx;
+    const target = isCurrent ? curMonthForecastProrated : monthlyForecasts[i];
+    const actual = isCurrent ? curActualGross : m.grossRevenue;
+    const comparable = i <= currentMonthIdx && target != null && target > 0;
     return {
       name: MONTHS[i],
-      Airbnb: m.byPlatform.airbnb.income,
-      'Booking.com': m.byPlatform.booking.income,
-      VRBO: m.byPlatform.vrbo.income,
-      ...(hasDirectIncome ? { Direct: m.byPlatform.direct.income } : {}),
-      ...(hasOtherIncome ? { Other: m.byPlatform.other.income } : {}),
-      'Monthly Target': monthlyForecasts[i],
-      _gross: isActual ? m.grossRevenue : null,
+      variance: comparable ? actual - target : null,
+      actual,
+      target: target ?? null,
+      isCurrent,
     };
   }) ?? [];
 
@@ -957,12 +956,12 @@ export default function DashboardClient() {
           <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
           {period === 'month'
             ? `${MONTHS_LONG[currentMonthIdx]} day by day`
-            : 'Target vs actual by month'}
+            : 'Over or under target by month'}
         </p>
         <p className="text-xs text-slate-400 mb-4">
           {period === 'month'
             ? 'Each stay is one block across the nights it covers · dashed line is the daily pace needed to hit target'
-            : 'Click a month to drill into its P&L'}
+            : 'How far each month landed above or below its target · click a month to drill into its P&L'}
         </p>
         {!hasData ? (
           <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
@@ -978,7 +977,7 @@ export default function DashboardClient() {
         ) : (
           <>
             <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart data={chartData} onClick={handleChartClick} style={{ cursor: 'pointer' }}>
+              <ComposedChart data={varianceChartData} onClick={handleChartClick} style={{ cursor: 'pointer' }} barCategoryGap="25%">
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                 <XAxis dataKey="name" tick={(props) => {
                   const { x, y, payload, index } = props;
@@ -1000,38 +999,28 @@ export default function DashboardClient() {
                     </g>
                   );
                 }} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip content={(props) => (
-                  <ChartTooltip
-                    active={props.active}
-                    payload={props.payload as unknown as TooltipEntry[]}
-                    label={String(props.label ?? '')}
-                    fmt={fmt}
-                  />
-                )} />
-                <Legend />
-                {(
-                  [
-                    'Airbnb',
-                    'Booking.com',
-                    'VRBO',
-                    ...(hasDirectIncome ? ['Direct'] : []),
-                    ...(hasOtherIncome ? ['Other'] : []),
-                  ] as string[]
-                ).map(p => (
-                  <Bar key={p} dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com', '')]}>
-                    {chartData.map((_, i) => (
-                      <Cell
-                        key={i}
-                        opacity={selectedMonth === null || selectedMonth === i ? 1 : 0.18}
-                      />
-                    ))}
-                  </Bar>
-                ))}
-                <Line
-                  type="monotone" dataKey="Monthly Target" stroke="#475569"
-                  strokeWidth={2} strokeDasharray="6 3" dot={{ r: 4, fill: '#475569', strokeWidth: 0 }}
+                <YAxis tick={{ fontSize: 12 }} tickFormatter={signedMoneyTick} width={60} />
+                <Tooltip
+                  cursor={{ fill: '#0f172a0a' }}
+                  content={(props) => (
+                    <VarianceTooltip
+                      active={props.active}
+                      payload={props.payload as unknown as { payload: VarianceDatum }[]}
+                      fmt={fmt}
+                    />
+                  )}
                 />
+                {/* Target is the zero line now, so it needs no legend entry */}
+                <ReferenceLine y={0} stroke="#475569" strokeWidth={1.5} />
+                <Bar dataKey="variance">
+                  {varianceChartData.map((d, i) => (
+                    <Cell
+                      key={i}
+                      fill={(d.variance ?? 0) >= 0 ? '#10b981' : '#f43f5e'}
+                      opacity={selectedMonth === null || selectedMonth === i ? 1 : 0.25}
+                    />
+                  ))}
+                </Bar>
               </ComposedChart>
             </ResponsiveContainer>
             {!prevHasData && manualTarget == null && (
