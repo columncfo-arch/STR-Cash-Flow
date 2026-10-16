@@ -21,6 +21,12 @@ export type DayDatum = {
 
 const nightsLabel = (n: number) => `${n} night${n === 1 ? '' : 's'}`;
 
+/** Money on an axis, with the sign in front of the symbol rather than after it. */
+const moneyTick = (v: number) => {
+  const s = `$${(Math.abs(v) / 1000).toFixed(1)}k`;
+  return v < 0 ? `\u2212${s}` : s;
+};
+
 const COLORS = {
   earned: '#10b981',
   upcoming: '#cbd5e1',
@@ -29,14 +35,14 @@ const COLORS = {
 /** Pixel width of one day's slot. The category gap is 0, so slots tile the plot area. */
 const slotWidth = (plotWidth: number, dayCount: number) => plotWidth / dayCount;
 
-/** A day on the cumulative revenue chart. */
-type RunningDatum = {
+/** A day on a month-progress chart: the running total so far. */
+export type ProgressPoint = {
   day: string;
   /** Cumulative revenue up to and including this day, while it has happened. */
   earned: number | null;
   /** The same running total carried on through what is already booked ahead. */
   booked: number | null;
-  /** This day's own takings, for the tooltip. */
+  /** This day's own movement, for the tooltip. */
   today: number;
   isFuture: boolean;
 };
@@ -46,7 +52,7 @@ type RunningDatum = {
  * still only booked. The changeover day belongs to both series so the solid line
  * hands over to the dashed one without a break.
  */
-function runningTotals(data: DayDatum[]): RunningDatum[] {
+export function runningTotals(data: DayDatum[]): ProgressPoint[] {
   const lastActual = data.reduce((acc, d, i) => (d.isFuture ? acc : i), -1);
   let running = 0;
   return data.map((d, i) => {
@@ -65,7 +71,7 @@ function RunningTooltip({
   active, payload, monthLabel, fmt, target,
 }: {
   active?: boolean;
-  payload?: { payload: RunningDatum }[];
+  payload?: { payload: ProgressPoint }[];
   monthLabel?: string;
   fmt?: (n: number) => string;
   target?: number | null;
@@ -73,13 +79,13 @@ function RunningTooltip({
   if (!active || !payload?.length || !fmt) return null;
   const d = payload[0].payload;
   const total = d.earned ?? d.booked ?? 0;
-  const gap = target != null && target > 0 ? target - total : null;
+  const gap = target != null ? target - total : null;
 
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm min-w-[200px]">
       <p className="font-semibold text-slate-800 mb-2">{monthLabel} {d.day}</p>
       <div className="flex justify-between gap-6">
-        <span className="text-slate-500">{d.isFuture ? 'On the books' : 'Earned'}</span>
+        <span className="text-slate-500">{d.isFuture ? 'On the books' : 'So far'}</span>
         <span className="font-semibold">{fmt(total)}</span>
       </div>
       {d.today > 0 && (
@@ -98,67 +104,75 @@ function RunningTooltip({
 }
 
 /**
- * The month's revenue as one climbing total against the month's target.
+ * A month as one running total against the month's target.
  *
- * Revenue arrives in lumps on check-in days, so a bar per day was a row of
- * spikes and gaps that answered nothing about the month. The question the
- * section asks is whether the month gets to its number, and that is a running
- * total: solid while it has been earned, dashed onward through what is already
- * booked, against a flat line at the target. Where the dashed line ends is
- * where the month lands if nothing else sells.
+ * Money arrives in lumps on check-in days, so a bar per day was a row of spikes
+ * and gaps that answered nothing about the month. The question each section asks
+ * is whether the month gets to its number, and that is a running total: solid
+ * while it has been earned, dashed onward through what is already booked,
+ * against a flat line at the target. Where the dashed line ends is where the
+ * month lands if nothing else sells.
  *
- * Which nights actually sold is the Occupancy section's night-by-night chart —
- * this one is about the money.
+ * Gross revenue and net income are the same chart on different money, so they
+ * share this one — net income opens below zero at the month's committed costs
+ * and marks where it breaks even.
  */
-export function DayRevenueChart({
-  data, monthLabel, fmt, target,
+export function MonthProgressChart({
+  points, monthLabel, fmt, target, color = COLORS.earned, breakeven = false,
 }: {
-  data: DayDatum[];
+  points: ProgressPoint[];
   monthLabel: string;
   fmt: (n: number) => string;
-  /** The month's gross revenue target, if one is set. */
+  /** What the month is held to, or null when nothing is set. */
   target?: number | null;
+  color?: string;
+  /** Mark zero as breakeven — meaningful for net income, not for revenue. */
+  breakeven?: boolean;
 }) {
-  const series = runningTotals(data);
-  const endsAt = series.length ? series[series.length - 1].booked ?? 0 : 0;
-  const hasTarget = target != null && target > 0;
+  const endsAt = points.length ? points[points.length - 1].booked ?? 0 : 0;
+  const hasTarget = target != null;
 
   return (
     <>
       <ResponsiveContainer width="100%" height={300}>
-        <ComposedChart data={series}>
+        <ComposedChart data={points}>
           <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
           <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8' }} interval={1} />
           <YAxis
             tick={{ fontSize: 12 }}
-            tickFormatter={v => `$${(v / 1000).toFixed(1)}k`}
-            // Keep the target line on screen even when the month falls well short
-            domain={[0, (max: number) => Math.max(max, hasTarget ? target : 0) * 1.08]}
+            tickFormatter={moneyTick}
+            // Keep the target line on screen even when the month falls well short,
+            // and keep zero in view so a loss is read against breakeven
+            domain={[
+              (min: number) => Math.min(min, target ?? 0, 0) * 1.08,
+              (max: number) => Math.max(max, target ?? 0) * 1.08,
+            ]}
           />
-          <Tooltip
-            content={<RunningTooltip monthLabel={monthLabel} fmt={fmt} target={target} />}
-          />
+          <Tooltip content={<RunningTooltip monthLabel={monthLabel} fmt={fmt} target={target} />} />
+          {breakeven && (
+            <ReferenceLine
+              y={0} stroke="#94a3b8" strokeWidth={1}
+              label={{ value: 'breakeven', position: 'insideTopLeft', fontSize: 10, fill: '#94a3b8' }}
+            />
+          )}
           {hasTarget && (
             <ReferenceLine
-              y={target}
-              stroke="#475569"
-              strokeWidth={1.5}
-              strokeDasharray="6 3"
+              y={target} stroke="#475569" strokeWidth={1.5} strokeDasharray="6 3"
               label={{ value: `${fmt(target)} target`, position: 'insideTopRight', fontSize: 10, fill: '#475569' }}
             />
           )}
           {/* Steps, not a curve: the total holds flat and jumps on a check-in day,
               which is when the money actually arrives. A smoothed line would show
-              revenue trickling in on days nothing was sold.
+              it trickling in on days nothing was sold.
 
               Animation off, as on the occupancy chart: the period toggle swaps
               these in and out, and redrawing the line each time is noise. */}
           <Line
-            dataKey="earned" type="stepAfter" stroke={COLORS.earned} strokeWidth={2.5}
+            dataKey="earned" type="stepAfter" stroke={color} strokeWidth={2.5}
             dot={false} connectNulls={false} isAnimationActive={false}
           />
           <Line
-            dataKey="booked" type="stepAfter" stroke={COLORS.earned} strokeWidth={2}
+            dataKey="booked" type="stepAfter" stroke={color} strokeWidth={2}
             strokeDasharray="5 4" strokeOpacity={0.55} dot={false} connectNulls={false}
             isAnimationActive={false}
           />
@@ -166,11 +180,11 @@ export function DayRevenueChart({
       </ResponsiveContainer>
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2 text-[11px] text-slate-400">
         <span className="flex items-center gap-1.5">
-          <span className="w-4 h-0.5 rounded" style={{ background: COLORS.earned }} />
+          <span className="w-4 h-0.5 rounded" style={{ background: color }} />
           Earned so far
         </span>
         <span className="flex items-center gap-1.5">
-          <span className="w-4 h-0.5 rounded opacity-60" style={{ background: COLORS.earned }} />
+          <span className="w-4 h-0.5 rounded opacity-60" style={{ background: color }} />
           Already booked
         </span>
         <span className="text-slate-500 font-medium">
@@ -183,6 +197,24 @@ export function DayRevenueChart({
   );
 }
 
+/** The gross revenue month view: the running total of what each day's check-ins brought in. */
+export function DayRevenueChart({
+  data, monthLabel, fmt, target,
+}: {
+  data: DayDatum[];
+  monthLabel: string;
+  fmt: (n: number) => string;
+  target?: number | null;
+}) {
+  return (
+    <MonthProgressChart
+      points={runningTotals(data)}
+      monthLabel={monthLabel}
+      fmt={fmt}
+      target={target}
+    />
+  );
+}
 
 function NightTooltip({
   active, payload, monthLabel, fmt,

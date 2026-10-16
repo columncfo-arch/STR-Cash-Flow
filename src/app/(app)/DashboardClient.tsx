@@ -6,99 +6,17 @@ import { TrendingUp, X, Pencil, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
 import { pacingStatus } from '@/lib/pacing';
 import { addDays } from '@/lib/dateRange';
-import { DayRevenueChart, DayOccupancyChart, DayDatum } from '@/components/DayCharts';
+import {
+  DayRevenueChart, DayOccupancyChart, MonthProgressChart, DayDatum, ProgressPoint,
+} from '@/components/DayCharts';
+import { YearVarianceChart, VarianceDatum } from '@/components/YearVarianceChart';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Legend, Cell, ReferenceLine,
+  Cell, ReferenceLine,
 } from 'recharts';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
-/** A month's gross revenue measured against its target, for the year chart. */
-type VarianceDatum = {
-  name: string;
-  /** actual \u2212 target, or null for a month not reached yet. */
-  variance: number | null;
-  actual: number;
-  /** `actual` again, but blank for months with no bar, so the line stops where
-      the bars do instead of diving through months nobody has lived yet. */
-  actualLine: number | null;
-  target: number | null;
-  isCurrent: boolean;
-};
-
-/** Axis ticks that read as a gap: signed, and in whole dollars while small. */
-const signedMoneyTick = (v: number) => {
-  const abs = Math.abs(v);
-  const s = abs >= 1000 ? `$${(abs / 1000).toFixed(abs >= 10000 ? 0 : 1)}k` : `$${Math.round(abs)}`;
-  return v < 0 ? `\u2212${s}` : s;
-};
-
-function VarianceTooltip({
-  active, payload, fmt,
-}: {
-  active?: boolean;
-  payload?: { payload: VarianceDatum }[];
-  fmt: (n: number) => string;
-}) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-
-  return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm min-w-[200px]">
-      <p className="font-semibold text-slate-800 mb-2">{d.name}{d.isCurrent ? ' \u00b7 so far' : ''}</p>
-      {d.variance == null ? (
-        <p className="text-slate-500">
-          Not reached yet{d.actual > 0 ? ` \u00b7 ${fmt(d.actual)} on the books` : ''}
-        </p>
-      ) : (
-        <>
-          <div className="flex justify-between gap-6">
-            <span className="text-slate-500">{d.variance >= 0 ? 'Over target' : 'Under target'}</span>
-            <span className={`font-semibold ${d.variance >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-              {d.variance >= 0 ? '+' : '\u2212'}{fmt(Math.abs(d.variance))}
-            </span>
-          </div>
-          <div className="flex justify-between gap-6 border-t border-slate-100 mt-2 pt-2">
-            <span className="text-slate-500">Earned</span>
-            <span className="font-medium">{fmt(d.actual)}</span>
-          </div>
-          <div className="flex justify-between gap-6">
-            <span className="text-slate-500">Target</span>
-            <span className="font-medium text-slate-600">{fmt(d.target ?? 0)}</span>
-          </div>
-        </>
-      )}
-    </div>
-  );
-}
-
-function PnLTooltip({
-  active, payload, label, fmt,
-}: {
-  active?: boolean;
-  payload?: { name: string; value: number | null; color: string }[];
-  label?: string;
-  fmt: (n: number) => string;
-}) {
-  if (!active || !payload?.length) return null;
-  const entries = payload.filter(p => p.value != null);
-  if (!entries.length) return null;
-  return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm min-w-[190px]">
-      <p className="font-semibold text-slate-800 mb-2">{label}</p>
-      {entries.map(e => (
-        <div key={e.name} className="flex justify-between gap-6">
-          <span className="text-slate-500">{e.name}</span>
-          <span className={`font-medium ${e.name === 'Net Income' && e.value! < 0 ? 'text-red-500' : ''}`}>
-            {fmt(e.value!)}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function PlatformTable({
   byPlatform, totalRevenue, fmt,
@@ -610,7 +528,11 @@ export default function DashboardClient() {
   // Mirrors buildPnL so the last point equals the month's netIncome:
   //   netIncome = gross − platformFees − fastPay − tax − refunds − opex − piti
   // Per-booking terms are dated; refunds, opex and piti form the opening debt.
-  const cumulativeNetData = (() => {
+  // The month's net income as a running total, the same shape as the revenue
+  // chart above it. It opens below zero at the costs the month has already
+  // committed — operating expenses, PITI, refunds — and climbs as stays check
+  // in, so crossing zero is the day the month paid for itself.
+  const cumulativeNetData: ProgressPoint[] = (() => {
     if (period !== 'month') return [];
     const m = statement?.months[currentMonthIdx];
     if (!m) return [];
@@ -626,7 +548,6 @@ export default function DashboardClient() {
         - (b.taxRemitted ?? 0) - (b.taxWithheld ?? 0);
     }
 
-    const now = new Date();
     const isLiveMonth = now.getFullYear() === year && now.getMonth() === currentMonthIdx;
     const todayDay = isLiveMonth ? now.getDate() : daysInMonth;
 
@@ -639,18 +560,29 @@ export default function DashboardClient() {
       // checked in. Both carry today's point so the lines meet.
       return {
         day: String(day),
-        actual: day <= todayDay ? value : null,
-        projected: day >= todayDay ? value : null,
+        earned: day <= todayDay ? value : null,
+        booked: day >= todayDay ? value : null,
+        today: Math.round(v),
+        isFuture: day > todayDay,
       };
     });
   })();
 
-  const pnlChartData = statement?.months.map((m, i) => {
-    const isActual = i <= currentMonthIdx;
+  // Net income against its forecast, as the gap. Completed months only: this
+  // month's costs — a full month of PITI and recurring expenses — have all
+  // landed while its revenue has not, so comparing it to a whole month's
+  // forecast would report a loss that the day-by-day view shows closing. The
+  // gross chart can prorate its target; costs do not prorate.
+  const netVarianceChartData: VarianceDatum[] = statement?.months.map((m, i) => {
+    const target = monthlyNetForecasts[i];
+    const comparable = i < currentMonthIdx && target != null;
     return {
       name: MONTHS[i],
-      'Net Income': isActual ? m.netIncome : null,
-      'Net Forecast': monthlyNetForecasts[i],
+      variance: comparable ? m.netIncome - target : null,
+      actual: m.netIncome,
+      actualLine: comparable ? m.netIncome : null,
+      target: target ?? null,
+      isCurrent: i === currentMonthIdx,
     };
   }) ?? [];
 
@@ -972,66 +904,12 @@ export default function DashboardClient() {
           />
         ) : (
           <>
-            <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart data={varianceChartData} onClick={handleChartClick} style={{ cursor: 'pointer' }} barCategoryGap="25%">
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="name" tick={(props) => {
-                  const { x, y, payload, index } = props;
-                  const isSelected = index === selectedMonth;
-                  return (
-                    <g transform={`translate(${x},${y})`}>
-                      <text
-                        x={0} y={0} dy={16}
-                        textAnchor="middle"
-                        fontSize={12}
-                        fontWeight={isSelected ? 700 : 400}
-                        fill={isSelected ? '#0f172a' : '#94a3b8'}
-                      >
-                        {payload.value}
-                      </text>
-                      {isSelected && (
-                        <line x1={-20} y1={4} x2={20} y2={4} stroke="#0f172a" strokeWidth={2} />
-                      )}
-                    </g>
-                  );
-                }} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={signedMoneyTick} width={60} />
-                {/* Revenue is an order of magnitude bigger than the gap to target,
-                    so it needs its own scale. Faint, and anchored at zero so the
-                    shape of the year is honest. */}
-                <YAxis
-                  yAxisId="actual" orientation="right" domain={[0, 'auto']}
-                  tick={{ fontSize: 10, fill: '#cbd5e1' }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}
-                  width={42} axisLine={false} tickLine={false}
-                />
-                <Tooltip
-                  cursor={{ fill: '#0f172a0a' }}
-                  content={(props) => (
-                    <VarianceTooltip
-                      active={props.active}
-                      payload={props.payload as unknown as { payload: VarianceDatum }[]}
-                      fmt={fmt}
-                    />
-                  )}
-                />
-                {/* Target is the zero line now, so it needs no legend entry */}
-                <ReferenceLine y={0} stroke="#475569" strokeWidth={1.5} />
-                {/* Declared before the bars so they paint over it */}
-                <Line
-                  yAxisId="actual" dataKey="actualLine" type="monotone"
-                  stroke="#cbd5e1" strokeWidth={2} dot={false} connectNulls={false}
-                />
-                <Bar dataKey="variance">
-                  {varianceChartData.map((d, i) => (
-                    <Cell
-                      key={i}
-                      fill={(d.variance ?? 0) >= 0 ? '#10b981' : '#f43f5e'}
-                      opacity={selectedMonth === null || selectedMonth === i ? 1 : 0.25}
-                    />
-                  ))}
-                </Bar>
-              </ComposedChart>
-            </ResponsiveContainer>
+            <YearVarianceChart
+              data={varianceChartData}
+              fmt={fmt}
+              selectedIndex={selectedMonth}
+              onSelect={handleChartClick}
+            />
             {!prevHasData && manualTarget == null && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
                 No prior-year data — set an annual target on the pacing card above to enable the forecast line, or{' '}
@@ -1125,73 +1003,33 @@ export default function DashboardClient() {
       {hasData && (
         <div className="px-5 py-4">
           <p className="text-xs font-medium text-slate-500 mb-1">
-            {period === 'month' ? `${MONTHS_LONG[currentMonthIdx]} cumulative` : 'By month'}
+            {period === 'month'
+              ? `${MONTHS_LONG[currentMonthIdx]} against plan`
+              : 'Over or under plan by month'}
           </p>
           <p className="text-xs text-slate-400 mb-4">
             {period === 'month'
               ? 'Opens at the month\u2019s committed costs and climbs as bookings land \u00b7 crossing zero is breakeven'
-              : 'Actuals and projected'}
+              : 'Bars: how far each month landed above or below its projection \u00b7 line: net income \u00b7 click a month to drill into its P&L'}
           </p>
           {period === 'month' ? (
-            <ResponsiveContainer width="100%" height={280}>
-              <ComposedChart data={cumulativeNetData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="day" tick={{ fontSize: 11, fill: '#94a3b8' }} interval={1} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(1)}k`} />
-                <Tooltip
-                  formatter={(v) => [fmt(typeof v === 'number' ? v : 0), 'Cumulative net']}
-                  labelFormatter={(d) => `${MONTHS_LONG[currentMonthIdx]} ${d}`}
-                  contentStyle={{ fontSize: 12, borderRadius: 8, border: '1px solid #e2e8f0' }}
-                />
-                {/* Breakeven: above this line the month has covered its costs */}
-                <ReferenceLine y={0} stroke="#94a3b8" strokeWidth={1}
-                  label={{ value: 'breakeven', position: 'insideTopLeft', fontSize: 10, fill: '#94a3b8' }} />
-                <Line dataKey="actual" stroke="#6366f1" strokeWidth={2} dot={false} connectNulls={false} />
-                {/* Confirmed bookings not yet checked in */}
-                <Line dataKey="projected" stroke="#6366f1" strokeWidth={2} strokeDasharray="5 3"
-                  dot={false} connectNulls={false} />
-              </ComposedChart>
-            </ResponsiveContainer>
+            <MonthProgressChart
+              points={cumulativeNetData}
+              monthLabel={MONTHS_LONG[currentMonthIdx]}
+              fmt={fmt}
+              target={periodNetTarget !== 0 ? periodNetTarget : null}
+              color="#6366f1"
+              breakeven
+            />
           ) : (
-          <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={pnlChartData} barGap={4} barCategoryGap="30%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94a3b8' }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip content={(props) => (
-                <PnLTooltip
-                  active={props.active}
-                  payload={props.payload as unknown as { name: string; value: number | null; color: string }[]}
-                  label={String(props.label ?? '')}
-                  fmt={fmt}
-                />
-              )} />
-              <Legend />
-              <ReferenceLine y={0} stroke="#cbd5e1" />
-              <Bar dataKey="Net Income" fill="#6366f1" radius={[3, 3, 0, 0]}>
-                {/* Loss-making months read red; the rounded corner follows the bar's direction */}
-                {pnlChartData.map((d, i) => {
-                  const v = d['Net Income'] as number | null;
-                  const negative = v != null && v < 0;
-                  return (
-                    <Cell
-                      key={i}
-                      fill={negative ? '#ef4444' : '#6366f1'}
-                      radius={(negative ? [0, 0, 3, 3] : [3, 3, 0, 0]) as unknown as number}
-                    />
-                  );
-                })}
-              </Bar>
-              <Line
-                dataKey="Net Forecast"
-                stroke="#6366f1"
-                strokeWidth={2}
-                strokeDasharray="6 3"
-                dot={{ r: 3, fill: '#6366f1', strokeWidth: 0 }}
-                connectNulls
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
+            <YearVarianceChart
+              data={netVarianceChartData}
+              fmt={fmt}
+              selectedIndex={selectedMonth}
+              onSelect={handleChartClick}
+              actualLabel="Net income"
+              pendingNote="Not closed out yet"
+            />
           )}
         </div>
       )}
