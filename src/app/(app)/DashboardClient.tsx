@@ -113,8 +113,6 @@ function MonthPnL({ m, fmt }: { m: MonthlyStatement; fmt: (n: number) => string 
   return <PnLTable m={m} fmt={fmt} />;
 }
 
-type HealthScore = 1 | 0 | -1;
-type HealthVerdict = { verdict: string; level: 'exceeding' | 'on-track' | 'at-risk' };
 
 export default function DashboardClient() {
   const [statement, setStatement] = useState<AnnualStatement | null>(null);
@@ -169,37 +167,13 @@ export default function DashboardClient() {
   const ytdGross = completedMonths.reduce((s, m) => s + m.grossRevenue, 0) + curActualGross;
   // Net income: completed months only — mixing partial-month revenue with full-month expenses/PITI is misleading
   const ytdNetIncome = completedMonths.reduce((s, m) => s + m.netIncome, 0);
-  const ytdNights = completedMonths.reduce((s, m) => s + m.totalNights, 0) + curActualNights;
   const daysInCurMonth = new Date(year, currentMonthIdx + 1, 0).getDate();
   const curMonthPartialOccupancy = curActualNights / daysInCurMonth;
   const occupancyMonthCount = completedMonths.length + (curMonthStmt ? 1 : 0);
   const ytdOccupancy = occupancyMonthCount > 0
     ? (completedMonths.reduce((s, m) => s + m.occupancyRate, 0) + curMonthPartialOccupancy) / occupancyMonthCount
     : 0;
-  const ytdAdr = ytdNights > 0 ? ytdGross / ytdNights : null;
 
-  // Confirmed future bookings in the current year (checkIn > today)
-  const futureConfirmedGross = statement?.months.reduce((total, m, i) => {
-    const eligible = i === currentMonthIdx
-      ? m.bookings.filter(b => b.checkIn > todayStr)
-      : i > currentMonthIdx
-      ? m.bookings
-      : [];
-    return total + eligible.reduce((s, b) => s + b.income, 0);
-  }, 0) ?? 0;
-
-  // Confirmed future nights (for open-nights calculation)
-  const futureConfirmedNights = statement?.months.reduce((total, m, i) => {
-    if (i === currentMonthIdx) {
-      return total + m.bookings.filter(b => b.checkIn > todayStr).reduce((s, b) => s + b.nights, 0);
-    }
-    return i > currentMonthIdx ? total + m.totalNights : total;
-  }, 0) ?? 0;
-
-  // Days remaining in the year from today (inclusive)
-  const yearEnd = new Date(year, 11, 31);
-  const daysRemainingInYear = Math.round((yearEnd.getTime() - now.getTime()) / 86400000) + 1;
-  const openNights = Math.max(0, daysRemainingInYear - futureConfirmedNights);
   // P&L table uses completed months only — the only period where revenue and expenses are both fully settled
 
   // Aggregate YTD byPlatform for the platform table
@@ -308,18 +282,11 @@ export default function DashboardClient() {
     ? (manualTarget ?? monthlyForecasts.reduce<number>((s, v) => s + (v ?? 0), 0))
     : null;
   const curMonthForecast = monthlyForecasts[currentMonthIdx];
-  const stillToBook = annualForecast != null ? Math.max(0, annualForecast - ytdGross - futureConfirmedGross) : null;
-  const breakEvenAdr = openNights > 0 && stillToBook != null && stillToBook > 0 ? Math.ceil(stillToBook / openNights) : null;
   // Prorate current month's forecast by days elapsed so ytdForecast matches the ytdGross horizon
   const daysElapsed = now.getDate();
   const curMonthForecastProrated = curMonthForecast != null
     ? Math.round(curMonthForecast * daysElapsed / daysInCurMonth)
     : 0;
-  const ytdForecast = hasTarget
-    ? monthlyForecasts.slice(0, currentMonthIdx).reduce<number>((s, v) => s + (v ?? 0), 0) + curMonthForecastProrated
-    : null;
-  const pacingVariance = ytdForecast != null ? ytdGross - ytdForecast : null;
-  const pacingVariancePct = ytdForecast && ytdForecast > 0 ? (pacingVariance! / ytdForecast) * 100 : null;
 
   // Day-by-day view of the selected month, shown in place of the year charts when
   // the period is This Month. Both the revenue chart and the occupancy chart read
@@ -442,14 +409,6 @@ export default function DashboardClient() {
     : null;
   const annualNetForecast = projRemainingNet != null ? ytdNetIncome + projRemainingNet : null;
 
-  // NI pacing: compare completed months actual vs completed months forecast (same time horizon)
-  const ytdGrossForecastTotal = monthlyForecasts.slice(0, currentMonthIdx).reduce<number>((s, v) => s + (v ?? 0), 0);
-  const ytdNetForecast = cmRatio != null
-    ? Math.round(ytdGrossForecastTotal * cmRatio - ytdPITITotal)
-    : null;
-  const netPacingVariance = ytdNetForecast != null ? ytdNetIncome - ytdNetForecast : null;
-  const netPacingVariancePct = ytdNetForecast != null && ytdNetForecast !== 0
-    ? (netPacingVariance! / Math.abs(ytdNetForecast)) * 100 : null;
 
 
   // ── Selected period ────────────────────────────────────────────────────────
@@ -606,54 +565,6 @@ export default function DashboardClient() {
 
   const targetOcc = displayOccTarget;
   const occVariance = targetOcc != null ? ytdOccupancy - targetOcc : null;
-
-  // Year Health: composite score from the key pacing and coverage signals
-  const healthSignals: { label: string; score: HealthScore; detail: string }[] = [];
-
-  if (pacingVariancePct != null) {
-    const score: HealthScore = pacingVariancePct > 5 ? 1 : pacingVariancePct >= -10 ? 0 : -1;
-    healthSignals.push({ label: 'Revenue', score, detail: `${pacingVariancePct >= 0 ? '+' : ''}${pacingVariancePct.toFixed(1)}% vs target` });
-  }
-  // Only score NI pacing when the base is large enough to be meaningful — a $20 forecast
-  // base produces absurd percentages that mislead the health verdict.
-  if (netPacingVariancePct != null && ytdNetForecast != null && Math.abs(ytdNetForecast) >= 500) {
-    const score: HealthScore = netPacingVariancePct > 5 ? 1 : netPacingVariancePct >= -15 ? 0 : -1;
-    healthSignals.push({ label: 'Net Income', score, detail: `${netPacingVariancePct >= 0 ? '+' : ''}${netPacingVariancePct.toFixed(1)}% vs projection` });
-  }
-  if (annualForecast != null) {
-    if (breakEvenAdr == null) {
-      healthSignals.push({ label: 'Target Path', score: 1, detail: 'Bookings cover target' });
-    } else if (ytdAdr != null && ytdAdr > 0) {
-      const stretchRatio = breakEvenAdr / ytdAdr;
-      const score: HealthScore = stretchRatio <= 1.1 ? 1 : stretchRatio <= 1.4 ? 0 : -1;
-      healthSignals.push({ label: 'Target Path', score, detail: `$${breakEvenAdr}/night · ${openNights} open nights` });
-    }
-  }
-  if (occVariance != null) {
-    const score: HealthScore = occVariance >= 0 ? 1 : occVariance >= -10 ? 0 : -1;
-    healthSignals.push({ label: 'Occupancy', score, detail: `${occVariance >= 0 ? '+' : ''}${occVariance.toFixed(1)}pts vs target` });
-  }
-  // Annual NI projection: if the full-year outcome is negative, cap the verdict at "On Track"
-  // regardless of how well individual signals are pacing — a projected loss is a loss.
-  const annualNiIsNegative = annualNetForecast != null && annualNetForecast < 0;
-
-  const healthTotal = healthSignals.reduce((s, sig) => s + sig.score, 0);
-  const healthNorm = healthSignals.length > 0 ? healthTotal / healthSignals.length : 0;
-  const yearHealth: HealthVerdict | null =
-    healthSignals.length < 2 ? null
-    : healthNorm > 0.6 && !annualNiIsNegative ? { verdict: 'Exceeding', level: 'exceeding' }
-    : healthNorm > -0.4 ? { verdict: 'On Track', level: 'on-track' }
-    : { verdict: 'At Risk', level: 'at-risk' };
-
-  // The one signal worth surfacing is the binding constraint — the weakest —
-  // since that is what would have to change. Ties break on which measure
-  // matters most, not on the order the signals happen to be pushed.
-  const HEALTH_PRIORITY = ['Net Income', 'Revenue', 'Occupancy', 'Target Path'];
-  const mainSignal = healthSignals.length > 0
-    ? [...healthSignals].sort((a, b) =>
-        (a.score - b.score) ||
-        (HEALTH_PRIORITY.indexOf(a.label) - HEALTH_PRIORITY.indexOf(b.label)))[0]
-    : null;
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function handleChartClick(data: any) {
@@ -861,17 +772,17 @@ export default function DashboardClient() {
         <div className="border-t border-slate-100">
       {/* Chart */}
       <div className="px-5 py-4">
-        <p className="text-xs font-medium text-slate-500 mb-1 flex items-center gap-1.5">
+        <p className={`text-xs font-medium text-slate-500 flex items-center gap-1.5 ${period === 'month' ? 'mb-1' : 'mb-4'}`}>
           <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
           {period === 'month'
             ? `${MONTHS_LONG[currentMonthIdx]} against target`
             : 'Over or under target by month'}
         </p>
-        <p className="text-xs text-slate-400 mb-4">
-          {period === 'month'
-            ? 'Revenue adding up through the month · dashed where it is booked but not yet earned'
-            : 'Bars: how far each month landed above or below target, grey where the month is still ahead and the gap is left to sell · line: revenue booked · click a month to drill into its P&L'}
-        </p>
+        {period === 'month' && (
+          <p className="text-xs text-slate-400 mb-4">
+            Revenue adding up through the month · dashed where it is booked but not yet earned
+          </p>
+        )}
         {!hasData ? (
           <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
             No data yet. Import your earnings CSV to get started.
@@ -993,16 +904,16 @@ export default function DashboardClient() {
       {/* P&L Chart */}
       {hasData && (
         <div className="px-5 py-4">
-          <p className="text-xs font-medium text-slate-500 mb-1">
+          <p className={`text-xs font-medium text-slate-500 ${period === 'month' ? 'mb-1' : 'mb-4'}`}>
             {period === 'month'
               ? `${MONTHS_LONG[currentMonthIdx]} against plan`
               : 'Over or under plan by month'}
           </p>
-          <p className="text-xs text-slate-400 mb-4">
-            {period === 'month'
-              ? 'Opens at the month\u2019s committed costs and climbs as bookings land \u00b7 crossing zero is breakeven'
-              : 'Bars: how far each month landed above or below its projection \u00b7 line: net income \u00b7 click a month to drill into its P&L'}
-          </p>
+          {period === 'month' && (
+            <p className="text-xs text-slate-400 mb-4">
+              Opens at the month’s committed costs and climbs as bookings land · crossing zero is breakeven
+            </p>
+          )}
           {period === 'month' ? (
             <MonthProgressChart
               points={cumulativeNetData}
@@ -1239,32 +1150,9 @@ export default function DashboardClient() {
       </section>
 
 
-      {/* ── Year Health + YTD tables — hidden when a month is drilled into ── */}
+      {/* ── Hidden when a month is drilled into ── */}
       {hasData && !selMonth && (
         <>
-          {yearHealth && (
-            <div className={`rounded-xl border p-4 mb-6 ${
-              yearHealth.level === 'exceeding' ? 'bg-emerald-50 border-emerald-200' :
-              yearHealth.level === 'on-track' ? 'bg-slate-50 border-slate-200' :
-              'bg-red-50 border-red-200'
-            }`}>
-              <div className="flex items-baseline flex-wrap gap-x-3 gap-y-1">
-                <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-400">Year Health</p>
-                <p className={`text-xl font-bold ${
-                  yearHealth.level === 'exceeding' ? 'text-emerald-700' :
-                  yearHealth.level === 'on-track' ? 'text-slate-700' :
-                  'text-red-700'
-                }`}>{yearHealth.verdict}</p>
-                {mainSignal && (
-                  <p className="text-xs text-slate-500">
-                    {mainSignal.score === 1 ? '▲' : mainSignal.score === -1 ? '▼' : '~'}{' '}
-                    <span className="font-medium text-slate-700">{mainSignal.label}</span>{' '}
-                    {mainSignal.detail}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
           {/* The year-to-date P&L and the platform split used to sit here as two
               bare tables, in a page that is otherwise sections of tiles. The
               Income Statement tab already presents both, over any period and
