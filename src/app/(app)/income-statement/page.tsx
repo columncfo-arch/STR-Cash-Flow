@@ -15,6 +15,18 @@ const MONTHS_LONG = [
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 const PLATFORMS = ['airbnb','booking','vrbo','direct','other'] as Platform[];
+/**
+ * An axis tick that stays distinct when the range is narrow. Rounding everything
+ * to whole thousands printed "$-3k" on every gridline of a one-month year.
+ */
+const axisMoney = (v: number) => {
+  const abs = Math.abs(v);
+  const s = abs >= 10000 ? `$${Math.round(abs / 1000)}k`
+    : abs >= 1000 ? `$${(abs / 1000).toFixed(1)}k`
+    : `$${Math.round(abs)}`;
+  return v < 0 ? `\u2212${s}` : s;
+};
+
 const platformLabel = (p: string) => p === 'booking' ? 'Booking.com' : p.charAt(0).toUpperCase() + p.slice(1);
 
 type Mode = 'month' | 'ytd' | 'prior_year' | 'full_year';
@@ -225,8 +237,8 @@ export default function IncomeStatementPage() {
                 </tr>
                 {splitDerived ? (
                   <>
-                    <Row label="Mortgage Interest" value={pnl.mortgageInterest} indent negative />
-                    <Row label="Taxes, Insurance &amp; Escrow" value={pnl.mortgageTaxesInsurance} indent negative />
+                    <Row label={`Mortgage Interest (${monthCount} mo)`} value={pnl.mortgageInterest} indent negative />
+                    <Row label={`Taxes, Insurance & Escrow (${monthCount} mo)`} value={pnl.mortgageTaxesInsurance} indent negative />
                   </>
                 ) : (
                   <Row label={`PITI (${monthCount} mo × ${fmt(settings?.monthlyPITI ?? 0)})`} value={pnl.piti} indent negative />
@@ -243,7 +255,7 @@ export default function IncomeStatementPage() {
                     Cash Flow
                   </td>
                 </tr>
-                <Row label="Principal Repaid (equity built)" value={pnl.mortgagePrincipal} indent negative />
+                <Row label={`Principal Repaid (${monthCount} mo, equity built)`} value={pnl.mortgagePrincipal} indent negative />
                 <Row label="Cash Flow" value={pnl.netIncome} bold separator accent />
               </>
             )}
@@ -329,6 +341,18 @@ export default function IncomeStatementPage() {
 
   const pitiMonths = mode === 'month' ? 1 : mode === 'ytd' ? currentMonthIdx + 1 : 12;
 
+  // This page is built from bookings alone. A year can also carry figures typed
+  // straight into the forecast, and those drive the projections without ever
+  // appearing here — which looks like missing data rather than data kept
+  // somewhere else. Say which it is instead of leaving the reader to guess.
+  const override = settings?.forecastOverrides?.[String(fetchYear)];
+  const hasManualFigures = Boolean(
+    override && (override.isManualYear || override.revenue != null || override.monthlyRevenue?.some(v => v > 0)),
+  );
+  const monthsWithBookings = activeMonthsSlice.filter(m => m.grossRevenue > 0).length;
+  const emptyPitiMonths = Math.max(0, pitiMonths - monthsWithBookings);
+  const pitiOnEmptyMonths = emptyPitiMonths * (settings?.monthlyPITI ?? 0);
+
   return (
     <div className="max-w-5xl mx-auto">
       {/* Header */}
@@ -359,7 +383,7 @@ export default function IncomeStatementPage() {
             }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={axisMoney} width={62} />
               <Tooltip formatter={(v) => fmt(Number(v))} />
               <ReferenceLine y={0} stroke="#cbd5e1" />
               <Bar dataKey="netIncome" name="Cash Flow" radius={[3, 3, 0, 0]}>
@@ -427,6 +451,26 @@ export default function IncomeStatementPage() {
         <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{activeLabel}</span>
       </div>
 
+      {activePnL && hasManualFigures && monthsWithBookings < pitiMonths && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6 text-sm text-amber-900">
+          <p className="font-semibold mb-0.5">{fetchYear} is partly a typed-in year</p>
+          <p className="text-amber-800 leading-relaxed">
+            This statement is built from bookings, and {fetchYear} has {monthsWithBookings} month
+            {monthsWithBookings === 1 ? '' : 's'} of them. The figures driving the forecast for {fetchYear} were
+            entered by hand and live with the forecast, not here — which is why the two do not agree. Import that
+            year&rsquo;s earnings to see it in full.
+          </p>
+        </div>
+      )}
+      {activePnL && pitiOnEmptyMonths > 0 && mode !== 'month' && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 mb-6 text-sm text-slate-700">
+          <p className="leading-relaxed">
+            PITI is charged for all {pitiMonths} months of this period, {emptyPitiMonths} of which have no
+            bookings — {fmt(pitiOnEmptyMonths)} of the total. If you did not own the property for those
+            months, that much of the loss is not real.
+          </p>
+        </div>
+      )}
       {activePnL && <KPICards pnl={activePnL} />}
       {activePnL && <PnLTable pnl={activePnL} label={activeLabel} months={pitiMonths} />}
     </div>
