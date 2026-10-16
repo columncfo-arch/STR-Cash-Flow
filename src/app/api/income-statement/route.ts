@@ -2,7 +2,9 @@ import { NextResponse } from 'next/server';
 import { loadBookings, loadExpenses, loadSettings } from '@/lib/storage';
 import { requireAuth, unauthorized } from '@/lib/auth';
 import { AnnualStatement, Booking, Expense, ExpenseCategory, MonthlyStatement, Platform, PnLSummary } from '@/types';
+import type { PitiSplit } from '@/lib/mortgage';
 import { occurrencesIn } from '@/lib/recurrence';
+import { splitPiti } from '@/lib/mortgage';
 import { getYear, getDaysInMonth } from 'date-fns';
 
 const PLATFORMS: Platform[] = ['airbnb', 'booking', 'vrbo', 'direct', 'other'];
@@ -30,6 +32,7 @@ function buildPnL(
   monthlyPITI: number,
   months: number,
   cleaningCostPerBooking: number = 0,
+  pitiSplit: PitiSplit = { interest: 0, principal: 0, taxesInsurance: monthlyPITI, derived: false },
 ): PnLSummary {
   const grossRevenue = bookings.reduce((s, b) => s + b.income, 0);
   const platformFees = bookings.reduce((s, b) => s + (b.platformFee ?? 0), 0);
@@ -62,6 +65,13 @@ function buildPnL(
 
   const operatingIncome = netRevenue - totalOperatingExpenses;
   const piti = monthlyPITI * months;
+  // The costs of carrying the property, separated from the principal repayment,
+  // which is equity rather than an expense
+  const mortgageInterest = pitiSplit.interest * months;
+  const mortgagePrincipal = pitiSplit.principal * months;
+  const mortgageTaxesInsurance = pitiSplit.taxesInsurance * months;
+  const netProfit = operatingIncome - mortgageInterest - mortgageTaxesInsurance;
+  // Unchanged: what leaves the bank once the whole payment is made
   const netIncome = operatingIncome - piti;
 
   return {
@@ -76,6 +86,10 @@ function buildPnL(
     totalOperatingExpenses,
     operatingIncome,
     piti,
+    mortgageInterest,
+    mortgagePrincipal,
+    mortgageTaxesInsurance,
+    netProfit,
     netIncome,
   };
 }
@@ -87,6 +101,7 @@ function buildMonthly(
   expenses: Expense[],
   monthlyPITI: number,
   cleaningCostPerBooking: number = 0,
+  pitiSplit?: PitiSplit,
 ): MonthlyStatement {
   // Use string prefix to avoid timezone shifts from Date parsing
   const prefix = `${year}-${String(month).padStart(2, '0')}`;
@@ -108,7 +123,7 @@ function buildMonthly(
     byPlatform[b.platform].income += b.income;
   }
 
-  const pnl = buildPnL(monthBookings, monthExpenses, monthlyPITI, 1, cleaningCostPerBooking);
+  const pnl = buildPnL(monthBookings, monthExpenses, monthlyPITI, 1, cleaningCostPerBooking, pitiSplit);
 
   return {
     year,
@@ -134,9 +149,10 @@ export async function GET(req: Request) {
     ]);
 
     const cleaningCostPerBooking = settings.cleaningFeePerBooking ?? 0;
+    const pitiSplit = splitPiti(settings);
     const months: MonthlyStatement[] = [];
     for (let m = 1; m <= 12; m++) {
-      months.push(buildMonthly(year, m, allBookings, allExpenses, settings.monthlyPITI, cleaningCostPerBooking));
+      months.push(buildMonthly(year, m, allBookings, allExpenses, settings.monthlyPITI, cleaningCostPerBooking, pitiSplit));
     }
 
     const yearBookings = allBookings.filter(b => b.checkIn.startsWith(String(year)));
@@ -157,7 +173,7 @@ export async function GET(req: Request) {
 
     const now = new Date();
     const pitiMonths = year < now.getFullYear() ? 12 : Math.min(now.getMonth() + 1, 12);
-    const annualPnL = buildPnL(yearBookings, yearExpenses, settings.monthlyPITI, pitiMonths, cleaningCostPerBooking);
+    const annualPnL = buildPnL(yearBookings, yearExpenses, settings.monthlyPITI, pitiMonths, cleaningCostPerBooking, pitiSplit);
 
     const statement: AnnualStatement = {
       year,

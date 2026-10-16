@@ -34,6 +34,9 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
   let refunds = 0;
   let totalOperatingExpenses = 0;
   let piti = 0;
+  let mortgageInterest = 0;
+  let mortgagePrincipal = 0;
+  let mortgageTaxesInsurance = 0;
 
   let fastPayFees = 0;
   let taxRemitted = 0;
@@ -51,6 +54,9 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
     refunds += m.refunds;
     totalOperatingExpenses += m.totalOperatingExpenses;
     piti += m.piti;
+    mortgageInterest += m.mortgageInterest;
+    mortgagePrincipal += m.mortgagePrincipal;
+    mortgageTaxesInsurance += m.mortgageTaxesInsurance;
     for (const cat of Object.keys(expensesByCategory) as (keyof typeof expensesByCategory)[]) {
       expensesByCategory[cat] += m.expensesByCategory[cat] ?? 0;
     }
@@ -63,12 +69,17 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
 
   const netRevenue = grossRevenue - platformFees - fastPayFees - taxRemitted - refunds;
   const operatingIncome = netRevenue - totalOperatingExpenses;
+  // Profit after what the property costs to carry; cash flow after the principal
+  // repayment on top, which is equity rather than an expense
+  const netProfit = operatingIncome - mortgageInterest - mortgageTaxesInsurance;
   const netIncome = operatingIncome - piti;
 
   return {
     grossRevenue, platformFees, fastPayFees, taxRemitted, refunds, netRevenue,
     expensesByCategory, ownerTaxes, totalOperatingExpenses,
-    operatingIncome, piti, netIncome,
+    operatingIncome, piti,
+    mortgageInterest, mortgagePrincipal, mortgageTaxesInsurance,
+    netProfit, netIncome,
     totalNights,
     avgOccupancy: months.length ? totalOccupancy / months.length : 0,
     byPlatform,
@@ -129,6 +140,9 @@ export default function IncomeStatementPage() {
     const hasRefunds = pnl.refunds > 0;
     const hasExpenses = pnl.totalOperatingExpenses > 0;
     const hasPITI = pnl.piti > 0;
+    // Only separate interest from principal when the loan settings support it;
+    // otherwise the payment stays one line rather than an invented split.
+    const splitDerived = pnl.mortgagePrincipal > 0 || pnl.mortgageInterest > 0;
 
     function Row({ label: l, value, indent = false, bold = false, accent = false, negative = false, separator = false }: {
       label: string; value: number; indent?: boolean; bold?: boolean; accent?: boolean; negative?: boolean; separator?: boolean;
@@ -199,18 +213,43 @@ export default function IncomeStatementPage() {
 
             <Row label="Operating Income" value={pnl.operatingIncome} bold separator accent />
 
-            {/* PITI */}
+            {/* PITI, split into what it costs and what it buys. Principal
+                repayment is not an expense — it is cash moving into equity — so
+                it sits below net income rather than inside it. */}
             {hasPITI && (
               <>
                 <tr>
-                  <td colSpan={2} className="px-4 pt-3 pb-1 text-xs font-semibold text-slate-400 uppercase tracking-wide border-t border-slate-100">Debt Service</td>
+                  <td colSpan={2} className="px-4 pt-3 pb-1 text-xs font-semibold text-slate-400 uppercase tracking-wide border-t border-slate-100">
+                    Cost of Carrying the Property
+                  </td>
                 </tr>
-                <Row label={`PITI (${monthCount} mo × ${fmt((settings?.monthlyPITI ?? 0))})`} value={pnl.piti} indent negative />
-                <Row label="Total PITI" value={pnl.piti} bold separator negative />
+                {splitDerived ? (
+                  <>
+                    <Row label="Mortgage Interest" value={pnl.mortgageInterest} indent negative />
+                    <Row label="Taxes, Insurance &amp; Escrow" value={pnl.mortgageTaxesInsurance} indent negative />
+                  </>
+                ) : (
+                  <Row label={`PITI (${monthCount} mo × ${fmt(settings?.monthlyPITI ?? 0)})`} value={pnl.piti} indent negative />
+                )}
               </>
             )}
 
-            <Row label="Net Income" value={pnl.netIncome} bold separator accent />
+            <Row label="Net Income" value={pnl.netProfit} bold separator accent />
+
+            {hasPITI && splitDerived && (
+              <>
+                <tr>
+                  <td colSpan={2} className="px-4 pt-3 pb-1 text-xs font-semibold text-slate-400 uppercase tracking-wide border-t border-slate-100">
+                    Cash Flow
+                  </td>
+                </tr>
+                <Row label="Principal Repaid (equity built)" value={pnl.mortgagePrincipal} indent negative />
+                <Row label="Cash Flow" value={pnl.netIncome} bold separator accent />
+              </>
+            )}
+            {hasPITI && !splitDerived && (
+              <Row label="Cash Flow" value={pnl.netIncome} bold separator accent />
+            )}
           </tbody>
         </table>
       </div>
@@ -258,8 +297,12 @@ export default function IncomeStatementPage() {
       [],
       ['Operating Income', pnl.operatingIncome.toFixed(2)],
       [],
-      ['PITI', (-pnl.piti).toFixed(2)],
-      ['Net Income', pnl.netIncome.toFixed(2)],
+      ['Mortgage Interest', (-pnl.mortgageInterest).toFixed(2)],
+      ['Taxes, Insurance & Escrow', (-pnl.mortgageTaxesInsurance).toFixed(2)],
+      ['Net Income', pnl.netProfit.toFixed(2)],
+      [],
+      ['Principal Repaid (equity built)', (-pnl.mortgagePrincipal).toFixed(2)],
+      ['Cash Flow', pnl.netIncome.toFixed(2)],
     ];
     const csv = rows.map(r => r.join(',')).join('\n');
     const a = document.createElement('a');

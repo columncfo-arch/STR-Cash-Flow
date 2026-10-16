@@ -922,6 +922,10 @@ export default function DashboardClient() {
         const revenue = periodMonths.reduce((s, m) => s + (monthStmt(m)?.netRevenue ?? 0), 0);
         const opex = periodMonths.reduce((s, m) => s + (monthStmt(m)?.totalOperatingExpenses ?? 0), 0);
         const piti = periodMonths.reduce((s, m) => s + (monthStmt(m)?.piti ?? 0), 0);
+        // The part of the mortgage payment that bought equity rather than being
+        // spent. This tile reports cash flow, which subtracts it — so a month
+        // reading as a loss may still have moved the owner forward.
+        const principal = periodMonths.reduce((s, m) => s + (monthStmt(m)?.mortgagePrincipal ?? 0), 0);
 
         return (
           <div className={`px-5 py-4 ${net < 0 ? 'bg-red-50/40' : ''}`}>
@@ -969,6 +973,12 @@ export default function DashboardClient() {
                 </p>
               </div>
             </div>
+            {principal > 0 && (
+              <p className="text-[11px] text-slate-400 mt-3">
+                {fmt(principal)} of that mortgage payment repaid principal, so it built equity rather
+                than being spent — before it, the period made {fmt(net + principal)}.
+              </p>
+            )}
             {projected > 0 && (
               <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
                 <div className="h-1 rounded-full bg-indigo-500 transition-all"

@@ -131,6 +131,8 @@ export interface Settings {
   totalCapitalDeployed?: number;
   benchmarkReturnPct?: number;  // annualised return the property is judged against (e.g. 8 for an index fund)
   renovationCosts?: number;
+  monthlyPropertyTax?: number;    // the T in PITI, per month
+  monthlyInsurance?: number;      // the second I in PITI, per month
   mortgageRate?: number;          // current interest rate %
   propertyValue?: number;         // estimated current value
   loanBalance?: number;           // current outstanding balance
@@ -187,6 +189,14 @@ export interface PnLSummary {
   totalOperatingExpenses: number;
   operatingIncome: number;
   piti: number;
+  // PITI split three ways. Interest, tax and insurance are costs; principal is
+  // equity built. The three always sum to `piti`.
+  mortgageInterest: number;
+  mortgagePrincipal: number;
+  mortgageTaxesInsurance: number;
+  /** Profit after the costs of carrying the property, before principal repayment. */
+  netProfit: number;
+  /** What actually leaves the bank: netProfit less the principal repaid. */
   netIncome: number;
 }
 

@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { ForecastYear, Settings, ForecastOverride } from '@/types';
 import { pacingStatus } from '@/lib/pacing';
+import { balanceAfterMonths } from '@/lib/mortgage';
 import { Pencil, Check, X, Plus, Trash2, TrendingUp } from 'lucide-react';
 import {
   ComposedChart, Bar, Area, Line, XAxis, YAxis, CartesianGrid, Tooltip,
@@ -245,40 +246,14 @@ export default function ForecastPage() {
   // ── Equity / Amortization ─────────────────────────────────────────────────
   const propertyValue = settings?.propertyValue ?? 0;
   const loanBalance = settings?.loanBalance ?? 0;
-  const mortgageRate = settings?.mortgageRate ?? 0;
-  const loanTermYears = settings?.loanTermYears ?? 30;
   const loanStructure = settings?.loanStructure ?? 'fixed';
   const appreciationPct = configDraft.propertyAppreciationPct ?? settings?.propertyAppreciationPct ?? 0;
   const hasEquityData = propertyValue > 0 && loanBalance > 0;
 
-  const monthlyRate = mortgageRate / 100 / 12;
-  const totalPayments = loanTermYears * 12;
-  let monthlyPayment = 0;
-  if (hasEquityData && loanStructure !== 'interest_only' && totalPayments > 0) {
-    if (monthlyRate > 0) {
-      const factor = Math.pow(1 + monthlyRate, totalPayments);
-      monthlyPayment = loanBalance * monthlyRate * factor / (factor - 1);
-    } else {
-      monthlyPayment = loanBalance / totalPayments;
-    }
-  }
-
-  function projectedBalance(yearsFromNow: number): number {
-    if (!hasEquityData) return 0;
-    // Interest-only: no principal reduction — balance stays flat
-    if (loanStructure === 'interest_only') return loanBalance;
-    const months = yearsFromNow * 12;
-    let bal: number;
-    if (monthlyRate > 0 && monthlyPayment > 0) {
-      const factor = Math.pow(1 + monthlyRate, months);
-      bal = loanBalance * factor - monthlyPayment * (factor - 1) / monthlyRate;
-    } else if (monthlyPayment > 0) {
-      bal = loanBalance - monthlyPayment * months;
-    } else {
-      bal = loanBalance;
-    }
-    return Math.max(0, bal);
-  }
+  // The schedule lives in lib/mortgage, where the income statement reads it too —
+  // the same loan should not amortise two different ways on two pages.
+  const projectedBalance = (yearsFromNow: number) =>
+    hasEquityData ? balanceAfterMonths(settings, yearsFromNow * 12) : 0;
 
   const equityData = hasEquityData ? enriched.map(row => {
     const yearsFromNow = row.year - currentYear;
