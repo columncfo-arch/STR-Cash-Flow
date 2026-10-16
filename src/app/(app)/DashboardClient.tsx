@@ -783,17 +783,12 @@ export default function DashboardClient() {
         <div className="border-t border-slate-100">
       {/* Chart */}
       <div className="px-5 py-4">
-        <p className={`text-xs font-medium text-slate-500 flex items-center gap-1.5 ${period === 'month' ? 'mb-1' : 'mb-4'}`}>
+        <p className="text-xs font-medium text-slate-500 mb-4 flex items-center gap-1.5">
           <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
           {period === 'month'
             ? `${MONTHS_LONG[currentMonthIdx]} against target`
             : 'Over or under target by month'}
         </p>
-        {period === 'month' && (
-          <p className="text-xs text-slate-400 mb-4">
-            Revenue adding up through the month · dashed where it is booked but not yet earned
-          </p>
-        )}
         {!hasData ? (
           <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
             No data yet. Import your earnings CSV to get started.
