@@ -850,8 +850,10 @@ export default function DashboardClient() {
         // reading as a loss may still have moved the owner forward.
         const principal = periodMonths.reduce((s, m) => s + (monthStmt(m)?.mortgagePrincipal ?? 0), 0);
 
+        // No red wash behind a negative month: the figure and the status are
+        // already red, and tinting the whole tile only makes them harder to read
         return (
-          <div className={`px-5 py-4 ${net < 0 ? 'bg-red-50/40' : ''}`}>
+          <div className="px-5 py-4">
             <div className="flex items-start gap-4 sm:gap-6">
               {/* Same sequence as Gross Revenue: the total, the gap to what was
                   projected, then the verdict. Named for what it is inside the
