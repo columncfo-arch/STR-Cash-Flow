@@ -21,6 +21,9 @@ type VarianceDatum = {
   /** actual \u2212 target, or null for a month not reached yet. */
   variance: number | null;
   actual: number;
+  /** `actual` again, but blank for months with no bar, so the line stops where
+      the bars do instead of diving through months nobody has lived yet. */
+  actualLine: number | null;
   target: number | null;
   isCurrent: boolean;
 };
@@ -507,6 +510,7 @@ export default function DashboardClient() {
       name: MONTHS[i],
       variance: comparable ? actual - target : null,
       actual,
+      actualLine: comparable ? actual : null,
       target: target ?? null,
       isCurrent,
     };
@@ -961,7 +965,7 @@ export default function DashboardClient() {
         <p className="text-xs text-slate-400 mb-4">
           {period === 'month'
             ? 'Each stay is one block across the nights it covers · dashed line is the daily pace needed to hit target'
-            : 'How far each month landed above or below its target · click a month to drill into its P&L'}
+            : 'Bars: how far each month landed above or below target · line: revenue earned · click a month to drill into its P&L'}
         </p>
         {!hasData ? (
           <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
@@ -1000,6 +1004,14 @@ export default function DashboardClient() {
                   );
                 }} />
                 <YAxis tick={{ fontSize: 12 }} tickFormatter={signedMoneyTick} width={60} />
+                {/* Revenue is an order of magnitude bigger than the gap to target,
+                    so it needs its own scale. Faint, and anchored at zero so the
+                    shape of the year is honest. */}
+                <YAxis
+                  yAxisId="actual" orientation="right" domain={[0, 'auto']}
+                  tick={{ fontSize: 10, fill: '#cbd5e1' }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`}
+                  width={42} axisLine={false} tickLine={false}
+                />
                 <Tooltip
                   cursor={{ fill: '#0f172a0a' }}
                   content={(props) => (
@@ -1012,6 +1024,11 @@ export default function DashboardClient() {
                 />
                 {/* Target is the zero line now, so it needs no legend entry */}
                 <ReferenceLine y={0} stroke="#475569" strokeWidth={1.5} />
+                {/* Declared before the bars so they paint over it */}
+                <Line
+                  yAxisId="actual" dataKey="actualLine" type="monotone"
+                  stroke="#cbd5e1" strokeWidth={2} dot={false} connectNulls={false}
+                />
                 <Bar dataKey="variance">
                   {varianceChartData.map((d, i) => (
                     <Cell
