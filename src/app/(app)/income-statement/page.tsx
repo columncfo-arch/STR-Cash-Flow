@@ -258,12 +258,16 @@ export default function IncomeStatementPage() {
 
   function KPICards({ pnl }: { pnl: ReturnType<typeof sumMonths> }) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {[
           { l: 'Gross Revenue', v: fmt(pnl.grossRevenue) },
           { l: 'Net Revenue', v: fmt(pnl.netRevenue) },
           { l: 'Operating Income', v: fmt(pnl.operatingIncome), accent: true },
-          { l: 'Net Income', v: fmt(pnl.netIncome), accent: true },
+          // Both, and labelled apart: they differ by the principal repaid, and
+          // showing one of them under the other's name is what made the page
+          // disagree with the dashboard
+          { l: 'Net Income', v: fmt(pnl.netProfit), accent: true },
+          { l: 'Cash Flow', v: fmt(pnl.netIncome), accent: true },
         ].map(c => (
           <div key={c.l} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <p className="text-xs text-slate-500">{c.l}</p>
@@ -341,11 +345,13 @@ export default function IncomeStatementPage() {
         </button>
       </div>
 
-      {/* Net Income overview chart */}
+      {/* Monthly cash flow overview chart */}
       {statement && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
-          <h2 className="font-semibold text-slate-800 mb-1">Monthly Net Income — {fetchYear}</h2>
-          <p className="text-xs text-slate-400 mb-4">Net income after all expenses and debt service</p>
+          <h2 className="font-semibold text-slate-800 mb-1">Monthly Cash Flow — {fetchYear}</h2>
+          <p className="text-xs text-slate-400 mb-4">
+            After every cost including the whole mortgage payment — the figure the dashboard reports
+          </p>
           <ResponsiveContainer width="100%" height={200}>
             <ComposedChart data={statement.months.map(m => ({
               name: MONTHS_SHORT[m.month - 1],
@@ -356,7 +362,7 @@ export default function IncomeStatementPage() {
               <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
               <Tooltip formatter={(v) => fmt(Number(v))} />
               <ReferenceLine y={0} stroke="#cbd5e1" />
-              <Bar dataKey="netIncome" name="Net Income" radius={[3, 3, 0, 0]}>
+              <Bar dataKey="netIncome" name="Cash Flow" radius={[3, 3, 0, 0]}>
                 {statement.months.map((m, i) => (
                   <Cell key={i} fill={m.netIncome >= 0 ? '#10b981' : '#ef4444'} />
                 ))}

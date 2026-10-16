@@ -57,7 +57,10 @@ function PlatformTable({
   );
 }
 
-type PnLData = Pick<MonthlyStatement, 'grossRevenue' | 'platformFees' | 'fastPayFees' | 'taxRemitted' | 'refunds' | 'netRevenue' | 'ownerTaxes' | 'totalOperatingExpenses' | 'operatingIncome' | 'piti' | 'netIncome'>;
+type PnLData = Pick<MonthlyStatement,
+  'grossRevenue' | 'platformFees' | 'fastPayFees' | 'taxRemitted' | 'refunds' | 'netRevenue'
+  | 'ownerTaxes' | 'totalOperatingExpenses' | 'operatingIncome' | 'piti'
+  | 'mortgageInterest' | 'mortgagePrincipal' | 'mortgageTaxesInsurance' | 'netProfit' | 'netIncome'>;
 
 // Green = on/above target · Amber = missing by ≤25 · Red = missing by >25
 // missMagnitude: absolute pct or pts below target (pass null → defaults to red)
@@ -81,8 +84,16 @@ function PnLTable({ m, fmt }: { m: PnLData; fmt: (n: number) => string }) {
     ...(m.ownerTaxes > 0 ? [{ label: 'State & Local Taxes (Owner Remits)', value: m.ownerTaxes, indent: true, negative: true }] : []),
     ...(otherOpEx > 0 ? [{ label: 'Other Operating Expenses', value: otherOpEx, indent: true, negative: true }] : []),
     { label: 'Operating Income', value: m.operatingIncome, bold: true, separator: true, accent: true },
-    ...(m.piti > 0 ? [{ label: 'PITI', value: m.piti, negative: true, indent: true }] : []),
-    { label: 'Net Income', value: m.netIncome, bold: true, separator: true, accent: true },
+    // Interest and escrow are costs; the principal below is equity, so it sits
+    // under net income rather than inside it — as on the Income Statement
+    ...(m.mortgageInterest > 0 ? [{ label: 'Mortgage Interest', value: m.mortgageInterest, negative: true, indent: true }] : []),
+    ...(m.mortgageTaxesInsurance > 0 ? [{ label: 'Taxes, Insurance & Escrow', value: m.mortgageTaxesInsurance, negative: true, indent: true }] : []),
+    ...(m.piti > 0 && m.mortgageInterest === 0 && m.mortgageTaxesInsurance === 0
+      ? [{ label: 'PITI', value: m.piti, negative: true, indent: true }] : []),
+    { label: 'Net Income', value: m.netProfit, bold: true, separator: true, accent: true },
+    ...(m.mortgagePrincipal > 0 ? [{ label: 'Principal Repaid (equity built)', value: m.mortgagePrincipal, negative: true, indent: true }] : []),
+    ...(m.mortgagePrincipal > 0
+      ? [{ label: 'Cash Flow', value: m.netIncome, bold: true, separator: true, accent: true }] : []),
   ];
 
   return (
@@ -816,7 +827,7 @@ export default function DashboardClient() {
 
       <section className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-100">
-          <h2 className="text-xs uppercase tracking-wide text-slate-900 font-semibold">Net Income</h2>
+          <h2 className="text-xs uppercase tracking-wide text-slate-900 font-semibold">Cash Flow</h2>
         </div>
 
       {/* One tile: what the period earned after costs, and against projection */}
@@ -886,8 +897,8 @@ export default function DashboardClient() {
             </div>
             {principal > 0 && (
               <p className="text-[11px] text-slate-400 mt-3">
-                {fmt(principal)} of that mortgage payment repaid principal, so it built equity rather
-                than being spent — before it, the period made {fmt(net + principal)}.
+                Net income was {fmt(net + principal)}. Cash flow is {fmt(principal)} lower because that
+                much of the mortgage payment repaid principal — equity built rather than money spent.
               </p>
             )}
             {projected > 0 && (
