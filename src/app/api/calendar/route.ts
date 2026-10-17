@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { loadSettings } from '@/lib/storage';
+import { loadSettings, resolveScope } from '@/lib/storage';
 
 // Simple in-memory cache per userId
 const _cache = new Map<string, { blocked: BlockedRange[]; expiry: number }>();
@@ -47,7 +47,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ blocked: cached.blocked });
     }
 
-    const settings = await loadSettings(userId);
+    const { scope } = await resolveScope(userId);
+    const settings = await loadSettings(scope);
     const urls = [settings.airbnbIcalUrl, settings.vrboIcalUrl].filter(Boolean) as string[];
 
     const results = await Promise.allSettled(urls.map(fetchICal));

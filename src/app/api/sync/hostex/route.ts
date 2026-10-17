@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
+import { requireScope, unauthorized, AuthError } from '@/lib/auth';
 import { loadSettings, loadBookings, replaceAllBookings } from '@/lib/storage';
 import { Booking, Platform } from '@/types';
 
@@ -161,8 +161,8 @@ async function fetchAll(token: string): Promise<HostexReservation[]> {
 // the mapping below.
 export async function GET() {
   try {
-    const userId = await requireAuth();
-    const settings = await loadSettings(userId);
+    const { scope } = await requireScope();
+    const settings = await loadSettings(scope);
     const token = settings.hostexAccessToken?.trim();
     if (!token) return NextResponse.json({ error: 'No Hostex access token saved.' }, { status: 400 });
 
@@ -183,8 +183,8 @@ export async function GET() {
 
 export async function POST() {
   try {
-    const userId = await requireAuth();
-    const settings = await loadSettings(userId);
+    const { scope } = await requireScope();
+    const settings = await loadSettings(scope);
 
     const token = settings.hostexAccessToken?.trim();
     if (!token) {
@@ -202,7 +202,7 @@ export async function POST() {
       return s !== 'cancelled' && s !== 'canceled' && s !== 'denied' && s !== 'inquiry';
     });
 
-    const existing = await loadBookings(userId);
+    const existing = await loadBookings(scope);
     const now = new Date().toISOString();
     let created = 0;
     let updated = 0;
@@ -323,7 +323,7 @@ export async function POST() {
     }
     const dedupedBookings = existing.filter((_, i) => !toRemove.has(i));
 
-    await replaceAllBookings(userId, dedupedBookings);
+    await replaceAllBookings(scope, dedupedBookings);
     return NextResponse.json({ created, updated, total: active.length, deduped, base: HOSTEX_BASE });
   } catch (err) {
     if (err instanceof AuthError) return unauthorized();

@@ -1,16 +1,37 @@
-import { Booking, DirectLead, Expense, Settings } from '@/types';
+import { Account, Booking, DirectLead, Expense, Property, Settings } from '@/types';
 import path from 'path';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 
-// ─── Per-user key factories ────────────────────────────────────────────────────
+// ─── Keys ──────────────────────────────────────────────────────────────────────
 
+/**
+ * Whose books, and which unit's. Bookings, expenses and settings all belong to
+ * one property; the account owns the list of properties and the guest leads,
+ * which arrive from a welcome link that knows only the user.
+ */
+export interface Scope {
+  userId: string;
+  propertyId: string;
+}
+
+/** The original single-property keys. Still read, to migrate from. */
 const K = (userId: string) => ({
+  account:  `str:account:${userId}`,
   settings: `str:settings:${userId}`,
   bookings: `str:bookings:${userId}`,
   expenses: `str:expenses:${userId}`,
   leads:    `str:leads:${userId}`,
 });
+
+const KP = ({ userId, propertyId }: Scope) => ({
+  settings: `str:settings:${userId}:${propertyId}`,
+  bookings: `str:bookings:${userId}:${propertyId}`,
+  expenses: `str:expenses:${userId}:${propertyId}`,
+});
+
+/** The property every pre-multi-property record is moved under. */
+export const DEFAULT_PROPERTY_ID = 'default';
 
 const DEFAULT_SETTINGS: Settings = {
   currency: 'USD',
@@ -116,6 +137,7 @@ function userDir(userId: string) {
 function filePaths(userId: string) {
   const dir = userDir(userId);
   return {
+    account:  path.join(dir, 'account.json'),
     settings: path.join(dir, 'settings.json'),
     bookings: path.join(dir, 'bookings.json'),
     expenses: path.join(dir, 'expenses.json'),
@@ -123,8 +145,21 @@ function filePaths(userId: string) {
   };
 }
 
-async function ensureUserDir(userId: string) {
-  const dir = userDir(userId);
+function propertyDir({ userId, propertyId }: Scope) {
+  return path.join(userDir(userId), 'properties', propertyId);
+}
+
+function propertyPaths(scope: Scope) {
+  const dir = propertyDir(scope);
+  return {
+    settings: path.join(dir, 'settings.json'),
+    bookings: path.join(dir, 'bookings.json'),
+    expenses: path.join(dir, 'expenses.json'),
+  };
+}
+
+async function ensureDirFor(file: string) {
+  const dir = path.dirname(file);
   if (!existsSync(dir)) await mkdir(dir, { recursive: true });
 }
 
@@ -136,16 +171,16 @@ async function fileLoad<T>(file: string, fallback: T): Promise<T> {
   }
 }
 
-async function fileSave(file: string, userId: string, value: unknown): Promise<void> {
-  await ensureUserDir(userId);
+async function fileSave(file: string, value: unknown): Promise<void> {
+  await ensureDirFor(file);
   await writeFile(file, JSON.stringify(value, null, 2));
 }
 
-async function fileMutate<T extends { id: string }>(file: string, userId: string, fn: (items: T[]) => T[]): Promise<T[]> {
+async function fileMutate<T extends { id: string }>(file: string, fn: (items: T[]) => T[]): Promise<T[]> {
   return withLock(file, async () => {
     const items = await fileLoad<T[]>(file, []);
     const next = fn(items);
-    await fileSave(file, userId, next);
+    await fileSave(file, next);
     return next;
   });
 }
@@ -166,44 +201,127 @@ export function storageBackend(): { backend: 'redis' | 'filesystem'; persists: b
   };
 }
 
-export async function loadSettings(userId: string): Promise<Settings> {
+// ─── Account: the properties under one login ──────────────────────────────────
+
+const DEFAULT_ACCOUNT = (propertyName: string, currency: string): Account => ({
+  properties: [{ id: DEFAULT_PROPERTY_ID, name: propertyName, createdAt: new Date().toISOString() }],
+  activePropertyId: DEFAULT_PROPERTY_ID,
+  currency,
+});
+
+async function readAccount(userId: string): Promise<Account | null> {
+  return useRedis
+    ? redisGet<Account | null>(K(userId).account, null)
+    : fileLoad<Account | null>(filePaths(userId).account, null);
+}
+
+export async function saveAccount(userId: string, account: Account): Promise<void> {
+  if (useRedis) await redisSet(K(userId).account, account);
+  else await fileSave(filePaths(userId).account, account);
+}
+
+/**
+ * The account, creating it on first sight and bringing the single-property
+ * records across with it.
+ *
+ * The migration copies rather than moves. The original keys are left exactly as
+ * they were, so if anything here is wrong the data is still sitting where it
+ * always was — a deploy can be rolled back without a restore. It is also
+ * idempotent: the destination is a fixed property id, and the account record it
+ * writes last is what stops it running twice.
+ */
+export async function loadAccount(userId: string): Promise<Account> {
+  const existing = await readAccount(userId);
+  if (existing) return existing;
+
+  return withLock(`account:${userId}`, async () => {
+    // Another request may have migrated while this one waited for the lock
+    const raced = await readAccount(userId);
+    if (raced) return raced;
+
+    const legacySettings = useRedis
+      ? await redisGet<Partial<Settings> | null>(K(userId).settings, null)
+      : await fileLoad<Partial<Settings> | null>(filePaths(userId).settings, null);
+
+    const account = DEFAULT_ACCOUNT(
+      legacySettings?.propertyName || DEFAULT_SETTINGS.propertyName,
+      legacySettings?.currency || DEFAULT_SETTINGS.currency,
+    );
+    account.hostexAccessToken = legacySettings?.hostexAccessToken;
+
+    const scope: Scope = { userId, propertyId: DEFAULT_PROPERTY_ID };
+    const legacyBookings = useRedis
+      ? await redisHashAll<Booking>(K(userId).bookings)
+      : await fileLoad<Booking[]>(filePaths(userId).bookings, []);
+    const legacyExpenses = useRedis
+      ? await redisHashAll<Expense>(K(userId).expenses)
+      : await fileLoad<Expense[]>(filePaths(userId).expenses, []);
+
+    if (legacySettings) await saveSettings(scope, { ...DEFAULT_SETTINGS, ...legacySettings });
+    if (legacyBookings.length) await replaceAllBookings(scope, legacyBookings);
+    if (legacyExpenses.length) await replaceAllExpenses(scope, legacyExpenses);
+
+    account.migratedAt = new Date().toISOString();
+    await saveAccount(userId, account);
+    return account;
+  });
+}
+
+/**
+ * The property a request is about: the one asked for when it exists, otherwise
+ * whichever the account last had in view.
+ */
+export async function resolveScope(userId: string, requested?: string | null): Promise<{ account: Account; scope: Scope }> {
+  const account = await loadAccount(userId);
+  const known = account.properties.some(p => p.id === requested);
+  const propertyId = known && requested ? requested : account.activePropertyId;
+  return { account, scope: { userId, propertyId } };
+}
+
+/** Every property's scope, for the portfolio view. Archived units are left out. */
+export function allScopes(userId: string, account: Account): { property: Property; scope: Scope }[] {
+  return account.properties
+    .filter(p => !p.archived)
+    .map(property => ({ property, scope: { userId, propertyId: property.id } }));
+}
+
+export async function loadSettings(scope: Scope): Promise<Settings> {
   const raw = useRedis
-    ? await redisGet<Partial<Settings> | null>(K(userId).settings, null)
-    : await fileLoad<Partial<Settings>>(filePaths(userId).settings, {});
+    ? await redisGet<Partial<Settings> | null>(KP(scope).settings, null)
+    : await fileLoad<Partial<Settings>>(propertyPaths(scope).settings, {});
   return { ...DEFAULT_SETTINGS, ...(raw ?? {}) };
 }
 
-export async function saveSettings(userId: string, settings: Settings): Promise<void> {
-  useRedis
-    ? await redisSet(K(userId).settings, settings)
-    : await fileSave(filePaths(userId).settings, userId, settings);
+export async function saveSettings(scope: Scope, settings: Settings): Promise<void> {
+  if (useRedis) await redisSet(KP(scope).settings, settings);
+  else await fileSave(propertyPaths(scope).settings, settings);
 }
 
-export async function loadBookings(userId: string): Promise<Booking[]> {
+export async function loadBookings(scope: Scope): Promise<Booking[]> {
   return useRedis
-    ? redisHashAll<Booking>(K(userId).bookings)
-    : fileLoad<Booking[]>(filePaths(userId).bookings, []);
+    ? redisHashAll<Booking>(KP(scope).bookings)
+    : fileLoad<Booking[]>(propertyPaths(scope).bookings, []);
 }
 
-export async function addBooking(userId: string, booking: Booking): Promise<void> {
+export async function addBooking(scope: Scope, booking: Booking): Promise<void> {
   if (useRedis) {
-    await redisHashSet(K(userId).bookings, booking.id, booking);
+    await redisHashSet(KP(scope).bookings, booking.id, booking);
   } else {
-    await fileMutate<Booking>(filePaths(userId).bookings, userId, items => [...items, booking]);
+    await fileMutate<Booking>(propertyPaths(scope).bookings, items => [...items, booking]);
   }
 }
 
-export async function updateBooking(userId: string, id: string, patch: Partial<Booking>): Promise<Booking | null> {
+export async function updateBooking(scope: Scope, id: string, patch: Partial<Booking>): Promise<Booking | null> {
   if (useRedis) {
-    const bookings = await redisHashAll<Booking>(K(userId).bookings);
+    const bookings = await redisHashAll<Booking>(KP(scope).bookings);
     const existing = bookings.find(b => b.id === id);
     if (!existing) return null;
     const updated = { ...existing, ...patch, id };
-    await redisHashSet(K(userId).bookings, id, updated);
+    await redisHashSet(KP(scope).bookings, id, updated);
     return updated;
   }
   let updated: Booking | null = null;
-  await fileMutate<Booking>(filePaths(userId).bookings, userId, items => items.map(b => {
+  await fileMutate<Booking>(propertyPaths(scope).bookings, items => items.map(b => {
     if (b.id !== id) return b;
     updated = { ...b, ...patch, id };
     return updated;
@@ -211,15 +329,15 @@ export async function updateBooking(userId: string, id: string, patch: Partial<B
   return updated;
 }
 
-export async function deleteBooking(userId: string, id: string): Promise<boolean> {
+export async function deleteBooking(scope: Scope, id: string): Promise<boolean> {
   if (useRedis) {
-    const bookings = await redisHashAll<Booking>(K(userId).bookings);
+    const bookings = await redisHashAll<Booking>(KP(scope).bookings);
     if (!bookings.some(b => b.id === id)) return false;
-    await redisHashDel(K(userId).bookings, id);
+    await redisHashDel(KP(scope).bookings, id);
     return true;
   }
   let found = false;
-  await fileMutate<Booking>(filePaths(userId).bookings, userId, items => {
+  await fileMutate<Booking>(propertyPaths(scope).bookings, items => {
     const next = items.filter(b => b.id !== id);
     found = next.length !== items.length;
     return next;
@@ -227,15 +345,15 @@ export async function deleteBooking(userId: string, id: string): Promise<boolean
   return found;
 }
 
-export async function deleteBookings(userId: string, predicate: (b: Booking) => boolean): Promise<number> {
+export async function deleteBookings(scope: Scope, predicate: (b: Booking) => boolean): Promise<number> {
   if (useRedis) {
-    const bookings = await redisHashAll<Booking>(K(userId).bookings);
+    const bookings = await redisHashAll<Booking>(KP(scope).bookings);
     const toDelete = bookings.filter(predicate).map(b => b.id);
-    await redisHashClear(K(userId).bookings, toDelete);
+    await redisHashClear(KP(scope).bookings, toDelete);
     return toDelete.length;
   }
   let deleted = 0;
-  await fileMutate<Booking>(filePaths(userId).bookings, userId, items => {
+  await fileMutate<Booking>(propertyPaths(scope).bookings, items => {
     const next = items.filter(b => !predicate(b));
     deleted = items.length - next.length;
     return next;
@@ -243,32 +361,32 @@ export async function deleteBookings(userId: string, predicate: (b: Booking) => 
   return deleted;
 }
 
-export async function replaceAllBookings(userId: string, bookings: Booking[]): Promise<void> {
+export async function replaceAllBookings(scope: Scope, bookings: Booking[]): Promise<void> {
   if (useRedis) {
     const client = await getRedis();
     const pipeline = client.multi();
-    pipeline.del(K(userId).bookings);
-    for (const b of bookings) pipeline.hSet(K(userId).bookings, b.id, JSON.stringify(b));
+    pipeline.del(KP(scope).bookings);
+    for (const b of bookings) pipeline.hSet(KP(scope).bookings, b.id, JSON.stringify(b));
     await pipeline.exec();
   } else {
-    await withLock(filePaths(userId).bookings, async () => fileSave(filePaths(userId).bookings, userId, bookings));
+    await withLock(propertyPaths(scope).bookings, async () => fileSave(propertyPaths(scope).bookings, bookings));
   }
 }
 
-export async function replaceAllExpenses(userId: string, expenses: Expense[]): Promise<void> {
+export async function replaceAllExpenses(scope: Scope, expenses: Expense[]): Promise<void> {
   if (useRedis) {
     const client = await getRedis();
     const pipeline = client.multi();
-    pipeline.del(K(userId).expenses);
-    for (const e of expenses) pipeline.hSet(K(userId).expenses, e.id, JSON.stringify(e));
+    pipeline.del(KP(scope).expenses);
+    for (const e of expenses) pipeline.hSet(KP(scope).expenses, e.id, JSON.stringify(e));
     await pipeline.exec();
   } else {
-    await withLock(filePaths(userId).expenses, async () => fileSave(filePaths(userId).expenses, userId, expenses));
+    await withLock(propertyPaths(scope).expenses, async () => fileSave(propertyPaths(scope).expenses, expenses));
   }
 }
 
-export async function upsertBooking(userId: string, booking: Booking): Promise<void> {
-  const bookings = await loadBookings(userId);
+export async function upsertBooking(scope: Scope, booking: Booking): Promise<void> {
+  const bookings = await loadBookings(scope);
   const existing = bookings.find(b =>
     (b.uid === booking.uid && b.sourceId === booking.sourceId) ||
     (booking.confirmationCode && b.confirmationCode === booking.confirmationCode && b.platform === booking.platform)
@@ -283,40 +401,40 @@ export async function upsertBooking(userId: string, booking: Booking): Promise<v
       notes: existing.notes ?? booking.notes,
     };
     if (useRedis) {
-      await redisHashSet(K(userId).bookings, existing.id, merged);
+      await redisHashSet(KP(scope).bookings, existing.id, merged);
     } else {
-      await fileMutate<Booking>(filePaths(userId).bookings, userId, items => items.map(b => b.id === existing.id ? merged : b));
+      await fileMutate<Booking>(propertyPaths(scope).bookings, items => items.map(b => b.id === existing.id ? merged : b));
     }
   } else {
-    await addBooking(userId, booking);
+    await addBooking(scope, booking);
   }
 }
 
-export async function loadExpenses(userId: string): Promise<Expense[]> {
+export async function loadExpenses(scope: Scope): Promise<Expense[]> {
   return useRedis
-    ? redisHashAll<Expense>(K(userId).expenses)
-    : fileLoad<Expense[]>(filePaths(userId).expenses, []);
+    ? redisHashAll<Expense>(KP(scope).expenses)
+    : fileLoad<Expense[]>(propertyPaths(scope).expenses, []);
 }
 
-export async function addExpense(userId: string, expense: Expense): Promise<void> {
+export async function addExpense(scope: Scope, expense: Expense): Promise<void> {
   if (useRedis) {
-    await redisHashSet(K(userId).expenses, expense.id, expense);
+    await redisHashSet(KP(scope).expenses, expense.id, expense);
   } else {
-    await fileMutate<Expense>(filePaths(userId).expenses, userId, items => [...items, expense]);
+    await fileMutate<Expense>(propertyPaths(scope).expenses, items => [...items, expense]);
   }
 }
 
-export async function updateExpense(userId: string, id: string, patch: Partial<Expense>): Promise<Expense | null> {
+export async function updateExpense(scope: Scope, id: string, patch: Partial<Expense>): Promise<Expense | null> {
   if (useRedis) {
-    const expenses = await redisHashAll<Expense>(K(userId).expenses);
+    const expenses = await redisHashAll<Expense>(KP(scope).expenses);
     const existing = expenses.find(e => e.id === id);
     if (!existing) return null;
     const updated = { ...existing, ...patch, id, updatedAt: new Date().toISOString() };
-    await redisHashSet(K(userId).expenses, id, updated);
+    await redisHashSet(KP(scope).expenses, id, updated);
     return updated;
   }
   let updated: Expense | null = null;
-  await fileMutate<Expense>(filePaths(userId).expenses, userId, items => items.map(e => {
+  await fileMutate<Expense>(propertyPaths(scope).expenses, items => items.map(e => {
     if (e.id !== id) return e;
     updated = { ...e, ...patch, id, updatedAt: new Date().toISOString() };
     return updated;
@@ -324,15 +442,15 @@ export async function updateExpense(userId: string, id: string, patch: Partial<E
   return updated;
 }
 
-export async function deleteExpense(userId: string, id: string): Promise<boolean> {
+export async function deleteExpense(scope: Scope, id: string): Promise<boolean> {
   if (useRedis) {
-    const expenses = await redisHashAll<Expense>(K(userId).expenses);
+    const expenses = await redisHashAll<Expense>(KP(scope).expenses);
     if (!expenses.some(e => e.id === id)) return false;
-    await redisHashDel(K(userId).expenses, id);
+    await redisHashDel(KP(scope).expenses, id);
     return true;
   }
   let found = false;
-  await fileMutate<Expense>(filePaths(userId).expenses, userId, items => {
+  await fileMutate<Expense>(propertyPaths(scope).expenses, items => {
     const next = items.filter(e => e.id !== id);
     found = next.length !== items.length;
     return next;
@@ -350,7 +468,7 @@ export async function addLead(userId: string, lead: DirectLead): Promise<void> {
   if (useRedis) {
     await redisHashSet(K(userId).leads, lead.id, lead);
   } else {
-    await fileMutate<DirectLead>(filePaths(userId).leads, userId, items => [...items, lead]);
+    await fileMutate<DirectLead>(filePaths(userId).leads, items => [...items, lead]);
   }
 }
 
@@ -362,7 +480,7 @@ export async function deleteLead(userId: string, id: string): Promise<boolean> {
     return true;
   }
   let found = false;
-  await fileMutate<DirectLead>(filePaths(userId).leads, userId, items => {
+  await fileMutate<DirectLead>(filePaths(userId).leads, items => {
     const next = items.filter(l => l.id !== id);
     found = next.length !== items.length;
     return next;

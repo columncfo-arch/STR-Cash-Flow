@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loadBookings, loadExpenses, replaceAllBookings, replaceAllExpenses } from '@/lib/storage';
-import { requireAuth, unauthorized } from '@/lib/auth';
+import { requireScope, unauthorized } from '@/lib/auth';
 import { Booking, Expense } from '@/types';
 
 // 2025 monthly actuals from property spreadsheet (Jan–Oct)
@@ -105,12 +105,12 @@ function buildSeedData(now: string): { bookings: Booking[]; expenses: Expense[] 
 
 export async function POST(req: Request) {
   try {
-    const userId = await requireAuth();
+    const { scope } = await requireScope(req);
     const force = new URL(req.url).searchParams.get('force') === 'true';
 
     const [existingBookings, existingExpenses] = await Promise.all([
-      loadBookings(userId),
-      loadExpenses(userId),
+      loadBookings(scope),
+      loadExpenses(scope),
     ]);
 
     const has2025 = existingBookings.some(b => b.checkIn.startsWith('2025'))
@@ -135,8 +135,8 @@ export async function POST(req: Request) {
 
     // replaceAll uses a single pipeline — one Redis round-trip each
     await Promise.all([
-      replaceAllBookings(userId, [...keptBookings, ...seedBookings]),
-      replaceAllExpenses(userId, [...keptExpenses, ...seedExpenses]),
+      replaceAllBookings(scope, [...keptBookings, ...seedBookings]),
+      replaceAllExpenses(scope, [...keptExpenses, ...seedExpenses]),
     ]);
 
     return NextResponse.json({

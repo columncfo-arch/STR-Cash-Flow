@@ -1,16 +1,16 @@
 import { NextResponse } from 'next/server';
 import { loadExpenses, addExpense } from '@/lib/storage';
-import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
+import { requireScope, unauthorized, AuthError } from '@/lib/auth';
 import { Expense } from '@/types';
 
 export async function GET(req: Request) {
   try {
-    const userId = await requireAuth();
+    const { scope } = await requireScope(req);
     const { searchParams } = new URL(req.url);
     const year = searchParams.get('year');
     const month = searchParams.get('month');
 
-    let expenses = await loadExpenses(userId);
+    let expenses = await loadExpenses(scope);
 
     if (year && year !== 'all') expenses = expenses.filter(e => e.date.startsWith(year));
     if (year && month) {
@@ -29,7 +29,7 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const userId = await requireAuth();
+    const { scope } = await requireScope(req);
     const body: Expense = await req.json();
     const now = new Date().toISOString();
     const expense: Expense = {
@@ -39,7 +39,7 @@ export async function POST(req: Request) {
       updatedAt: now,
     };
 
-    await addExpense(userId, expense);
+    await addExpense(scope, expense);
     return NextResponse.json(expense, { status: 201 });
   } catch (err) {
     if (err instanceof AuthError) return unauthorized();

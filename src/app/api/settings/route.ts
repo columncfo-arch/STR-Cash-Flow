@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server';
 import { loadSettings, saveSettings } from '@/lib/storage';
-import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
+import { requireScope, unauthorized, AuthError } from '@/lib/auth';
 import { Settings } from '@/types';
 
 export async function GET() {
   try {
-    const userId = await requireAuth();
-    const settings = await loadSettings(userId);
+    const { scope } = await requireScope();
+    const settings = await loadSettings(scope);
     return NextResponse.json(settings);
   } catch (err) {
     if (err instanceof AuthError) return unauthorized();
@@ -17,9 +17,9 @@ export async function GET() {
 
 export async function PUT(req: Request) {
   try {
-    const userId = await requireAuth();
+    const { scope } = await requireScope(req);
     const body: Settings = await req.json();
-    await saveSettings(userId, body);
+    await saveSettings(scope, body);
     return NextResponse.json({ ok: true });
   } catch (err) {
     if (err instanceof AuthError) return unauthorized();

@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loadBookings, loadExpenses, loadSettings } from '@/lib/storage';
-import { requireAuth, unauthorized } from '@/lib/auth';
+import { requireScope, unauthorized } from '@/lib/auth';
 import { AnnualStatement, Booking, Expense, ExpenseCategory, MonthlyStatement, Platform, PnLSummary } from '@/types';
 import type { PitiSplit } from '@/lib/mortgage';
 import { occurrencesIn } from '@/lib/recurrence';
@@ -138,14 +138,14 @@ function buildMonthly(
 
 export async function GET(req: Request) {
   try {
-    const userId = await requireAuth();
+    const { scope } = await requireScope(req);
     const { searchParams } = new URL(req.url);
     const year = parseInt(searchParams.get('year') ?? String(new Date().getFullYear()));
 
     const [allBookings, allExpenses, settings] = await Promise.all([
-      loadBookings(userId),
-      loadExpenses(userId),
-      loadSettings(userId),
+      loadBookings(scope),
+      loadExpenses(scope),
+      loadSettings(scope),
     ]);
 
     const cleaningCostPerBooking = settings.cleaningFeePerBooking ?? 0;

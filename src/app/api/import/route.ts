@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loadBookings, replaceAllBookings } from '@/lib/storage';
-import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
+import { requireScope, unauthorized, AuthError } from '@/lib/auth';
 import { Booking, Platform } from '@/types';
 import * as XLSX from 'xlsx';
 
@@ -475,7 +475,7 @@ async function parseExcelToRows(file: File): Promise<[Record<string, string>[], 
 
 export async function POST(req: Request) {
   try {
-    const userId = await requireAuth();
+    const { scope } = await requireScope(req);
     const contentType = req.headers.get('content-type') ?? '';
 
     // ── Preview: accepts multipart/form-data with the raw file ──
@@ -534,7 +534,7 @@ export async function POST(req: Request) {
       const { platform, rows = [] } = body;
       if (!rows.length) return NextResponse.json({ error: 'No rows to import' }, { status: 400 });
 
-      const existing = await loadBookings(userId);
+      const existing = await loadBookings(scope);
       const now = new Date().toISOString();
       let created = 0;
       let updated = 0;
@@ -619,7 +619,7 @@ export async function POST(req: Request) {
         }
       }
 
-      await replaceAllBookings(userId, existing);
+      await replaceAllBookings(scope, existing);
       return NextResponse.json({ created, updated });
     }
 

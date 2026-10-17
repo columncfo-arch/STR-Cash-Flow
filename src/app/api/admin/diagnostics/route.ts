@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
+import { requireScope, unauthorized, AuthError } from '@/lib/auth';
 import { loadBookings, loadLeads, loadExpenses, storageBackend } from '@/lib/storage';
 
 export const dynamic = 'force-dynamic';
@@ -13,11 +13,11 @@ export const dynamic = 'force-dynamic';
  */
 export async function GET() {
   try {
-    const userId = await requireAuth();
+    const { userId, scope } = await requireScope();
     const [bookings, leads, expenses] = await Promise.all([
-      loadBookings(userId),
+      loadBookings(scope),
       loadLeads(userId),
-      loadExpenses(userId),
+      loadExpenses(scope),
     ]);
 
     const leadsBySource = leads.reduce<Record<string, number>>((acc, l) => {

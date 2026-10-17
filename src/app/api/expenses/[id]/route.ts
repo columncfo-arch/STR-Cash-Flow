@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server';
 import { updateExpense, deleteExpense } from '@/lib/storage';
-import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
+import { requireScope, unauthorized, AuthError } from '@/lib/auth';
 import { Expense } from '@/types';
 
 export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const userId = await requireAuth();
+    const { scope } = await requireScope(req);
     const { id } = await params;
     const patch: Partial<Expense> = await req.json();
-    const updated = await updateExpense(userId, id, patch);
+    const updated = await updateExpense(scope, id, patch);
     if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json(updated);
   } catch (err) {
@@ -20,9 +20,9 @@ export async function PUT(req: Request, { params }: { params: Promise<{ id: stri
 
 export async function DELETE(_req: Request, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const userId = await requireAuth();
+    const { scope } = await requireScope();
     const { id } = await params;
-    const found = await deleteExpense(userId, id);
+    const found = await deleteExpense(scope, id);
     if (!found) return NextResponse.json({ error: 'Not found' }, { status: 404 });
     return NextResponse.json({ ok: true });
   } catch (err) {

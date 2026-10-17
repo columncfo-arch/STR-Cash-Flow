@@ -75,6 +75,35 @@ export interface Booking {
   updatedAt: string;
 }
 
+/**
+ * One rental unit. Everything financial — bookings, expenses, targets, the loan
+ * — belongs to a property rather than to the account, so an owner with three
+ * units keeps three separate sets of books under one login.
+ */
+export interface Property {
+  id: string;
+  name: string;
+  createdAt: string;
+  /** Hidden from the portfolio without deleting its history. */
+  archived?: boolean;
+  /** The platform's own id for this unit, used to route synced reservations. */
+  externalIds?: string[];
+}
+
+/**
+ * What belongs to the login rather than to any one unit: the list of
+ * properties, which one is in view, and the credentials that reach every unit
+ * at once.
+ */
+export interface Account {
+  properties: Property[];
+  activePropertyId: string;
+  currency: string;
+  hostexAccessToken?: string;
+  /** Set once the legacy single-property records have been copied across. */
+  migratedAt?: string;
+}
+
 export type RecurrenceFrequency = 'monthly' | 'quarterly' | 'annual';
 
 export interface Expense {

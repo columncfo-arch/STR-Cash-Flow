@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { loadBookings, loadExpenses, loadSettings } from '@/lib/storage';
-import { requireAuth, unauthorized } from '@/lib/auth';
+import { requireScope, unauthorized } from '@/lib/auth';
 import { ForecastYear, Expense } from '@/types';
 import { occursInMonth, occurrencesIn } from '@/lib/recurrence';
 import { getYear } from 'date-fns';
@@ -56,11 +56,11 @@ function computeMonthActuals(
 
 export async function GET() {
   try {
-    const userId = await requireAuth();
+    const { scope } = await requireScope();
     const [allBookings, allExpenses, settings] = await Promise.all([
-      loadBookings(userId),
-      loadExpenses(userId),
-      loadSettings(userId),
+      loadBookings(scope),
+      loadExpenses(scope),
+      loadSettings(scope),
     ]);
 
     const now = new Date();

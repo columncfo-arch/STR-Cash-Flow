@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { addLead, loadBookings, loadSettings, updateBooking } from '@/lib/storage';
+import { addLead, loadBookings, loadSettings, resolveScope, updateBooking } from '@/lib/storage';
 import { DirectLead } from '@/types';
 
 // Public endpoint — no auth. Guests call this from the /welcome page.
@@ -21,7 +21,10 @@ export async function POST(req: Request) {
 
     if (!email) return NextResponse.json({ error: 'Email is required' }, { status: 400 });
 
-    const [settings, bookings] = await Promise.all([loadSettings(userId), loadBookings(userId)]);
+    // Leads belong to the account — the welcome link carries only a user id —
+    // while the stay being matched belongs to a property.
+    const { scope } = await resolveScope(userId);
+    const [settings, bookings] = await Promise.all([loadSettings(scope), loadBookings(scope)]);
 
     const guestName = [firstName, lastName].filter(Boolean).join(' ') || undefined;
     const today = new Date().toISOString().slice(0, 10);
@@ -33,7 +36,7 @@ export async function POST(req: Request) {
       const notes = tcpaConsent
         ? (activeSell.notes ? activeSell.notes + ' | TCPA consent: yes' : 'TCPA consent: yes')
         : activeSell.notes;
-      await updateBooking(userId, activeSell.id, {
+      await updateBooking(scope, activeSell.id, {
         email: email || undefined,
         phone: phone || activeSell.phone || undefined,
         guestName: guestName || activeSell.guestName || undefined,
@@ -73,7 +76,8 @@ export async function GET(req: Request) {
     const userId = resolveUserId(req);
     if (!userId) return NextResponse.json({ error: 'Missing host identifier' }, { status: 400 });
 
-    const settings = await loadSettings(userId);
+    const { scope } = await resolveScope(userId);
+    const settings = await loadSettings(scope);
     return NextResponse.json({
       propertyName: settings.propertyName,
       welcomeMessage: settings.welcomeMessage ?? null,

@@ -1,18 +1,18 @@
 import { NextResponse } from 'next/server';
 import { loadBookings, addBooking, deleteBookings } from '@/lib/storage';
-import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
+import { requireScope, unauthorized, AuthError } from '@/lib/auth';
 import { Booking } from '@/types';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET(req: Request) {
   try {
-    const userId = await requireAuth();
+    const { scope } = await requireScope(req);
     const { searchParams } = new URL(req.url);
     const year = searchParams.get('year');
     const month = searchParams.get('month');
 
-    let bookings = await loadBookings(userId);
+    let bookings = await loadBookings(scope);
 
     if (year && year !== 'all') bookings = bookings.filter(b => b.checkIn.startsWith(year));
     if (month && year) {
@@ -31,15 +31,15 @@ export async function GET(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    const userId = await requireAuth();
+    const { scope } = await requireScope(req);
     const { searchParams } = new URL(req.url);
     const platform = searchParams.get('platform');
     const all = searchParams.get('all');
 
     const deleted = (all === 'true')
-      ? await deleteBookings(userId, () => true)
+      ? await deleteBookings(scope, () => true)
       : platform
-        ? await deleteBookings(userId, b => b.platform === platform)
+        ? await deleteBookings(scope, b => b.platform === platform)
         : 0;
 
     return NextResponse.json({ deleted });
@@ -52,13 +52,13 @@ export async function DELETE(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    const userId = await requireAuth();
+    const { scope } = await requireScope(req);
     const body: Booking = await req.json();
     body.createdAt = new Date().toISOString();
     body.updatedAt = new Date().toISOString();
     body.isManual = true;
 
-    await addBooking(userId, body);
+    await addBooking(scope, body);
     return NextResponse.json(body, { status: 201 });
   } catch (err) {
     if (err instanceof AuthError) return unauthorized();
