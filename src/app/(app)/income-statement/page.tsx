@@ -43,6 +43,7 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
   let totalNights = 0;
   let totalOccupancy = 0;
   let grossRevenue = 0;
+  let leaseRevenue = 0;
   let platformFees = 0;
   let refunds = 0;
   let totalOperatingExpenses = 0;
@@ -60,6 +61,7 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
     totalNights += m.totalNights;
     totalOccupancy += m.occupancyRate;
     grossRevenue += m.grossRevenue;
+    leaseRevenue += m.leaseRevenue;
     platformFees += m.platformFees;
     fastPayFees += m.fastPayFees;
     taxRemitted += m.taxRemitted;
@@ -88,7 +90,7 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
   const netIncome = operatingIncome - piti;
 
   return {
-    grossRevenue, platformFees, fastPayFees, taxRemitted, refunds, netRevenue,
+    grossRevenue, leaseRevenue, platformFees, fastPayFees, taxRemitted, refunds, netRevenue,
     expensesByCategory, ownerTaxes, totalOperatingExpenses,
     operatingIncome, piti,
     mortgageInterest, mortgagePrincipal, mortgageTaxesInsurance,

@@ -3,8 +3,14 @@
 // Lifted out of the income-statement route so the portfolio view can build the
 // same statement for every unit without a second, drifting implementation.
 
-import { loadBookings, loadExpenses, loadSettings, type Scope } from '@/lib/storage';
-import { AnnualStatement, Booking, Expense, ExpenseCategory, MonthlyStatement, Platform, PnLSummary } from '@/types';
+import {
+  loadBookings, loadExpenses, loadLeaseCharges, loadLeases, loadSettings, type Scope,
+} from '@/lib/storage';
+import {
+  AnnualStatement, Booking, Expense, ExpenseCategory, Lease, LeaseCharge,
+  MonthlyStatement, Platform, PnLSummary,
+} from '@/types';
+import { leaseTotalsForMonth } from '@/lib/lease';
 import type { PitiSplit } from '@/lib/mortgage';
 import { occurrencesIn } from '@/lib/recurrence';
 import { splitPiti } from '@/lib/mortgage';
@@ -36,8 +42,13 @@ function buildPnL(
   months: number,
   cleaningCostPerBooking: number = 0,
   pitiSplit: PitiSplit = { interest: 0, principal: 0, taxesInsurance: monthlyPITI, derived: false },
+  leaseRevenue: number = 0,
 ): PnLSummary {
-  const grossRevenue = bookings.reduce((s, b) => s + b.income, 0);
+  // Rent joins gross revenue and carries no platform fee and no
+  // platform-remitted tax — nobody takes a cut of rent — so it flows through to
+  // net revenue untouched. A property with no leases adds zero and every figure
+  // below is exactly what it was.
+  const grossRevenue = bookings.reduce((s, b) => s + b.income, 0) + leaseRevenue;
   const platformFees = bookings.reduce((s, b) => s + (b.platformFee ?? 0), 0);
   const fastPayFees = bookings.reduce((s, b) => s + (b.fastPayFee ?? 0), 0);
   const taxRemitted = bookings.reduce((s, b) => s + (b.taxRemitted ?? 0) + (b.taxWithheld ?? 0), 0);
@@ -79,6 +90,7 @@ function buildPnL(
 
   return {
     grossRevenue,
+    leaseRevenue,
     platformFees,
     fastPayFees,
     taxRemitted,
@@ -105,6 +117,8 @@ function buildMonthly(
   monthlyPITI: number,
   cleaningCostPerBooking: number = 0,
   pitiSplit?: PitiSplit,
+  leases: Lease[] = [],
+  leaseCharges: LeaseCharge[] = [],
 ): MonthlyStatement {
   // Use string prefix to avoid timezone shifts from Date parsing
   const prefix = `${year}-${String(month).padStart(2, '0')}`;
@@ -126,14 +140,18 @@ function buildMonthly(
     byPlatform[b.platform].income += b.income;
   }
 
-  const pnl = buildPnL(monthBookings, monthExpenses, monthlyPITI, 1, cleaningCostPerBooking, pitiSplit);
+  const { revenue: leaseRevenue, leasedDays } = leaseTotalsForMonth(leases, leaseCharges, prefix);
+  const pnl = buildPnL(monthBookings, monthExpenses, monthlyPITI, 1, cleaningCostPerBooking, pitiSplit, leaseRevenue);
 
   return {
     year,
     month,
     bookings: monthBookings,
     totalNights,
-    occupancyRate: Math.min((totalNights / daysInMonth) * 100, 100),
+    leasedDays,
+    // Nights sold plus days under lease. A leased unit reads near 100%, and a
+    // turnover month reads the part of it that was covered.
+    occupancyRate: Math.min(((totalNights + leasedDays) / daysInMonth) * 100, 100),
     byPlatform,
     ...pnl,
   };
@@ -142,9 +160,11 @@ function buildMonthly(
 
 export async function buildAnnualStatement(scope: Scope, year: number): Promise<{ statement: AnnualStatement; years: number[] }> {
 
-  const [allBookings, allExpenses, settings] = await Promise.all([
+  const [allBookings, allExpenses, allLeases, allLeaseCharges, settings] = await Promise.all([
     loadBookings(scope),
     loadExpenses(scope),
+    loadLeases(scope),
+    loadLeaseCharges(scope),
     loadSettings(scope),
   ]);
 
@@ -152,7 +172,10 @@ export async function buildAnnualStatement(scope: Scope, year: number): Promise<
   const pitiSplit = splitPiti(settings);
   const months: MonthlyStatement[] = [];
   for (let m = 1; m <= 12; m++) {
-    months.push(buildMonthly(year, m, allBookings, allExpenses, settings.monthlyPITI, cleaningCostPerBooking, pitiSplit));
+    months.push(buildMonthly(
+      year, m, allBookings, allExpenses, settings.monthlyPITI, cleaningCostPerBooking, pitiSplit,
+      allLeases, allLeaseCharges,
+    ));
   }
 
   const yearBookings = allBookings.filter(b => b.checkIn.startsWith(String(year)));
@@ -161,9 +184,15 @@ export async function buildAnnualStatement(scope: Scope, year: number): Promise<
 
   const byPlatform = emptyPlatformBreakdown();
   let totalNights = 0;
+  let leasedDays = 0;
+  // Summed from the months rather than recomputed, so the year can never
+  // disagree with the twelve figures it is made of
+  let leaseRevenue = 0;
 
   for (const ms of months) {
     totalNights += ms.totalNights;
+    leasedDays += ms.leasedDays;
+    leaseRevenue += ms.leaseRevenue;
     for (const p of PLATFORMS) {
       byPlatform[p].income += ms.byPlatform[p].income;
       byPlatform[p].nights += ms.byPlatform[p].nights;
@@ -173,12 +202,16 @@ export async function buildAnnualStatement(scope: Scope, year: number): Promise<
 
   const now = new Date();
   const pitiMonths = year < now.getFullYear() ? 12 : Math.min(now.getMonth() + 1, 12);
-  const annualPnL = buildPnL(yearBookings, yearExpenses, settings.monthlyPITI, pitiMonths, cleaningCostPerBooking, pitiSplit);
+  const annualPnL = buildPnL(
+    yearBookings, yearExpenses, settings.monthlyPITI, pitiMonths, cleaningCostPerBooking, pitiSplit,
+    leaseRevenue,
+  );
 
   const statement: AnnualStatement = {
     year,
     months,
     totalNights,
+    leasedDays,
     avgOccupancyRate: months.slice(0, pitiMonths).reduce((s, m) => s + m.occupancyRate, 0) / pitiMonths,
     byPlatform,
     ...annualPnL,

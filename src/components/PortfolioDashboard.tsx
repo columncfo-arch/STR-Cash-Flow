@@ -1,9 +1,10 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, ArrowRight, Building2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Building2, Plus } from 'lucide-react';
 import { pacingStatus, planShare } from '@/lib/pacing';
 import PacingRing from '@/components/PacingRing';
 import InfoTip from '@/components/InfoTip';
+import AddPropertyForm from '@/components/AddPropertyForm';
 import type { PortfolioEntry } from '@/app/api/portfolio/route';
 
 const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
@@ -68,6 +69,7 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
   const [period, setPeriod] = useState<Period>('ytd');
   const [sortBy, setSortBy] = useState<LayerKey>('netIncome');
   const [focused, setFocused] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
 
   useEffect(() => {
     fetch(`/api/portfolio?year=${year}`).then(r => r.json()).then(setData).catch(() => {});
@@ -216,6 +218,14 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
           )}
         </div>
         <div className="flex items-center gap-1.5">
+          {!focused && (
+            <button
+              onClick={() => setAdding(true)}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border border-slate-200 text-slate-600 hover:border-emerald-300 hover:text-emerald-700 bg-white transition-colors"
+            >
+              <Plus className="w-3 h-3" /> Add property
+            </button>
+          )}
           {focused && (
             <button
               onClick={() => setFocused(null)}
@@ -239,6 +249,20 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
           ))}
         </div>
       </div>
+
+      {/* A new unit becomes the one in view, so the whole app — its dashboard,
+          its settings, its leases — is already pointed at it */}
+      {adding && (
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm px-5 py-4 mb-6 max-w-md">
+          <p className="text-xs uppercase tracking-wide text-slate-900 font-semibold mb-3">Add a property</p>
+          <AddPropertyForm
+            onCancel={() => setAdding(false)}
+            onDone={(_id, model) => {
+              window.location.href = model === 'ltr' ? '/leases' : '/';
+            }}
+          />
+        </div>
+      )}
 
       {/* ── The four layers, rolled up across every unit ──
           Only with more than one unit. With a single property this said exactly

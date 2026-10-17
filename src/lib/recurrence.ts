@@ -9,6 +9,15 @@
 import { Expense, RecurrenceFrequency } from '@/types';
 import { DateRange, inRange, recurrenceOverlapsRange } from '@/lib/dateRange';
 
+/**
+ * Anything that repeats on a schedule: an expense, or a charge on a lease.
+ *
+ * The questions below are about the recurrence, not about what is recurring,
+ * so they take this shape rather than one record type. The expense side proved
+ * the rule; the revenue side should not grow a second one.
+ */
+export type Recurs = Pick<Expense, 'date' | 'recurring' | 'recurrenceFrequency' | 'recurrenceEnd'>;
+
 export const RECURRENCE_FREQUENCIES: {
   id: RecurrenceFrequency;
   /** For the picker, phrased as the cadence. */
@@ -53,7 +62,7 @@ function monthsBetween(from: string, to: string): number {
  * month and every `everyMonths` after, up to `recurrenceEnd` if it has one — so
  * a premium first paid in March is charged in March, not in April.
  */
-export function occursInMonth(e: Expense, month: string): boolean {
+export function occursInMonth(e: Recurs, month: string): boolean {
   if (!e.recurring) return e.date.startsWith(month);
 
   const start = e.date.slice(0, 7);
@@ -65,7 +74,7 @@ export function occursInMonth(e: Expense, month: string): boolean {
 }
 
 /** The subset of `months` (YYYY-MM) this expense lands in. */
-export function occurrencesIn(e: Expense, months: string[]): string[] {
+export function occurrencesIn(e: Recurs, months: string[]): string[] {
   return months.filter(month => occursInMonth(e, month));
 }
 
@@ -89,7 +98,7 @@ function monthsOfRange(range: DateRange): string[] {
  * An open-ended range cannot be enumerated, so it falls back to asking whether
  * the series is live at all — a recurrence with no end always charges eventually.
  */
-export function occursInRange(e: Expense, range: DateRange): boolean {
+export function occursInRange(e: Recurs, range: DateRange): boolean {
   if (!e.recurring) return inRange(e.date, range);
   if (!range.from || !range.to) return recurrenceOverlapsRange(e.date, e.recurrenceEnd, range);
   return monthsOfRange(range).some(month => occursInMonth(e, month));

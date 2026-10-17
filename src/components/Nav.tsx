@@ -4,7 +4,7 @@ import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { UserButton } from '@clerk/nextjs';
 import PropertySwitcher from './PropertySwitcher';
-import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, TrendingUp, Target, Users, Zap, Wifi, Menu, X } from 'lucide-react';
+import { BarChart3, CalendarDays, BookOpen, KeyRound, Settings, Home, Receipt, TrendingUp, Target, Users, Zap, Wifi, Menu, X } from 'lucide-react';
 
 type SubLink = { href: string; label: string; icon: React.ComponentType<{ className?: string }> };
 type NavLink = { href: string; label: string; icon: React.ComponentType<{ className?: string }>; children?: SubLink[] };
@@ -17,6 +17,7 @@ const links: NavLink[] = [
     icon: BarChart3,
     children: [
       { href: '/bookings', label: 'Bookings', icon: CalendarDays },
+      { href: '/leases', label: 'Leases', icon: KeyRound },
       { href: '/expenses', label: 'Expenses', icon: Receipt },
     ],
   },

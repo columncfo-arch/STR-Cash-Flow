@@ -76,9 +76,20 @@ export interface Booking {
 }
 
 /**
- * One rental unit. Everything financial — bookings, expenses, targets, the loan
- * — belongs to a property rather than to the account, so an owner with three
- * units keeps three separate sets of books under one login.
+ * How a unit is let. A label, not a switch: a property's revenue is its
+ * bookings plus its leases either way, and nothing in the accounting branches
+ * on it. A unit let nightly for half a year and leased for the rest reports
+ * both with no special case, which is exactly what converting one looks like.
+ *
+ * Absent on every property saved before long lets existed, all of which were
+ * short-term — so absent reads as 'str'.
+ */
+export type PropertyModel = 'str' | 'ltr';
+
+/**
+ * One rental unit. Everything financial — bookings, expenses, leases, targets,
+ * the loan — belongs to a property rather than to the account, so an owner with
+ * three units keeps three separate sets of books under one login.
  */
 export interface Property {
   id: string;
@@ -88,6 +99,8 @@ export interface Property {
   archived?: boolean;
   /** The platform's own id for this unit, used to route synced reservations. */
   externalIds?: string[];
+  /** How it is let. Absent ⇒ 'str'. */
+  model?: PropertyModel;
 }
 
 /**
@@ -105,6 +118,56 @@ export interface Account {
 }
 
 export type RecurrenceFrequency = 'monthly' | 'quarterly' | 'annual';
+
+/**
+ * A tenancy. Rent is the headline and lives here rather than becoming a charge:
+ * it prorates against the lease's own dates, and a tenancy without rent is not
+ * a tenancy.
+ */
+export interface Lease {
+  id: string;
+  tenantName: string;
+  monthlyRent: number;
+  startDate: string;                    // YYYY-MM-DD
+  /** null ⇒ month-to-month, running until it is ended. */
+  endDate: string | null;
+  /**
+   * Actual move-out, when a tenant left before `endDate`. Rent stops here.
+   * Both dates are kept: "contracted to December and ended in August" and
+   * "always an August lease" are different facts, and only the first one
+   * explains the vacancy that follows.
+   */
+  terminatedOn?: string | null;
+  /** The date notice has to be given or received by, for the warning. */
+  renewalNoticeDate?: string | null;
+  /** Escrowed, never revenue. Owed back unless withheld at move-out. */
+  depositHeld?: number;
+  notes?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Anything billed alongside the rent: parking and pet rent monthly, a late fee
+ * or an early termination fee on the day it applied. Separate records so adding
+ * parking mid-tenancy does not mean editing the lease, and so a late fee in
+ * March is not a property of the lease itself.
+ */
+export interface LeaseCharge {
+  id: string;
+  leaseId: string;
+  label: string;                        // "Parking", "Late fee"
+  amount: number;
+  /** First occurrence, or the day a one-off applied. */
+  date: string;
+  recurring?: boolean;
+  recurrenceFrequency?: RecurrenceFrequency;
+  recurrenceEnd?: string | null;
+  /** A fixed charge prorates with the lease; a one-off event does not. */
+  proratesWithLease?: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface Expense {
   id: string;
@@ -208,6 +271,13 @@ export interface ForecastYear {
 
 export interface PnLSummary {
   grossRevenue: number;
+  /**
+   * The part of gross revenue that came from leases rather than stays, so a
+   * unit let both ways can be read either way. It carries no platform fee and
+   * no platform-remitted tax — nobody takes a cut of rent — so it flows into
+   * net revenue untouched.
+   */
+  leaseRevenue: number;
   platformFees: number;      // host service fee / commission
   fastPayFees: number;       // instant payout fees (Airbnb)
   taxRemitted: number;       // platform-remitted occupancy tax
@@ -234,6 +304,10 @@ export interface MonthlyStatement extends PnLSummary {
   month: number;
   bookings: Booking[];
   totalNights: number;
+  /** Days of the month covered by a lease. Occupancy counts these alongside
+   *  nights sold, so a leased unit reads near 100% and a turnover month reads
+   *  the part of it that was covered. */
+  leasedDays: number;
   occupancyRate: number;
   byPlatform: Record<Platform, { income: number; nights: number; bookings: number }>;
 }
@@ -261,6 +335,7 @@ export interface AnnualStatement extends PnLSummary {
   year: number;
   months: MonthlyStatement[];
   totalNights: number;
+  leasedDays: number;
   avgOccupancyRate: number;
   byPlatform: Record<Platform, { income: number; nights: number; bookings: number }>;
 }

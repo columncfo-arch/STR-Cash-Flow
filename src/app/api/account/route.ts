@@ -1,7 +1,10 @@
 import { NextResponse } from 'next/server';
 import { loadAccount, saveAccount } from '@/lib/storage';
 import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
-import { Property } from '@/types';
+import { Property, PropertyModel } from '@/types';
+
+/** How it is let. Anything unrecognised reads as short-term, as absence does. */
+const cleanModel = (raw: unknown): PropertyModel => (raw === 'ltr' ? 'ltr' : 'str');
 
 /** A property name that is safe to show and distinct from the others. */
 function cleanName(raw: unknown, taken: string[]): string | null {
@@ -28,7 +31,7 @@ export async function POST(req: Request) {
   try {
     const userId = await requireAuth();
     const account = await loadAccount(userId);
-    const { name } = await req.json() as { name?: string };
+    const { name, model } = await req.json() as { name?: string; model?: string };
 
     const clean = cleanName(name, account.properties.map(p => p.name));
     if (!clean) {
@@ -38,6 +41,7 @@ export async function POST(req: Request) {
     const property: Property = {
       id: `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`,
       name: clean,
+      model: cleanModel(model),
       createdAt: new Date().toISOString(),
     };
     // Switch to it: the only reason to add one is to set it up
@@ -62,8 +66,9 @@ export async function PUT(req: Request) {
   try {
     const userId = await requireAuth();
     const account = await loadAccount(userId);
-    const { activePropertyId, id, name, archived, claimExternalId } = await req.json() as {
-      activePropertyId?: string; id?: string; name?: string; archived?: boolean; claimExternalId?: string;
+    const { activePropertyId, id, name, model, archived, claimExternalId } = await req.json() as {
+      activePropertyId?: string; id?: string; name?: string; model?: string;
+      archived?: boolean; claimExternalId?: string;
     };
 
     let properties = account.properties;
@@ -78,6 +83,12 @@ export async function PUT(req: Request) {
           return NextResponse.json({ error: 'Give the property a name it does not already have' }, { status: 400 });
         }
         properties = properties.map(p => p.id === id ? { ...p, name: clean } : p);
+      }
+
+      // Converting a unit is a relabelling, not a migration: its bookings and
+      // its leases are both still its revenue either way
+      if (model !== undefined) {
+        properties = properties.map(p => p.id === id ? { ...p, model: cleanModel(model) } : p);
       }
 
       if (claimExternalId) {

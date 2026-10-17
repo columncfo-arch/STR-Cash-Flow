@@ -1,4 +1,4 @@
-import { Account, Booking, DirectLead, Expense, Property, Settings } from '@/types';
+import { Account, Booking, DirectLead, Expense, Lease, LeaseCharge, Property, Settings } from '@/types';
 import path from 'path';
 import { readFile, writeFile, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
@@ -28,6 +28,8 @@ const KP = ({ userId, propertyId }: Scope) => ({
   settings: `str:settings:${userId}:${propertyId}`,
   bookings: `str:bookings:${userId}:${propertyId}`,
   expenses: `str:expenses:${userId}:${propertyId}`,
+  leases: `str:leases:${userId}:${propertyId}`,
+  leaseCharges: `str:lease-charges:${userId}:${propertyId}`,
 });
 
 /** The property every pre-multi-property record is moved under. */
@@ -155,6 +157,8 @@ function propertyPaths(scope: Scope) {
     settings: path.join(dir, 'settings.json'),
     bookings: path.join(dir, 'bookings.json'),
     expenses: path.join(dir, 'expenses.json'),
+    leases: path.join(dir, 'leases.json'),
+    leaseCharges: path.join(dir, 'lease-charges.json'),
   };
 }
 
@@ -456,6 +460,111 @@ export async function deleteExpense(scope: Scope, id: string): Promise<boolean> 
     return next;
   });
   return found;
+}
+
+// ─── Leases ───────────────────────────────────────────────────────────────────
+
+/**
+ * The four operations every per-property collection needs, over whichever
+ * backend is live.
+ *
+ * Bookings and expenses each spell these out above, which was four near-copies
+ * of the same twenty lines before leases would have made it six. They are left
+ * as they are rather than moved onto this — they work, they are covered, and
+ * rewriting proven storage paths to save repetition is a trade in the wrong
+ * direction. New collections start here.
+ */
+function collection<T extends { id: string }>(
+  key: (scope: Scope) => string,
+  file: (scope: Scope) => string,
+) {
+  return {
+    load: (scope: Scope): Promise<T[]> =>
+      useRedis ? redisHashAll<T>(key(scope)) : fileLoad<T[]>(file(scope), []),
+
+    add: async (scope: Scope, item: T): Promise<void> => {
+      if (useRedis) await redisHashSet(key(scope), item.id, item);
+      else await fileMutate<T>(file(scope), items => [...items, item]);
+    },
+
+    update: async (scope: Scope, id: string, patch: Partial<T>): Promise<T | null> => {
+      const stamped = { ...patch, id, updatedAt: new Date().toISOString() };
+      if (useRedis) {
+        const all = await redisHashAll<T>(key(scope));
+        const existing = all.find(i => i.id === id);
+        if (!existing) return null;
+        const updated = { ...existing, ...stamped } as T;
+        await redisHashSet(key(scope), id, updated);
+        return updated;
+      }
+      let updated: T | null = null;
+      await fileMutate<T>(file(scope), items => items.map(i => {
+        if (i.id !== id) return i;
+        updated = { ...i, ...stamped } as T;
+        return updated;
+      }));
+      return updated;
+    },
+
+    remove: async (scope: Scope, id: string): Promise<boolean> => {
+      if (useRedis) {
+        const all = await redisHashAll<T>(key(scope));
+        if (!all.some(i => i.id === id)) return false;
+        await redisHashDel(key(scope), id);
+        return true;
+      }
+      let found = false;
+      await fileMutate<T>(file(scope), items => {
+        const next = items.filter(i => i.id !== id);
+        found = next.length !== items.length;
+        return next;
+      });
+      return found;
+    },
+
+    /** Every id matching a predicate, removed together. */
+    removeWhere: async (scope: Scope, predicate: (item: T) => boolean): Promise<number> => {
+      if (useRedis) {
+        const all = await redisHashAll<T>(key(scope));
+        const ids = all.filter(predicate).map(i => i.id);
+        await redisHashClear(key(scope), ids);
+        return ids.length;
+      }
+      let removed = 0;
+      await fileMutate<T>(file(scope), items => {
+        const next = items.filter(i => !predicate(i));
+        removed = items.length - next.length;
+        return next;
+      });
+      return removed;
+    },
+  };
+}
+
+const leases = collection<Lease>(s => KP(s).leases, s => propertyPaths(s).leases);
+const leaseCharges = collection<LeaseCharge>(s => KP(s).leaseCharges, s => propertyPaths(s).leaseCharges);
+
+export const loadLeases = leases.load;
+export const addLease = leases.add;
+export const updateLease = leases.update;
+
+export const loadLeaseCharges = leaseCharges.load;
+export const addLeaseCharge = leaseCharges.add;
+export const updateLeaseCharge = leaseCharges.update;
+export const deleteLeaseCharge = leaseCharges.remove;
+
+/**
+ * Remove a lease and everything billed against it.
+ *
+ * Charges point at a lease by id, so leaving them behind would leave records
+ * that bill against a tenancy that no longer exists — invisible in the app and
+ * still counted by nothing, since recognition skips charges whose lease is
+ * gone. Deleting them together is what keeps the two in step.
+ */
+export async function deleteLease(scope: Scope, id: string): Promise<boolean> {
+  const removed = await leases.remove(scope, id);
+  if (removed) await leaseCharges.removeWhere(scope, c => c.leaseId === id);
+  return removed;
 }
 
 export async function loadLeads(userId: string): Promise<DirectLead[]> {
