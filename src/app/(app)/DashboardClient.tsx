@@ -1,15 +1,16 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { AnnualStatement, Booking, MonthlyStatement, Settings, Platform } from '@/types';
+import { AnnualStatement, MonthlyStatement, Settings, Platform } from '@/types';
 import StatCard from '@/components/StatCard';
 import { TrendingUp, X, Pencil, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
 import { pacingStatus, paceStatus } from '@/lib/pacing';
 import InfoTip from '@/components/InfoTip';
+import PacingRing from '@/components/PacingRing';
 import PropertySetup from '@/components/PropertySetup';
 import { addDays } from '@/lib/dateRange';
 import {
-  DayOccupancyChart, MonthGoalDonut, DayDatum,
+  DayOccupancyChart, MonthProgressChart, DayDatum, ProgressPoint,
 } from '@/components/DayCharts';
 import { YearVarianceChart, VarianceDatum } from '@/components/YearVarianceChart';
 import {
@@ -70,6 +71,34 @@ const METRICS = [
 
 type MetricKey = typeof METRICS[number]['key'];
 
+/**
+ * A month as a running total, opening at `start` and moving by each day's
+ * figure. Solid up to today and dashed beyond, with the changeover day in both
+ * series so the two lines meet rather than leaving a gap.
+ *
+ * Module level rather than inline: a running accumulator reassigned during a
+ * component's render is exactly what the React compiler refuses.
+ */
+function runningFrom(
+  start: number, byDay: number[], todayDay: number, grossByDay?: number[],
+): ProgressPoint[] {
+  let running = start;
+  let gross = 0;
+  return byDay.map((v, i) => {
+    running += v;
+    gross += grossByDay?.[i] ?? 0;
+    const day = i + 1;
+    const value = Math.round(running);
+    return {
+      day: String(day),
+      earned: day <= todayDay ? value : null,
+      booked: day >= todayDay ? value : null,
+      today: Math.round(v),
+      gross: grossByDay ? Math.round(gross) : null,
+      isFuture: day > todayDay,
+    };
+  });
+}
 
 /**
  * What stands between gross revenue and each layer below it, outermost first.
@@ -626,13 +655,54 @@ export default function DashboardClient() {
     : null;
 
   /**
-   * What the month owed before it sold a night, and so where the selected
-   * layer's ring opens.
+   * The selected layer through the month in progress, day by day.
    *
    * Only the revenue side has dates: bookings carry them, while expenses reach
-   * the dashboard as monthly category totals and the mortgage as one figure.
-   * There is no honest way to spread those across days, so they stand as the
-   * month's opening position and the revenue is measured from there.
+   * the dashboard as monthly category totals and the mortgage as one figure. So
+   * rather than invent a daily cost, the month opens at whatever it has already
+   * committed and climbs as stays check in. Gross revenue opens at zero; the
+   * layers beneath it open in the red, which is why crossing zero is the day the
+   * month paid for itself.
+   *
+   * It mirrors buildPnL so the last point equals the month's own figure:
+   *   netIncome = gross − platformFees − fastPay − tax − refunds − opex − piti
+   * The per-booking terms are dated; refunds, operating expenses and the
+   * mortgage form the opening debt of whichever layers include them.
+   */
+  const cumulativeData: ProgressPoint[] = (() => {
+    if (period !== 'month') return [];
+    const m = statement?.months[currentMonthIdx];
+    if (!m) return [];
+    const committed =
+      metric === 'grossRevenue' ? 0
+        : metric === 'netRevenue' ? m.refunds
+        : metric === 'operatingIncome' ? m.refunds + m.totalOperatingExpenses
+        : m.refunds + m.totalOperatingExpenses + m.piti;
+
+    const byDay = new Array<number>(daysInCurMonth).fill(0);
+    const grossByDay = new Array<number>(daysInCurMonth).fill(0);
+    for (const b of m.bookings) {
+      // Slice the day out of YYYY-MM-DD; Date would shift it across timezones
+      const d = Number(b.checkIn.slice(8, 10));
+      if (d < 1 || d > daysInCurMonth) continue;
+      grossByDay[d - 1] += b.income;
+      byDay[d - 1] += metric === 'grossRevenue'
+        ? b.income
+        : b.income - (b.platformFee ?? 0) - (b.fastPayFee ?? 0)
+          - (b.taxRemitted ?? 0) - (b.taxWithheld ?? 0);
+    }
+
+    const isLiveMonth = now.getFullYear() === year && now.getMonth() === currentMonthIdx;
+    return runningFrom(
+      -committed, byDay, isLiveMonth ? now.getDate() : daysInCurMonth,
+      // On the gross chart this would be the same line drawn twice
+      metric === 'grossRevenue' ? undefined : grossByDay,
+    );
+  })();
+
+  /**
+   * What the month owed before it sold a night: the depth `cumulativeData`
+   * opens at, shaded on the chart so the climb out of it is visible.
    */
   const monthCommitted = (() => {
     const m = statement?.months[currentMonthIdx];
@@ -640,34 +710,6 @@ export default function DashboardClient() {
     return DEDUCTIONS
       .filter(d => !d.dated && deductedFrom(d.from, metric))
       .reduce((s, d) => s + d.pick(m), 0);
-  })();
-
-  /**
-   * The month in progress: the layer as it stands today, and where it lands if
-   * nothing else sells.
-   *
-   * Both mirror buildPnL, so `booked` equals the month's own figure exactly:
-   *   netIncome = gross − platformFees − fastPay − tax − refunds − opex − piti
-   * The per-booking terms are dated and counted up to the day in question; the
-   * rest is the committed opening above.
-   */
-  const monthProgress = (() => {
-    const m = statement?.months[currentMonthIdx];
-    if (!m || period !== 'month') return null;
-    const isLiveMonth = now.getFullYear() === year && now.getMonth() === currentMonthIdx;
-    const todayDay = isLiveMonth ? now.getDate() : daysInCurMonth;
-    const dated = (b: Booking) => metric === 'grossRevenue'
-      ? b.income
-      : b.income - (b.platformFee ?? 0) - (b.fastPayFee ?? 0)
-        - (b.taxRemitted ?? 0) - (b.taxWithheld ?? 0);
-    const sum = (list: Booking[]) => list.reduce((s, b) => s + dated(b), 0);
-    // Slice the day out of YYYY-MM-DD; Date would shift it across timezones
-    const checkedIn = m.bookings.filter(b => Number(b.checkIn.slice(8, 10)) <= todayDay);
-    return {
-      start: -monthCommitted,
-      earned: sum(checkedIn) - monthCommitted,
-      booked: sum(m.bookings) - monthCommitted,
-    };
   })();
 
   /**
@@ -966,25 +1008,28 @@ export default function DashboardClient() {
                   <p className={`text-[11px] uppercase tracking-wide font-semibold truncate ${on ? 'text-slate-700' : 'text-slate-400'}`}>
                     {mt.label}
                   </p>
-                  <p className={`text-xl font-bold leading-tight mt-1 ${actual < 0 ? 'text-red-600' : 'text-slate-900'}`}>
-                    {fmt(actual)}
-                  </p>
-                  <p className="text-[11px] truncate mt-0.5 text-slate-400">
-                    {hasPlan ? `of ${fmt(plan)} plan` : 'no plan for this period'}
-                    {verdict && <span className={`ml-1 font-medium ${verdict.color}`}>· {verdict.label}</span>}
-                  </p>
-                  {plan > 0 && (
-                    <div className="w-full bg-slate-100 rounded-full h-1 mt-2.5">
-                      <div
-                        className={`h-1 rounded-full transition-all ${
-                          verdict == null ? 'bg-slate-300'
-                            : verdict.color === 'text-red-600' ? 'bg-red-400'
-                            : 'bg-emerald-500'
-                        }`}
-                        style={{ width: `${Math.min(100, Math.max(0, pctOfPlan ?? 0))}%` }}
-                      />
+                  <div className="flex items-center justify-between gap-3 mt-1">
+                    <div className="min-w-0">
+                      <p className={`text-xl font-bold leading-tight ${actual < 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                        {fmt(actual)}
+                      </p>
+                      <p className="text-[11px] truncate mt-0.5 text-slate-400">
+                        {hasPlan ? `of ${fmt(plan)} plan` : 'no plan for this period'}
+                        {verdict && <span className={`ml-1 font-medium ${verdict.color}`}>· {verdict.label}</span>}
+                      </p>
                     </div>
-                  )}
+                    {/* The same ring the portfolio tiles use, so a share of plan
+                        is drawn one way across the app. Its colour follows the
+                        verdict rather than the layer, so the ring and the words
+                        beside it can never disagree. A plan at or below zero —
+                        a period expected to lose money — has no share to draw,
+                        and the ring is a bare track. */}
+                    <PacingRing
+                      pct={pctOfPlan}
+                      color={verdict?.color === 'text-red-600' ? '#f43f5e' : '#10b981'}
+                      label={`${mt.label}: ${pctOfPlan == null ? 'no plan' : `${Math.round(pctOfPlan)}% of plan`}`}
+                    />
+                  </div>
                 </button>
               );
             })}
@@ -997,14 +1042,14 @@ export default function DashboardClient() {
             <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
               <TrendingUp className="w-3.5 h-3.5" style={{ color: selectedMetric.color }} />
               {period === 'month'
-                ? `${selectedMetric.label} towards ${MONTHS_LONG[currentMonthIdx]}’s plan`
+                ? `${selectedMetric.label} through ${MONTHS_LONG[currentMonthIdx]}`
                 : `${selectedMetric.label} over or under plan by month`}
               <InfoTip label="How to read this chart">
                 {selectedMetric.tip}{' '}
                 {period === 'month'
                   ? selectedMetric.breakeven
-                    ? 'The ring is the distance from where the month opened — below zero, at the costs it had already committed — to its plan. It fills with what has been earned, then with what is booked but not yet earned; the pale remainder still has to sell. The bar below names the costs.'
-                    : 'The ring is the month’s plan, filling with what has been earned and then with what is booked but not yet earned. The pale remainder still has to sell.'
+                    ? 'The month opens at the costs it has already committed — the shaded block, divided at each cost — and climbs as stays check in, so crossing zero is the day it paid for itself. The bar below names each cost; hover any day for the revenue in by then.'
+                    : 'Adding up through the month, dashed where it is booked but not yet earned. The flat line is the plan. Hover any day for the gross revenue in by then and what had been taken out of it.'
                   : selectedMetric.prorates
                     ? 'Each bar is how far a month landed above or below its plan, grey where the month is still ahead and the gap is left to sell. The faint line is the level itself. Click a month to drill into its P&L.'
                     : 'Each bar is how far a month landed above or below its plan. The month in progress has no bar — its costs land before its revenue does. The faint line is the level itself. Click a month to drill into its P&L.'}
@@ -1022,15 +1067,15 @@ export default function DashboardClient() {
             <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
               No data yet. Import your earnings CSV to get started.
             </div>
-          ) : period === 'month' && monthProgress ? (
-            <MonthGoalDonut
+          ) : period === 'month' ? (
+            <MonthProgressChart
+              points={cumulativeData}
               monthLabel={MONTHS_LONG[currentMonthIdx]}
               fmt={fmt}
+              target={periodTotals[metric].plan !== 0 ? periodTotals[metric].plan : null}
               color={selectedMetric.color}
-              start={monthProgress.start}
-              goal={periodTotals[metric].plan !== 0 ? periodTotals[metric].plan : null}
-              earned={monthProgress.earned}
-              booked={monthProgress.booked}
+              breakeven={selectedMetric.breakeven}
+              committed={monthCommitted}
             />
           ) : (
             <>
