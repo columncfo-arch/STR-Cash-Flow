@@ -3,6 +3,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useState } from 'react';
 import { UserButton } from '@clerk/nextjs';
+import PropertySwitcher from './PropertySwitcher';
 import { BarChart3, CalendarDays, BookOpen, Settings, Home, Receipt, TrendingUp, Target, Users, Zap, Wifi, Menu, X } from 'lucide-react';
 
 type SubLink = { href: string; label: string; icon: React.ComponentType<{ className?: string }> };
@@ -49,6 +50,7 @@ export default function Nav() {
           <X className="w-5 h-5" />
         </button>
       </div>
+      <PropertySwitcher />
       <ul className="flex-1 py-4 space-y-1 px-2 overflow-y-auto">
         {links.map(({ href, label, icon: Icon, children }) => {
           const active = pathname === href;

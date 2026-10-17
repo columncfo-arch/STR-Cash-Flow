@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server';
 import { requireScope, unauthorized, AuthError } from '@/lib/auth';
-import { loadSettings, loadBookings, replaceAllBookings } from '@/lib/storage';
+import { loadSettings, loadBookings, replaceAllBookings, saveAccount, type Scope } from '@/lib/storage';
 import { Booking, Platform } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -181,9 +181,144 @@ export async function GET() {
   }
 }
 
+/**
+ * Merge one unit's reservations into its own books.
+ *
+ * Hostex returns every unit on the account in one call, so the reservations are
+ * grouped by their Hostex property id and each group is merged into the
+ * property it belongs to. Dedup is per property by design: two units can of
+ * course hold stays over the same dates, and collapsing those would delete real
+ * bookings.
+ */
+async function syncIntoProperty(scope: Scope, active: HostexReservation[]) {
+  const existing = await loadBookings(scope);
+  const now = new Date().toISOString();
+  let created = 0;
+  let updated = 0;
+
+  for (const r of active) {
+    const confirmationCode = r.reservation_code ?? r.stay_code ?? '';
+    const checkIn = r.check_in_date ?? '';
+    const checkOut = r.check_out_date ?? '';
+    if (!checkIn) continue;
+
+    // Hostex doesn't send a night count — derive it from the stay dates.
+    const nights = checkOut
+      ? Math.max(Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000), 1)
+      : 1;
+
+    // Prefer whichever name carries the most detail. Airbnb only ever supplies
+    // a first name through Hostex; VRBO and Booking.com send the full name.
+    const nameCandidates = [r.guest_name, booker(r)?.name, ...(r.guests ?? []).map(g => g.name)]
+      .map(n => n?.trim())
+      .filter((n): n is string => !!n);
+    const guestName = nameCandidates.sort((a, b) => b.length - a.length)[0];
+
+    const platform = mapPlatform(r.channel_type ?? r.custom_channel?.name ?? '');
+
+    // total_rate is the gross the guest paid (accommodation + cleaning + pet
+    // + extra-guest fees). total_commission is the channel's cut, already
+    // excluded from payment.total_amount, which is the net payout.
+    const income = r.rates?.total_rate?.amount ?? 0;
+    const platformFee = r.rates?.total_commission?.amount || undefined;
+    const paidOut = r.payment?.total_amount ?? undefined;
+
+    const existingIdx = confirmationCode
+      ? existing.findIndex(b => b.confirmationCode === confirmationCode || b.uid === confirmationCode)
+      : -1;
+
+    const sharedFields = {
+      checkIn,
+      checkOut,
+      nights,
+      guestName,
+      email: r.guest_email || booker(r)?.email || undefined,
+      phone: r.guest_phone || booker(r)?.phone || undefined,
+      income,
+      platformFee,
+      paidOut,
+      cleaningFee: detailAmount(r.rates?.details, 'CLEANING_FEE'),
+      petFee: detailAmount(r.rates?.details, 'PET_FEE'),
+      taxRemitted: r.rates?.tax?.amount || undefined,
+      currency: r.rates?.total_rate?.currency || r.payment?.currency || undefined,
+      status: r.status || undefined,
+      propertyId: r.property_id !== undefined ? String(r.property_id) : undefined,
+      unitId: r.listing_id || undefined,
+      bookingDate: r.booked_at?.slice(0, 10) ?? r.created_at?.slice(0, 10) ?? undefined,
+      adults: r.number_of_adults || undefined,
+      children: r.number_of_children || undefined,
+      people: r.number_of_guests || undefined,
+      notes: r.remarks || undefined,
+      updatedAt: now,
+    };
+
+    if (existingIdx >= 0) {
+      const prior = existing[existingIdx];
+      existing[existingIdx] = {
+        ...prior,
+        ...sharedFields,
+        // platform lives outside sharedFields, so without this a record
+        // written by an earlier sync keeps whatever channel it was given.
+        platform,
+        summary: guestName ? `${platform} - ${guestName}` : platform,
+        guestName: fullerName(prior.guestName, guestName),
+      };
+      updated++;
+    } else {
+      const id = `hostex-${confirmationCode || checkIn}-${Math.random().toString(36).slice(2, 7)}`;
+      existing.push({
+        id,
+        sourceId: 'hostex',
+        platform,
+        uid: confirmationCode || id,
+        summary: guestName ? `${platform} - ${guestName}` : platform,
+        confirmationCode: confirmationCode || undefined,
+        isManual: false,
+        createdAt: now,
+        ...sharedFields,
+      } as Booking);
+      created++;
+    }
+  }
+
+  // Deduplicate by the stay itself — one unit cannot hold two bookings over
+  // the same check-in/check-out pair, so a collision is the same reservation
+  // recorded twice. Confirmation codes deliberately do NOT gate this: a CSV
+  // row and its Hostex counterpart carry different codes, and those are
+  // precisely the duplicates worth collapsing. The winner absorbs the loser's
+  // fields, so a CSV row's cleaning/tax detail survives the merge.
+  let deduped = 0;
+  const seen = new Map<string, number>(); // key → index in existing
+  const toRemove = new Set<number>();
+  for (let i = 0; i < existing.length; i++) {
+    const b = existing[i];
+    // Without both dates the stay isn't identified well enough to merge on.
+    if (!b.checkIn || !b.checkOut) continue;
+    const key = `${b.checkIn}|${b.checkOut}`;
+    const prevIdx = seen.get(key);
+    if (prevIdx === undefined) {
+      seen.set(key, i);
+      continue;
+    }
+    const prev = existing[prevIdx];
+    // Prefer Hostex-sourced; otherwise prefer whichever has a confirmation code
+    const keepNew = b.sourceId === 'hostex' || (!prev.confirmationCode && !!b.confirmationCode);
+    const [keep, drop] = keepNew ? [b, prev] : [prev, b];
+    absorb(keep, drop);
+    keep.guestName = fullerName(keep.guestName, drop.guestName);
+    toRemove.add(keepNew ? prevIdx : i);
+    if (keepNew) seen.set(key, i);
+    deduped++;
+  }
+  const dedupedBookings = existing.filter((_, i) => !toRemove.has(i));
+
+  await replaceAllBookings(scope, dedupedBookings);
+  return { created, updated, deduped };
+}
+
 export async function POST() {
   try {
-    const { scope } = await requireScope();
+    const { userId, account, scope } = await requireScope();
     const settings = await loadSettings(scope);
 
     const token = settings.hostexAccessToken?.trim();
@@ -202,129 +337,69 @@ export async function POST() {
       return s !== 'cancelled' && s !== 'canceled' && s !== 'denied' && s !== 'inquiry';
     });
 
-    const existing = await loadBookings(scope);
-    const now = new Date().toISOString();
-    let created = 0;
-    let updated = 0;
-
+    // Which of our properties each Hostex unit belongs to.
+    //
+    // With a single property there is nothing to decide: it owns everything on
+    // the account. With several, a unit is placed only where it has been
+    // recognised before. Guessing would file a stay against the wrong unit's
+    // books, and a wrong number is worse than a missing one — so anything
+    // unrecognised is reported back instead.
+    const live = account.properties.filter(p => !p.archived);
+    const byHostexUnit = new Map<string, HostexReservation[]>();
     for (const r of active) {
-      const confirmationCode = r.reservation_code ?? r.stay_code ?? '';
-      const checkIn = r.check_in_date ?? '';
-      const checkOut = r.check_out_date ?? '';
-      if (!checkIn) continue;
-
-      // Hostex doesn't send a night count — derive it from the stay dates.
-      const nights = checkOut
-        ? Math.max(Math.round((new Date(checkOut).getTime() - new Date(checkIn).getTime()) / 86400000), 1)
-        : 1;
-
-      // Prefer whichever name carries the most detail. Airbnb only ever supplies
-      // a first name through Hostex; VRBO and Booking.com send the full name.
-      const nameCandidates = [r.guest_name, booker(r)?.name, ...(r.guests ?? []).map(g => g.name)]
-        .map(n => n?.trim())
-        .filter((n): n is string => !!n);
-      const guestName = nameCandidates.sort((a, b) => b.length - a.length)[0];
-
-      const platform = mapPlatform(r.channel_type ?? r.custom_channel?.name ?? '');
-
-      // total_rate is the gross the guest paid (accommodation + cleaning + pet
-      // + extra-guest fees). total_commission is the channel's cut, already
-      // excluded from payment.total_amount, which is the net payout.
-      const income = r.rates?.total_rate?.amount ?? 0;
-      const platformFee = r.rates?.total_commission?.amount || undefined;
-      const paidOut = r.payment?.total_amount ?? undefined;
-
-      const existingIdx = confirmationCode
-        ? existing.findIndex(b => b.confirmationCode === confirmationCode || b.uid === confirmationCode)
-        : -1;
-
-      const sharedFields = {
-        checkIn,
-        checkOut,
-        nights,
-        guestName,
-        email: r.guest_email || booker(r)?.email || undefined,
-        phone: r.guest_phone || booker(r)?.phone || undefined,
-        income,
-        platformFee,
-        paidOut,
-        cleaningFee: detailAmount(r.rates?.details, 'CLEANING_FEE'),
-        petFee: detailAmount(r.rates?.details, 'PET_FEE'),
-        taxRemitted: r.rates?.tax?.amount || undefined,
-        currency: r.rates?.total_rate?.currency || r.payment?.currency || undefined,
-        status: r.status || undefined,
-        propertyId: r.property_id !== undefined ? String(r.property_id) : undefined,
-        unitId: r.listing_id || undefined,
-        bookingDate: r.booked_at?.slice(0, 10) ?? r.created_at?.slice(0, 10) ?? undefined,
-        adults: r.number_of_adults || undefined,
-        children: r.number_of_children || undefined,
-        people: r.number_of_guests || undefined,
-        notes: r.remarks || undefined,
-        updatedAt: now,
-      };
-
-      if (existingIdx >= 0) {
-        const prior = existing[existingIdx];
-        existing[existingIdx] = {
-          ...prior,
-          ...sharedFields,
-          // platform lives outside sharedFields, so without this a record
-          // written by an earlier sync keeps whatever channel it was given.
-          platform,
-          summary: guestName ? `${platform} - ${guestName}` : platform,
-          guestName: fullerName(prior.guestName, guestName),
-        };
-        updated++;
-      } else {
-        const id = `hostex-${confirmationCode || checkIn}-${Math.random().toString(36).slice(2, 7)}`;
-        existing.push({
-          id,
-          sourceId: 'hostex',
-          platform,
-          uid: confirmationCode || id,
-          summary: guestName ? `${platform} - ${guestName}` : platform,
-          confirmationCode: confirmationCode || undefined,
-          isManual: false,
-          createdAt: now,
-          ...sharedFields,
-        } as Booking);
-        created++;
-      }
+      const unit = r.property_id !== undefined ? String(r.property_id) : '';
+      const list = byHostexUnit.get(unit);
+      if (list) list.push(r);
+      else byHostexUnit.set(unit, [r]);
     }
 
-    // Deduplicate by the stay itself — one unit cannot hold two bookings over
-    // the same check-in/check-out pair, so a collision is the same reservation
-    // recorded twice. Confirmation codes deliberately do NOT gate this: a CSV
-    // row and its Hostex counterpart carry different codes, and those are
-    // precisely the duplicates worth collapsing. The winner absorbs the loser's
-    // fields, so a CSV row's cleaning/tax detail survives the merge.
-    let deduped = 0;
-    const seen = new Map<string, number>(); // key → index in existing
-    const toRemove = new Set<number>();
-    for (let i = 0; i < existing.length; i++) {
-      const b = existing[i];
-      // Without both dates the stay isn't identified well enough to merge on.
-      if (!b.checkIn || !b.checkOut) continue;
-      const key = `${b.checkIn}|${b.checkOut}`;
-      const prevIdx = seen.get(key);
-      if (prevIdx === undefined) {
-        seen.set(key, i);
+    const groups: { scope: Scope; hostexIds: string[]; reservations: HostexReservation[] }[] = [];
+    const unassigned: { hostexPropertyId: string; reservations: number }[] = [];
+
+    for (const [unit, reservations] of byHostexUnit) {
+      const owner = live.length === 1
+        ? live[0]
+        : live.find(p => unit && p.externalIds?.includes(unit));
+      if (!owner) {
+        unassigned.push({ hostexPropertyId: unit || '(none)', reservations: reservations.length });
         continue;
       }
-      const prev = existing[prevIdx];
-      // Prefer Hostex-sourced; otherwise prefer whichever has a confirmation code
-      const keepNew = b.sourceId === 'hostex' || (!prev.confirmationCode && !!b.confirmationCode);
-      const [keep, drop] = keepNew ? [b, prev] : [prev, b];
-      absorb(keep, drop);
-      keep.guestName = fullerName(keep.guestName, drop.guestName);
-      toRemove.add(keepNew ? prevIdx : i);
-      if (keepNew) seen.set(key, i);
-      deduped++;
+      const existingGroup = groups.find(g => g.scope.propertyId === owner.id);
+      if (existingGroup) {
+        existingGroup.reservations.push(...reservations);
+        if (unit) existingGroup.hostexIds.push(unit);
+      } else {
+        groups.push({
+          scope: { userId, propertyId: owner.id },
+          hostexIds: unit ? [unit] : [],
+          reservations,
+        });
+      }
     }
-    const dedupedBookings = existing.filter((_, i) => !toRemove.has(i));
 
-    await replaceAllBookings(scope, dedupedBookings);
-    return NextResponse.json({ created, updated, total: active.length, deduped, base: HOSTEX_BASE });
+    const results = await Promise.all(
+      groups.map(async g => ({ ...g, ...(await syncIntoProperty(g.scope, g.reservations)) })),
+    );
+
+    // Remember which Hostex unit each property answers to, so a second property
+    // added later can be given its own id rather than inheriting this one's.
+    const learned = account.properties.map(prop => {
+      const ids = results.filter(r => r.scope.propertyId === prop.id).flatMap(r => r.hostexIds);
+      const merged = Array.from(new Set([...(prop.externalIds ?? []), ...ids]));
+      return merged.length === (prop.externalIds ?? []).length ? prop : { ...prop, externalIds: merged };
+    });
+    if (learned.some((p, i) => p !== account.properties[i])) {
+      await saveAccount(userId, { ...account, properties: learned });
+    }
+
+    return NextResponse.json({
+      created: results.reduce((t, r) => t + r.created, 0),
+      updated: results.reduce((t, r) => t + r.updated, 0),
+      deduped: results.reduce((t, r) => t + r.deduped, 0),
+      total: active.length,
+      unassigned,
+      base: HOSTEX_BASE,
+    });
   } catch (err) {
     if (err instanceof AuthError) return unauthorized();
     console.error('Hostex sync error:', err);
