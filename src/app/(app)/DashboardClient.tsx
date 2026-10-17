@@ -700,18 +700,15 @@ export default function DashboardClient() {
   })();
 
   /**
-   * The month's undated costs, as the stripes the line starts beneath.
-   *
-   * They sum to exactly the depth `cumulativeData` opens at, so the stripes
-   * reach the start of the line rather than approximately reaching it.
+   * What the month owed before it sold a night: the depth `cumulativeData`
+   * opens at, shaded on the chart so the climb out of it is visible.
    */
-  const monthCostBands = (() => {
+  const monthCommitted = (() => {
     const m = statement?.months[currentMonthIdx];
-    if (!m || period !== 'month') return [];
+    if (!m || period !== 'month') return 0;
     return DEDUCTIONS
       .filter(d => !d.dated && deductedFrom(d.from, metric))
-      .map(d => ({ label: d.label, color: d.color, amount: d.pick(m) }))
-      .filter(b => b.amount > 0);
+      .reduce((s, d) => s + d.pick(m), 0);
   })();
 
   /**
@@ -993,11 +990,19 @@ export default function DashboardClient() {
                   onClick={() => setMetric(mt.key)}
                   aria-pressed={on}
                   title={mt.tip}
-                  className={`relative text-left px-4 py-4 border-b border-slate-100 transition-colors
+                  className={`text-left px-4 py-4 border-b border-slate-100 transition-colors
                     ${i % 2 === 1 ? 'border-l border-slate-100' : ''}
                     ${i >= 2 ? 'border-t border-slate-100' : ''} lg:border-t-0
                     ${i > 0 ? 'lg:border-l lg:border-slate-100' : 'lg:border-l-0'}
                     ${on ? '' : 'hover:bg-slate-50/60'}`}
+                  // The selected tile is washed in its own layer's colour,
+                  // fading out towards the chart it is driving. Faded to the
+                  // same hue at zero alpha rather than to `transparent`, which
+                  // interpolates through grey and dirties the middle of the
+                  // gradient.
+                  style={on
+                    ? { backgroundImage: `linear-gradient(180deg, ${mt.color}26 0%, ${mt.color}00 100%)` }
+                    : undefined}
                 >
                   <p className={`text-[11px] uppercase tracking-wide font-semibold truncate ${on ? 'text-slate-700' : 'text-slate-400'}`}>
                     {mt.label}
@@ -1021,9 +1026,6 @@ export default function DashboardClient() {
                       />
                     </div>
                   )}
-                  {/* The chart sits directly below, so the selected tile is
-                      underlined into it like a tab rather than filled in. */}
-                  <span className={`absolute left-0 right-0 -bottom-px h-0.5 ${on ? 'bg-slate-900' : 'bg-transparent'}`} />
                 </button>
               );
             })}
@@ -1042,8 +1044,8 @@ export default function DashboardClient() {
                 {selectedMetric.tip}{' '}
                 {period === 'month'
                   ? selectedMetric.breakeven
-                    ? 'The month opens at the costs it has already committed — the shaded stripes, one per cost — and climbs as stays check in, so crossing zero is the day it paid for itself. The faint line above is gross revenue, and the gap down to it is everything taken out so far.'
-                    : 'Adding up through the month, dashed where it is booked but not yet earned. The faint line above is gross revenue, and the gap down to it is everything taken out so far.'
+                    ? 'The month opens at the costs it has already committed — the shaded block, divided at each cost — and climbs as stays check in, so crossing zero is the day it paid for itself. The bar below names each cost; hover any day for the revenue in by then.'
+                    : 'Adding up through the month, dashed where it is booked but not yet earned. The flat line is the plan. Hover any day for the gross revenue in by then and what had been taken out of it.'
                   : selectedMetric.prorates
                     ? 'Each bar is how far a month landed above or below its plan, grey where the month is still ahead and the gap is left to sell. The faint line is the level itself. Click a month to drill into its P&L.'
                     : 'Each bar is how far a month landed above or below its plan. The month in progress has no bar — its costs land before its revenue does. The faint line is the level itself. Click a month to drill into its P&L.'}
@@ -1069,7 +1071,7 @@ export default function DashboardClient() {
               target={periodTotals[metric].plan !== 0 ? periodTotals[metric].plan : null}
               color={selectedMetric.color}
               breakeven={selectedMetric.breakeven}
-              costBands={monthCostBands}
+              committed={monthCommitted}
             />
           ) : (
             <>

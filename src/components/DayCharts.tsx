@@ -23,9 +23,39 @@ const nightsLabel = (n: number) => `${n} night${n === 1 ? '' : 's'}`;
 
 /** Money on an axis, with the sign in front of the symbol rather than after it. */
 const moneyTick = (v: number) => {
-  const s = `$${(Math.abs(v) / 1000).toFixed(1)}k`;
+  const abs = Math.abs(v);
+  // A round thousand reads as $6k; only an awkward one needs the decimal
+  const s = abs >= 1000
+    ? `$${(abs / 1000).toFixed(abs % 1000 === 0 ? 0 : 1)}k`
+    : `$${Math.round(abs)}`;
   return v < 0 ? `\u2212${s}` : s;
 };
+
+/**
+ * Round bounds and ticks for a money axis.
+ *
+ * Letting the data decide gave axes labelled $7.5k, $4.0k, $0.5k, \u2212$3.0k \u2014 six
+ * numbers with nothing in common, which is most of why a chart reads as noise.
+ * This picks a round step near a sixth of the span and hangs the ticks off
+ * multiples of it, leaving the bounds where the data actually is so the plot is
+ * not padded out with empty space.
+ */
+function moneyScale(lo: number, hi: number): { min: number; max: number; ticks: number[] } {
+  const span = Math.max(hi - lo, 1);
+  const rough = span / 6;
+  const mag = Math.pow(10, Math.floor(Math.log10(rough)));
+  const step = [1, 2, 2.5, 5, 10]
+    .map(m => m * mag)
+    .reduce((best, s) => (Math.abs(s - rough) < Math.abs(best - rough) ? s : best));
+  // Breathing room above for the target label, a little below for the floor
+  const min = lo - span * 0.04;
+  const max = hi + span * 0.1;
+  const ticks: number[] = [];
+  for (let v = Math.ceil(min / step) * step; v <= max; v += step) {
+    ticks.push(Math.round(v * 1e6) / 1e6);
+  }
+  return { min, max, ticks };
+}
 
 const COLORS = {
   earned: '#10b981',
@@ -44,35 +74,14 @@ export type ProgressPoint = {
   booked: number | null;
   /** This day's own movement, for the tooltip. */
   today: number;
-  /** Cumulative gross revenue to this day. Null on the gross chart, where it
-   *  would be the same line drawn twice. */
+  /** Cumulative gross revenue to this day, for the tooltip. It is deliberately
+   *  not plotted: as a second line it doubled the height of the axis to show a
+   *  figure that belongs to the layer above this one. Null on the gross chart,
+   *  where it would repeat the number beside it. */
   gross?: number | null;
   isFuture: boolean;
 };
 
-/**
- * One cost the month owes before it sells a night.
- *
- * Drawn as a stripe across the plot, stacked downward from zero, so the depth
- * of the hole the line starts in is visibly made of named things rather than
- * being one anonymous offset.
- */
-export type CostBand = { label: string; amount: number; color: string };
-
-/**
- * Where each cost sits on the axis, stacked downward from zero in the order
- * given — so the first one listed sits against the zero line and the last is
- * the floor the month starts on. Module level because a running accumulator
- * reassigned during a component's render is what the React compiler refuses.
- */
-function stackDown(costBands: CostBand[]) {
-  let floor = 0;
-  return costBands.map(b => {
-    const top = floor;
-    floor -= b.amount;
-    return { ...b, top, bottom: floor };
-  });
-}
 
 function RunningTooltip({
   active, payload, monthLabel, fmt, target,
@@ -131,16 +140,18 @@ function RunningTooltip({
  * against a flat line at the target. Where the dashed line ends is where the
  * month lands if nothing else sells.
  *
- * All four layers of the money are the same chart on different money. Drawn as
- * nothing but a running total they were also the same picture — one staircase
- * shifted down by however much that layer gives up, which told a reader nothing
- * about what it gave up or to whom. So the layers below gross revenue carry two
- * more things: the gross revenue line faint above, with the gap between them
- * being everything taken out by that day, and the hole the line starts in
- * striped into the named costs that dug it.
+ * All four layers of the money are the same chart on different money, so they
+ * share this one. What separates them here is the depth they start at: a
+ * cash-flow month opens below a mortgage and a month of operating costs, where
+ * a net-revenue month barely opens below zero at all.
+ *
+ * What those costs were belongs to the composition bar under the chart, not on
+ * top of it. An earlier version striped the hole into a labelled band per cost
+ * and drew gross revenue as a second line; between those, the target and
+ * breakeven it carried five annotations, three of them on the same right edge.
  */
 export function MonthProgressChart({
-  points, monthLabel, fmt, target, color = COLORS.earned, breakeven = false, costBands = [],
+  points, monthLabel, fmt, target, color = COLORS.earned, breakeven = false, committed = 0,
 }: {
   points: ProgressPoint[];
   monthLabel: string;
@@ -150,18 +161,20 @@ export function MonthProgressChart({
   color?: string;
   /** Mark zero as breakeven — meaningful for net income, not for revenue. */
   breakeven?: boolean;
-  /** The month's undated costs, outermost first. They stack downward from zero
-   *  and must sum to the depth the line opens at. */
-  costBands?: CostBand[];
+  /** What the month owed before it sold a night: the depth the line opens at. */
+  committed?: number;
 }) {
   const endsAt = points.length ? points[points.length - 1].booked ?? 0 : 0;
   const hasTarget = target != null;
-  const showsGross = points.some(p => p.gross != null);
 
-  const bands = stackDown(costBands);
-  // A stripe thinner than this has nowhere to put a legible label, so it is
-  // named in the composition bar under the chart instead of on top of itself.
-  const stackTotal = costBands.reduce((s, b) => s + b.amount, 0);
+  // The axis is read off the lines, the target and the floor of the costs —
+  // never off the gross series, which is carried for the tooltip only and would
+  // otherwise stretch the scale to twice what the chart is about.
+  const levels = points.flatMap(p => [p.earned, p.booked]).filter((v): v is number => v != null);
+  const scale = moneyScale(
+    Math.min(0, target ?? 0, -committed, ...levels),
+    Math.max(0, target ?? 0, ...levels),
+  );
 
   return (
     <>
@@ -172,33 +185,26 @@ export function MonthProgressChart({
           <YAxis
             tick={{ fontSize: 12 }}
             tickFormatter={moneyTick}
-            // Keep the target line on screen even when the month falls well short,
-            // and keep zero in view so a loss is read against breakeven
-            domain={[
-              (min: number) => Math.min(min, target ?? 0, 0) * 1.08,
-              (max: number) => Math.max(max, target ?? 0) * 1.08,
-            ]}
+            // Zero and the target are always in view, so a loss is read against
+            // breakeven and a short month still shows what it was short of
+            domain={[scale.min, scale.max]}
+            ticks={scale.ticks}
           />
           <Tooltip content={<RunningTooltip monthLabel={monthLabel} fmt={fmt} target={target} />} />
           {/* Declared before everything else so the lines and the zero rule
               paint over the stripes rather than under them */}
-          {bands.map(b => (
+          {/* The hole the month starts in. One block, not a stripe per cost:
+              divided, it needed a label on each division to mean anything, and
+              those labels plus the target's all landed on the same right edge.
+              Which cost is which belongs to the bar under the chart. */}
+          {committed > 0 && (
             <ReferenceArea
-              key={b.label}
-              y1={b.bottom} y2={b.top}
-              fill={b.color} fillOpacity={0.18}
-              stroke={b.color} strokeOpacity={0.45} strokeWidth={1}
+              y1={-committed} y2={0}
+              fill="#64748b" fillOpacity={0.09}
+              stroke="#94a3b8" strokeOpacity={0.35} strokeWidth={1}
               ifOverflow="hidden"
-              label={stackTotal > 0 && b.amount / stackTotal >= 0.15
-                ? {
-                  value: `${b.label} ${fmt(b.amount)}`,
-                  position: 'insideRight',
-                  fontSize: 10,
-                  fill: '#64748b',
-                }
-                : undefined}
             />
-          ))}
+          )}
           {breakeven && (
             <ReferenceLine
               y={0} stroke="#94a3b8" strokeWidth={1}
@@ -217,14 +223,6 @@ export function MonthProgressChart({
 
               Animation off, as on the occupancy chart: the period toggle swaps
               these in and out, and redrawing the line each time is noise. */}
-          {/* What came in, before this layer gives anything up. The gap down to
-              the lines below is the running cost of being this layer. */}
-          {showsGross && (
-            <Line
-              dataKey="gross" type="stepAfter" stroke="#cbd5e1" strokeWidth={1.5}
-              dot={false} connectNulls={false} isAnimationActive={false}
-            />
-          )}
           <Line
             dataKey="earned" type="stepAfter" stroke={color} strokeWidth={2.5}
             dot={false} connectNulls={false} isAnimationActive={false}
@@ -245,10 +243,10 @@ export function MonthProgressChart({
           <span className="w-4 h-0.5 rounded opacity-60" style={{ background: color }} />
           Already booked
         </span>
-        {showsGross && (
+        {committed > 0 && (
           <span className="flex items-center gap-1.5">
-            <span className="w-4 h-0.5 rounded" style={{ background: '#cbd5e1' }} />
-            Gross revenue in
+            <span className="w-2.5 h-2.5 rounded-sm bg-slate-200" />
+            {fmt(committed)} committed before a night sold
           </span>
         )}
         <span className="text-slate-500 font-medium">
