@@ -1,7 +1,7 @@
 'use client';
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ArrowRight, Building2 } from 'lucide-react';
-import { pacingStatus } from '@/lib/pacing';
+import { pacingStatus, planShare } from '@/lib/pacing';
 import PacingRing from '@/components/PacingRing';
 import InfoTip from '@/components/InfoTip';
 import type { PortfolioEntry } from '@/app/api/portfolio/route';
@@ -194,11 +194,7 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
     if (target == null) return { pct: null, variance: null, status: pacingStatus(null) };
     const variance = actual - target;
     const variancePct = target !== 0 ? (variance / Math.abs(target)) * 100 : null;
-    // A ring is the share of the plan met. With a plan at or below zero — a
-    // month expected to lose money — there is no share to draw, so the figure
-    // and its variance carry it alone.
-    const pct = target > 0 ? (actual / target) * 100 : null;
-    return { pct, variance, status: pacingStatus(variancePct) };
+    return { pct: planShare(actual, target), variance, status: pacingStatus(variancePct) };
   }
 
   return (

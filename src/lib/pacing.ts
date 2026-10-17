@@ -28,6 +28,25 @@ export function pacingStatus(
 }
 
 /**
+ * How far a figure has got towards its plan, as a percentage where 100% is
+ * exactly on plan.
+ *
+ * Measured against the size of the plan rather than against the plan itself,
+ * which is what makes it hold when the plan is a loss. A month planned to lose
+ * $1,084 that came in at $84 has beaten its plan comfortably and reads over
+ * 200%; dividing one by the other would have called that −8%, and the rule it
+ * replaces — a share only where the plan was above zero — drew no ring at all
+ * for the one case where the news was best.
+ *
+ * For a plan above zero this is exactly actual ÷ plan, so nothing that already
+ * read sensibly moves by a point.
+ */
+export function planShare(actual: number, plan: number | null | undefined): number | null {
+  if (plan == null || plan === 0) return null;
+  return (1 + (actual - plan) / Math.abs(plan)) * 100;
+}
+
+/**
  * The same band, read against where the period should be by now rather than
  * against its final goal — so earning 60% of a month's target says something
  * different on the 17th than on the 28th.

@@ -4,7 +4,7 @@ import { AnnualStatement, MonthlyStatement, Settings, Platform } from '@/types';
 import StatCard from '@/components/StatCard';
 import { TrendingUp, X, Pencil, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
-import { pacingStatus, paceStatus } from '@/lib/pacing';
+import { pacingStatus, paceStatus, planShare } from '@/lib/pacing';
 import InfoTip from '@/components/InfoTip';
 import PacingRing from '@/components/PacingRing';
 import PropertySetup from '@/components/PropertySetup';
@@ -982,7 +982,7 @@ export default function DashboardClient() {
               // a figure it still has half a month to earn.
               const tilePace = fairPace(mt.key);
               const verdict = tilePace ? paceStatus(tilePace.pct) : null;
-              const pctOfPlan = plan > 0 ? (actual / plan) * 100 : null;
+              const pctOfPlan = planShare(actual, plan);
               const on = metric === mt.key;
               return (
                 <button
@@ -1021,9 +1021,9 @@ export default function DashboardClient() {
                     {/* The same ring the portfolio tiles use, so a share of plan
                         is drawn one way across the app. Its colour follows the
                         verdict rather than the layer, so the ring and the words
-                        beside it can never disagree. A plan at or below zero —
-                        a period expected to lose money — has no share to draw,
-                        and the ring is a bare track. */}
+                        beside it can never disagree. A planned loss that has
+                        been beaten fills the ring, which is what beating it
+                        looks like. */}
                     <PacingRing
                       pct={pctOfPlan}
                       color={verdict?.color === 'text-red-600' ? '#f43f5e' : '#10b981'}
