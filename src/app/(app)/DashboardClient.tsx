@@ -1021,20 +1021,28 @@ export default function DashboardClient() {
           <h2 className="text-xs uppercase tracking-wide text-slate-900 font-semibold">Occupancy &amp; Pricing</h2>
         </div>
 
-      {/* Occupancy and rate for the period, with one status. Break-even rate,
-          nights booked and a second rate status came out: break-even is a
-          full-year figure that ignores the filter, and two status verdicts in
-          one section left it unclear which one the section was reporting. */}
+      {/* The two levers, and one verdict on the pair of them. */}
       {!selMonth && hasData && (() => {
         if (periodMonths.length === 0) return null;
         const occ = periodOccActual;
         const baseline = displayOccTarget;
-        const variancePts = occ != null && baseline != null ? occ - baseline : null;
-        // Variance is in points; express against the baseline so it shares the
-        // same 5% bands as the revenue and net income tiles.
-        const variancePct = variancePts != null && baseline != null && baseline > 0
-          ? (variancePts / baseline) * 100 : null;
-        const status = pacingStatus(variancePct);
+        const occVariancePts = occ != null && baseline != null ? occ - baseline : null;
+
+        const adr = periodAdr;
+        const adrTarget = displayAdrTarget;
+        const adrVariance = adr != null && adrTarget != null ? adr - adrTarget : null;
+
+        // The status judges the two together, as revenue per available night.
+        // They trade against each other — a higher rate sells fewer nights — so
+        // holding each to its own number calls a property behind for the very
+        // move that put it ahead. Their product is the figure neither lever can
+        // flatter on its own: raising the rate only helps while it costs fewer
+        // nights than it is worth.
+        const revpar = occ != null && adr != null ? (occ / 100) * adr : null;
+        const planRevpar = baseline != null && adrTarget != null ? (baseline / 100) * adrTarget : null;
+        const revparPct = revpar != null && planRevpar != null && planRevpar > 0
+          ? ((revpar - planRevpar) / planRevpar) * 100 : null;
+        const status = pacingStatus(revparPct);
 
         return (
           <div className="px-5 py-4">
@@ -1062,39 +1070,13 @@ export default function DashboardClient() {
               </div>
             ) : (
               <>
-                {/* Same sequence as the other two sections: the measure, the gap
-                    to what it is held to, then the verdict. The daily rate moves
-                    under the occupancy it was earned at — it is context for the
-                    figure, not a second thing to compare. */}
+                {/* The two levers, each against what it is held to, and then the
+                    verdict on the pair. Each lever keeps the pencil that sets
+                    its own target. */}
                 <div className="flex items-start gap-4 sm:gap-6">
                   <div className="min-w-0 flex-1">
-                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Occupancy</p>
-                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
-                      {occ != null ? `${occ.toFixed(1)}%` : '—'}
-                    </p>
-                    <div className="flex items-center gap-1 min-w-0">
-                      <p className="text-[11px] text-slate-400 truncate">
-                        {periodLabel}
-                        {periodAdr != null && ` · ${fmt(periodAdr)}/night`}
-                        {periodAdr != null && displayAdrTarget != null && ` of ${fmt(displayAdrTarget)} target`}
-                      </p>
-                      {derivedAdrTarget == null && (
-                        <button
-                          onClick={() => { setAdrTargetInput(String(settings?.targetAdr ?? '')); setEditingAdrTarget(true); }}
-                          className="text-slate-300 hover:text-slate-500 transition-colors shrink-0"
-                          title="Set daily rate target">
-                          <Pencil className="w-3 h-3" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Gap to the baseline, carrying the pencil that sets it */}
-                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">
-                        {variancePts != null && variancePts >= 0 ? 'Over Baseline' : 'Still Needed'}
-                      </p>
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Occupancy</p>
                       <button
                         onClick={() => { setOccTargetInput(String(settings?.targetOccupancyPct ?? '')); setEditingOccTarget(true); }}
                         className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
@@ -1102,33 +1084,72 @@ export default function DashboardClient() {
                         <Pencil className="w-3 h-3" />
                       </button>
                     </div>
-                    <p className={`text-xl font-bold leading-tight mt-0.5 ${
-                      variancePts == null ? 'text-slate-400'
-                        : variancePts >= 0 ? 'text-emerald-600'
-                        : 'text-slate-900'
-                    }`}>
-                      {variancePts == null ? '—'
-                        : variancePts >= 0 ? `+${variancePts.toFixed(1)} pts`
-                        : `${Math.abs(variancePts).toFixed(1)} pts`}
+                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
+                      {occ != null ? `${occ.toFixed(1)}%` : '—'}
                     </p>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {baseline != null ? `of ${baseline.toFixed(1)}% baseline` : 'no baseline set'}
+                      {occVariancePts != null && baseline != null ? (
+                        <>
+                          <span className={occVariancePts >= 0 ? 'text-emerald-600' : 'text-slate-500'}>
+                            {occVariancePts >= 0 ? '+' : '−'}{Math.abs(occVariancePts).toFixed(1)} pts
+                          </span>
+                          {` vs ${baseline.toFixed(1)}% baseline`}
+                        </>
+                      ) : 'no baseline set'}
                     </p>
                   </div>
 
                   <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Daily Rate (ADR)</p>
+                      {/* With a revenue target set the rate plan is derived from
+                          it, so there is nothing here to type. */}
+                      {derivedAdrTarget == null && (
+                        <button
+                          onClick={() => { setAdrTargetInput(String(settings?.targetAdr ?? '')); setEditingAdrTarget(true); }}
+                          className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
+                          title="Set daily rate target">
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
+                      {adr != null ? `${fmt(adr)}` : '—'}
+                    </p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {adrVariance != null && adrTarget != null ? (
+                        <>
+                          <span className={adrVariance >= 0 ? 'text-emerald-600' : 'text-slate-500'}>
+                            {adrVariance >= 0 ? '+' : '−'}{fmt(Math.abs(adrVariance))}
+                          </span>
+                          {` vs ${fmt(adrTarget)} plan`}
+                        </>
+                      ) : adr != null ? 'no rate plan set' : `no nights sold · ${periodLabel}`}
+                    </p>
+                  </div>
+
+                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold flex items-center gap-1">
+                      Status
+                      <InfoTip label="How the two are judged together" align="right">
+                        Occupancy and rate are read as one figure — revenue per available night, occupancy ×
+                        rate. A higher rate on fewer nights can still beat the plan, and a full calendar at a
+                        cut rate can still miss it, so neither lever is held to its own number alone.
+                      </InfoTip>
+                    </p>
                     <p className={`text-xl font-bold leading-tight mt-0.5 ${status.color}`}>{status.label}</p>
-                    {/* Where the baseline comes from, the way Gross Revenue's status
-                        caption names the annual target behind it. */}
-                    <p className="text-[11px] text-slate-400 truncate">baseline · {occBaselineLabel}</p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {revpar != null && planRevpar != null
+                        ? `${fmt(revpar)} of ${fmt(planRevpar)} per night available`
+                        : `baseline · ${occBaselineLabel}`}
+                    </p>
                   </div>
                 </div>
 
-                {occ != null && (
+                {revpar != null && planRevpar != null && planRevpar > 0 && (
                   <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
                     <div className={`h-1 rounded-full transition-all ${status.color === 'text-emerald-600' ? 'bg-emerald-500' : 'bg-red-400'}`}
-                      style={{ width: `${Math.min(100, Math.max(0, occ))}%` }} />
+                      style={{ width: `${Math.min(100, Math.max(0, (revpar / planRevpar) * 100))}%` }} />
                   </div>
                 )}
               </>
