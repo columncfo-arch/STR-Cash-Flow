@@ -1,7 +1,7 @@
 'use client';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
-  usePlotArea,
+  ReferenceArea, usePlotArea,
 } from 'recharts';
 
 /** One calendar day of the month view: what was earned, and whether it was booked. */
@@ -44,8 +44,35 @@ export type ProgressPoint = {
   booked: number | null;
   /** This day's own movement, for the tooltip. */
   today: number;
+  /** Cumulative gross revenue to this day. Null on the gross chart, where it
+   *  would be the same line drawn twice. */
+  gross?: number | null;
   isFuture: boolean;
 };
+
+/**
+ * One cost the month owes before it sells a night.
+ *
+ * Drawn as a stripe across the plot, stacked downward from zero, so the depth
+ * of the hole the line starts in is visibly made of named things rather than
+ * being one anonymous offset.
+ */
+export type CostBand = { label: string; amount: number; color: string };
+
+/**
+ * Where each cost sits on the axis, stacked downward from zero in the order
+ * given — so the first one listed sits against the zero line and the last is
+ * the floor the month starts on. Module level because a running accumulator
+ * reassigned during a component's render is what the React compiler refuses.
+ */
+function stackDown(costBands: CostBand[]) {
+  let floor = 0;
+  return costBands.map(b => {
+    const top = floor;
+    floor -= b.amount;
+    return { ...b, top, bottom: floor };
+  });
+}
 
 function RunningTooltip({
   active, payload, monthLabel, fmt, target,
@@ -64,10 +91,21 @@ function RunningTooltip({
   return (
     <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm min-w-[200px]">
       <p className="font-semibold text-slate-800 mb-2">{monthLabel} {d.day}</p>
+      {d.gross != null && (
+        <div className="flex justify-between gap-6">
+          <span className="text-slate-500">Revenue in</span>
+          <span className="font-medium text-slate-500">{fmt(d.gross)}</span>
+        </div>
+      )}
       <div className="flex justify-between gap-6">
         <span className="text-slate-500">{d.isFuture ? 'On the books' : 'So far'}</span>
         <span className="font-semibold">{fmt(total)}</span>
       </div>
+      {/* The distance between the two lines, which is the whole point of
+          drawing the second one */}
+      {d.gross != null && (
+        <p className="text-xs text-slate-400 mt-1">{fmt(d.gross - total)} taken out by this day</p>
+      )}
       {d.today > 0 && (
         <p className="text-xs text-slate-400 mt-1">{fmt(d.today)} checked in this day</p>
       )}
@@ -93,12 +131,16 @@ function RunningTooltip({
  * against a flat line at the target. Where the dashed line ends is where the
  * month lands if nothing else sells.
  *
- * All four layers of the money are the same chart on different money, so they
- * share this one — the layers carrying costs open below zero at what the month
- * has already committed and mark where they break even.
+ * All four layers of the money are the same chart on different money. Drawn as
+ * nothing but a running total they were also the same picture — one staircase
+ * shifted down by however much that layer gives up, which told a reader nothing
+ * about what it gave up or to whom. So the layers below gross revenue carry two
+ * more things: the gross revenue line faint above, with the gap between them
+ * being everything taken out by that day, and the hole the line starts in
+ * striped into the named costs that dug it.
  */
 export function MonthProgressChart({
-  points, monthLabel, fmt, target, color = COLORS.earned, breakeven = false,
+  points, monthLabel, fmt, target, color = COLORS.earned, breakeven = false, costBands = [],
 }: {
   points: ProgressPoint[];
   monthLabel: string;
@@ -108,9 +150,18 @@ export function MonthProgressChart({
   color?: string;
   /** Mark zero as breakeven — meaningful for net income, not for revenue. */
   breakeven?: boolean;
+  /** The month's undated costs, outermost first. They stack downward from zero
+   *  and must sum to the depth the line opens at. */
+  costBands?: CostBand[];
 }) {
   const endsAt = points.length ? points[points.length - 1].booked ?? 0 : 0;
   const hasTarget = target != null;
+  const showsGross = points.some(p => p.gross != null);
+
+  const bands = stackDown(costBands);
+  // A stripe thinner than this has nowhere to put a legible label, so it is
+  // named in the composition bar under the chart instead of on top of itself.
+  const stackTotal = costBands.reduce((s, b) => s + b.amount, 0);
 
   return (
     <>
@@ -129,6 +180,25 @@ export function MonthProgressChart({
             ]}
           />
           <Tooltip content={<RunningTooltip monthLabel={monthLabel} fmt={fmt} target={target} />} />
+          {/* Declared before everything else so the lines and the zero rule
+              paint over the stripes rather than under them */}
+          {bands.map(b => (
+            <ReferenceArea
+              key={b.label}
+              y1={b.bottom} y2={b.top}
+              fill={b.color} fillOpacity={0.18}
+              stroke={b.color} strokeOpacity={0.45} strokeWidth={1}
+              ifOverflow="hidden"
+              label={stackTotal > 0 && b.amount / stackTotal >= 0.15
+                ? {
+                  value: `${b.label} ${fmt(b.amount)}`,
+                  position: 'insideRight',
+                  fontSize: 10,
+                  fill: '#64748b',
+                }
+                : undefined}
+            />
+          ))}
           {breakeven && (
             <ReferenceLine
               y={0} stroke="#94a3b8" strokeWidth={1}
@@ -147,6 +217,14 @@ export function MonthProgressChart({
 
               Animation off, as on the occupancy chart: the period toggle swaps
               these in and out, and redrawing the line each time is noise. */}
+          {/* What came in, before this layer gives anything up. The gap down to
+              the lines below is the running cost of being this layer. */}
+          {showsGross && (
+            <Line
+              dataKey="gross" type="stepAfter" stroke="#cbd5e1" strokeWidth={1.5}
+              dot={false} connectNulls={false} isAnimationActive={false}
+            />
+          )}
           <Line
             dataKey="earned" type="stepAfter" stroke={color} strokeWidth={2.5}
             dot={false} connectNulls={false} isAnimationActive={false}
@@ -167,6 +245,12 @@ export function MonthProgressChart({
           <span className="w-4 h-0.5 rounded opacity-60" style={{ background: color }} />
           Already booked
         </span>
+        {showsGross && (
+          <span className="flex items-center gap-1.5">
+            <span className="w-4 h-0.5 rounded" style={{ background: '#cbd5e1' }} />
+            Gross revenue in
+          </span>
+        )}
         <span className="text-slate-500 font-medium">
           {!hasTarget ? `Lands at ${fmt(endsAt)} on what is booked`
             : endsAt >= target ? `Lands at ${fmt(endsAt)} — ${fmt(endsAt - target)} over target`

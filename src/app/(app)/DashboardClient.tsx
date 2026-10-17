@@ -78,10 +78,14 @@ type MetricKey = typeof METRICS[number]['key'];
  * Module level rather than inline: a running accumulator reassigned during a
  * component's render is exactly what the React compiler refuses.
  */
-function runningFrom(start: number, byDay: number[], todayDay: number): ProgressPoint[] {
+function runningFrom(
+  start: number, byDay: number[], todayDay: number, grossByDay?: number[],
+): ProgressPoint[] {
   let running = start;
+  let gross = 0;
   return byDay.map((v, i) => {
     running += v;
+    gross += grossByDay?.[i] ?? 0;
     const day = i + 1;
     const value = Math.round(running);
     return {
@@ -89,10 +93,37 @@ function runningFrom(start: number, byDay: number[], todayDay: number): Progress
       earned: day <= todayDay ? value : null,
       booked: day >= todayDay ? value : null,
       today: Math.round(v),
+      gross: grossByDay ? Math.round(gross) : null,
       isFuture: day > todayDay,
     };
   });
 }
+
+/**
+ * What stands between gross revenue and each layer below it, outermost first.
+ *
+ * One list, so the stripes in the chart and the bar beneath it name the same
+ * costs in the same colours. A deduction applies to the layer it is listed
+ * against and to every layer below that one.
+ */
+const DEDUCTIONS = [
+  {
+    label: 'Platform fees & tax', color: '#cbd5e1', from: 'netRevenue',
+    // Fees arrive with the booking that caused them, so they ride in the daily
+    // steps. Everything below is a monthly figure with no day attached, which
+    // is why it lands whole at the start of the month and draws as a stripe.
+    dated: true,
+    pick: (m: PnLData) => m.platformFees + m.fastPayFees + m.taxRemitted,
+  },
+  { label: 'Guest refunds', color: '#94a3b8', from: 'netRevenue', dated: false, pick: (m: PnLData) => m.refunds },
+  { label: 'Operating expenses', color: '#64748b', from: 'operatingIncome', dated: false, pick: (m: PnLData) => m.totalOperatingExpenses },
+  { label: 'Mortgage', color: '#475569', from: 'netIncome', dated: false, pick: (m: PnLData) => m.piti },
+] as const;
+
+/** Layers run outermost to innermost, so a deduction applies from its own layer down. */
+const LAYER_ORDER = METRICS.map(m => m.key) as MetricKey[];
+const deductedFrom = (from: MetricKey, metric: MetricKey) =>
+  LAYER_ORDER.indexOf(metric) >= LAYER_ORDER.indexOf(from);
 
 function PlatformTable({
   byPlatform, totalRevenue, fmt,
@@ -648,10 +679,12 @@ export default function DashboardClient() {
         : m.refunds + m.totalOperatingExpenses + m.piti;
 
     const byDay = new Array<number>(daysInCurMonth).fill(0);
+    const grossByDay = new Array<number>(daysInCurMonth).fill(0);
     for (const b of m.bookings) {
       // Slice the day out of YYYY-MM-DD; Date would shift it across timezones
       const d = Number(b.checkIn.slice(8, 10));
       if (d < 1 || d > daysInCurMonth) continue;
+      grossByDay[d - 1] += b.income;
       byDay[d - 1] += metric === 'grossRevenue'
         ? b.income
         : b.income - (b.platformFee ?? 0) - (b.fastPayFee ?? 0)
@@ -659,7 +692,49 @@ export default function DashboardClient() {
     }
 
     const isLiveMonth = now.getFullYear() === year && now.getMonth() === currentMonthIdx;
-    return runningFrom(-committed, byDay, isLiveMonth ? now.getDate() : daysInCurMonth);
+    return runningFrom(
+      -committed, byDay, isLiveMonth ? now.getDate() : daysInCurMonth,
+      // On the gross chart this would be the same line drawn twice
+      metric === 'grossRevenue' ? undefined : grossByDay,
+    );
+  })();
+
+  /**
+   * The month's undated costs, as the stripes the line starts beneath.
+   *
+   * They sum to exactly the depth `cumulativeData` opens at, so the stripes
+   * reach the start of the line rather than approximately reaching it.
+   */
+  const monthCostBands = (() => {
+    const m = statement?.months[currentMonthIdx];
+    if (!m || period !== 'month') return [];
+    return DEDUCTIONS
+      .filter(d => !d.dated && deductedFrom(d.from, metric))
+      .map(d => ({ label: d.label, color: d.color, amount: d.pick(m) }))
+      .filter(b => b.amount > 0);
+  })();
+
+  /**
+   * Where the period's gross revenue went to arrive at the selected layer.
+   *
+   * The chart can only show the shape of a layer over time, and for every layer
+   * but gross revenue that shape is the same staircase moved down — the costs
+   * are monthly figures, so they offset the line without bending it. What they
+   * cost is a composition, not a trend, so it is drawn as one.
+   */
+  const bridge = (() => {
+    if (metric === 'grossRevenue' || periodMonths.length === 0) return null;
+    const months = periodMonths.map(monthStmt).filter((m): m is NonNullable<typeof m> => !!m);
+    const taken = DEDUCTIONS
+      .filter(d => deductedFrom(d.from, metric))
+      .map(d => ({ label: d.label, color: d.color, amount: months.reduce((s, m) => s + d.pick(m), 0) }))
+      .filter(t => t.amount > 0);
+    const gross = periodTotals.grossRevenue.actual;
+    const left = periodTotals[metric].actual;
+    // When the costs outrun the revenue there is no remainder to draw, and the
+    // bar fills with them — which is the honest picture of a month that lost money
+    const scale = Math.max(gross, taken.reduce((s, t) => s + t.amount, 0));
+    return { gross, taken, left, scale };
   })();
 
   /**
@@ -967,8 +1042,8 @@ export default function DashboardClient() {
                 {selectedMetric.tip}{' '}
                 {period === 'month'
                   ? selectedMetric.breakeven
-                    ? 'The month opens at the costs it has already committed and climbs as stays check in, so crossing zero is the day it paid for itself. Dashed where it is booked but not yet earned.'
-                    : 'Adding up through the month, dashed where it is booked but not yet earned. The flat line is the plan.'
+                    ? 'The month opens at the costs it has already committed — the shaded stripes, one per cost — and climbs as stays check in, so crossing zero is the day it paid for itself. The faint line above is gross revenue, and the gap down to it is everything taken out so far.'
+                    : 'Adding up through the month, dashed where it is booked but not yet earned. The faint line above is gross revenue, and the gap down to it is everything taken out so far.'
                   : selectedMetric.prorates
                     ? 'Each bar is how far a month landed above or below its plan, grey where the month is still ahead and the gap is left to sell. The faint line is the level itself. Click a month to drill into its P&L.'
                     : 'Each bar is how far a month landed above or below its plan. The month in progress has no bar — its costs land before its revenue does. The faint line is the level itself. Click a month to drill into its P&L.'}
@@ -994,6 +1069,7 @@ export default function DashboardClient() {
               target={periodTotals[metric].plan !== 0 ? periodTotals[metric].plan : null}
               color={selectedMetric.color}
               breakeven={selectedMetric.breakeven}
+              costBands={monthCostBands}
             />
           ) : (
             <>
@@ -1012,6 +1088,55 @@ export default function DashboardClient() {
                 </p>
               )}
             </>
+          )}
+
+          {/* ── What the period's revenue went on to reach this layer ──
+              The chart shows the shape over time; this shows the composition,
+              which is the part a running total cannot draw. */}
+          {hasData && bridge && bridge.scale > 0 && (
+            <div className="mt-5 pt-4 border-t border-slate-100">
+              <p className="text-[11px] text-slate-400 mb-2">
+                Where {fmt(bridge.gross)} of gross revenue went · {periodLabel}
+              </p>
+              <div className="flex h-2.5 rounded-full overflow-hidden bg-slate-100">
+                {bridge.taken.map(t => (
+                  <div
+                    key={t.label}
+                    style={{ width: `${(t.amount / bridge.scale) * 100}%`, background: t.color }}
+                    title={`${t.label}: ${fmt(t.amount)}`}
+                  />
+                ))}
+                {bridge.left > 0 && (
+                  <div
+                    style={{ width: `${(bridge.left / bridge.scale) * 100}%`, background: selectedMetric.color }}
+                    title={`${selectedMetric.label}: ${fmt(bridge.left)}`}
+                  />
+                )}
+              </div>
+              <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2.5 text-[11px]">
+                {bridge.taken.map(t => (
+                  <span key={t.label} className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: t.color }} />
+                    <span className="text-slate-400">{t.label}</span>
+                    <span className="text-slate-600 font-medium">−{fmt(t.amount)}</span>
+                  </span>
+                ))}
+                <span className="flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: selectedMetric.color }} />
+                  <span className="text-slate-400">{selectedMetric.label}</span>
+                  <span className={`font-semibold ${bridge.left < 0 ? 'text-red-600' : 'text-slate-800'}`}>
+                    {fmt(bridge.left)}
+                  </span>
+                </span>
+                {/* "−38% of gross kept" is not a sentence. A period whose costs
+                    outran its revenue says so instead. */}
+                <span className="text-slate-400 ml-auto">
+                  {bridge.gross <= 0 ? null
+                    : bridge.left >= 0 ? `${((bridge.left / bridge.gross) * 100).toFixed(0)}% of gross kept`
+                    : `costs ran ${fmt(-bridge.left)} past revenue`}
+                </span>
+              </div>
+            </div>
           )}
         </div>
       </section>
