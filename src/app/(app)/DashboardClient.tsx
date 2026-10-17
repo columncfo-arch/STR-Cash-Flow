@@ -6,6 +6,7 @@ import { TrendingUp, X, Pencil, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
 import { pacingStatus, paceStatus } from '@/lib/pacing';
 import InfoTip from '@/components/InfoTip';
+import PropertySetup from '@/components/PropertySetup';
 import { addDays } from '@/lib/dateRange';
 import {
   DayRevenueChart, DayOccupancyChart, MonthProgressChart, DayDatum, ProgressPoint,
@@ -617,6 +618,15 @@ export default function DashboardClient() {
 
   return (
     <div className="max-w-6xl mx-auto">
+      {/* A unit with no stays yet has nothing to chart, so say what it is
+          waiting for rather than showing a page of zeroes. */}
+      {!hasData && settings && (
+        <PropertySetup
+          propertyName={settings.propertyName}
+          hasPITI={(settings.monthlyPITI ?? 0) > 0}
+          hasTarget={manualTarget != null}
+        />
+      )}
 
       {/* ── Period filter: drives every tile on the page ── */}
       {!selMonth && (

@@ -23,6 +23,7 @@ export default function PropertySwitcher() {
   }, []);
 
   const live = account?.properties.filter(p => !p.archived) ?? [];
+  const archived = account?.properties.filter(p => p.archived) ?? [];
   const active = live.find(p => p.id === account?.activePropertyId) ?? live[0];
 
   async function send(body: Record<string, unknown>, method: 'POST' | 'PUT') {
@@ -123,6 +124,27 @@ export default function PropertySwitcher() {
               <span className="w-3.5 shrink-0"><Plus className="w-3 h-3" /></span>
               Add a property
             </button>
+          )}
+
+          {/* Archiving is reachable from Settings; without this, restoring is
+              not reachable from anywhere. */}
+          {archived.length > 0 && (
+            <div className="mt-1 pt-1 border-t border-slate-800">
+              <p className="px-2 py-1 text-[10px] uppercase tracking-wide text-slate-600">Removed</p>
+              {archived.map(p => (
+                <div key={p.id} className="flex items-center gap-2 px-2 py-1">
+                  <span className="w-3.5 shrink-0" />
+                  <span className="flex-1 min-w-0 truncate text-xs text-slate-600">{p.name}</span>
+                  <button
+                    disabled={busy}
+                    onClick={() => send({ id: p.id, archived: false, activePropertyId: p.id }, 'PUT')}
+                    className="text-[11px] text-slate-500 hover:text-emerald-400 shrink-0"
+                  >
+                    Restore
+                  </button>
+                </div>
+              ))}
+            </div>
           )}
 
           {error && <p className="px-2 pb-1 text-[11px] text-red-400">{error}</p>}

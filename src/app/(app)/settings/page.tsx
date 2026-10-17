@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useState } from 'react';
-import { Settings } from '@/types';
+import { Account, Settings } from '@/types';
 import { AlertTriangle } from 'lucide-react';
 import ImportEarnings from '@/components/ImportEarnings';
 import InfoTip from '@/components/InfoTip';
@@ -11,6 +11,34 @@ export default function SettingsPage() {
   const [seeded, setSeeded] = useState<string | null>(null);
   const [migrating, setMigrating] = useState(false);
   const [migrateResult, setMigrateResult] = useState<string | null>(null);
+  const [account, setAccount] = useState<Account | null>(null);
+  const [archiving, setArchiving] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
+
+  async function archiveProperty() {
+    const active = account?.activePropertyId;
+    if (!active) return;
+    if (!confirm('Remove this property from the portfolio? Its books are kept.')) return;
+    setArchiving(true);
+    setArchiveError(null);
+    try {
+      const res = await fetch('/api/account', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: active, archived: true }),
+      });
+      if (!res.ok) {
+        setArchiveError(((await res.json()) as { error?: string }).error ?? 'That did not work');
+        return;
+      }
+      // Every page is still showing the property that just left the portfolio
+      window.location.href = '/';
+    } catch {
+      setArchiveError('That did not work');
+    } finally {
+      setArchiving(false);
+    }
+  }
 
   async function clearAllBookings() {
     if (!confirm('Delete ALL bookings? This cannot be undone.')) return;
@@ -58,6 +86,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(setSettings);
+    fetch('/api/account').then(r => r.json()).then(setAccount).catch(() => {});
   }, []);
 
   async function save(updated: Settings) {
@@ -168,6 +197,26 @@ export default function SettingsPage() {
         {migrateResult && <p className="text-xs text-slate-600 mt-3 p-3 rounded-lg">{migrateResult}</p>}
         {seeded && <p className="text-xs text-slate-600 mt-3 p-3 bg-slate-50 rounded-lg">{seeded}</p>}
       </section>
+
+      {/* Archiving, not deleting. A unit you stop renting still has a year of
+          books worth keeping, and closing it should not be what destroys them. */}
+      {account && account.properties.filter(p => !p.archived).length > 1 && (
+        <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm mt-4">
+          <h2 className="font-semibold text-slate-800 mb-2">Remove {settings.propertyName}</h2>
+          <p className="text-sm text-slate-500 mb-4">
+            Takes it out of the portfolio and the switcher. Its bookings, expenses and settings are kept,
+            so it can be brought back.
+          </p>
+          <button
+            onClick={archiveProperty}
+            disabled={archiving}
+            className="flex items-center gap-2 border border-slate-200 text-slate-600 px-4 py-2 rounded-lg text-sm hover:bg-slate-50 transition-colors disabled:opacity-60"
+          >
+            {archiving ? 'Removing…' : `Remove ${settings.propertyName} from the portfolio`}
+          </button>
+          {archiveError && <p className="text-xs text-red-600 mt-2">{archiveError}</p>}
+        </section>
+      )}
 
       <section className="bg-white border border-red-100 rounded-xl p-6 shadow-sm mt-4">
         <h2 className="font-semibold text-red-700 mb-2">Danger Zone</h2>
