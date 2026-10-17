@@ -1,31 +1,31 @@
 'use client';
 import { useState } from 'react';
 import Link from 'next/link';
-import { BookOpen, TrendingUp, Activity, Sliders, UserPlus, ChevronRight, ChevronDown, Check, Target, PiggyBank, Lock } from 'lucide-react';
+import { BookOpen, TrendingUp, Activity, Sliders, UserPlus, ChevronRight, ChevronDown, Check, Target, PiggyBank } from 'lucide-react';
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? '';
 
 const BENEFITS: { icon: React.ComponentType<{ className?: string }>; title: string; iconColor: string; iconBg: string; benefit: string }[] = [
   {
     icon: Target,
-    title: 'From Guesswork to Certainty',
+    title: 'Goodbye Spreadsheets. Hello Clarity.',
     iconColor: 'text-emerald-600',
     iconBg: 'bg-emerald-50',
-    benefit: 'Know exactly how your business is doing — real profit, seasonal dips, and year-over-year progress — without touching a spreadsheet.',
+    benefit: 'Track your real profit and seasonal trends instantly. No more late nights spent wrestling with Excel.',
   },
   {
     icon: PiggyBank,
-    title: 'From Passive Income to Active Wealth',
+    title: 'See Your Total Return Today and Tomorrow',
     iconColor: 'text-blue-600',
     iconBg: 'bg-blue-50',
-    benefit: "Watch your net worth grow every month, see your true return on investment, and know exactly when you're ready to buy your next property.",
+    benefit: 'Stop waiting for annual tax summaries to see how you did. Track live equity, appreciation, and cash flow to confidently control your financial future.',
   },
   {
-    icon: Lock,
-    title: 'From Marketplace Dependent to Independent Brand',
+    icon: Activity,
+    title: 'Track Performance Instantly',
     iconColor: 'text-violet-600',
     iconBg: 'bg-violet-50',
-    benefit: 'Own your guest relationships, keep more of every dollar you earn, and list everywhere — Airbnb, Vrbo, and Booking.com — without the headache.',
+    benefit: 'Stop logging into five different platform tabs. Aggregate live booking data from Airbnb, Vrbo, and Booking.com into one clear dashboard.',
   },
 ];
 
