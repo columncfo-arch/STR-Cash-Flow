@@ -1,13 +1,16 @@
 'use client';
 import { useEffect, useState, useMemo } from 'react';
-import { DirectLead, Settings } from '@/types';
+import { Account, DirectLead, Settings } from '@/types';
 import { format } from 'date-fns';
 import { Zap, Check, Mail, Phone, Download, Search, ExternalLink, Copy, RefreshCw } from 'lucide-react';
 import InfoTip from '@/components/InfoTip';
+import { useUser } from '@clerk/nextjs';
 
 type Tab = 'leads' | 'site';
 
 export default function DirectBookingPage() {
+  const { user } = useUser();
+  const [account, setAccount] = useState<Account | null>(null);
   const [tab, setTab] = useState<Tab>('leads');
   const [leads, setLeads] = useState<DirectLead[]>([]);
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -16,10 +19,12 @@ export default function DirectBookingPage() {
   const [syncResult, setSyncResult] = useState<string | null>(null);
 
   async function load() {
-    const [l, s] = await Promise.all([
+    const [l, s, a] = await Promise.all([
       fetch('/api/direct-booking').then(r => r.json()),
       fetch('/api/settings').then(r => r.json()),
+      fetch('/api/account').then(r => r.json()).catch(() => null),
     ]);
+    setAccount(a);
     setLeads(Array.isArray(l) ? l : []);
     setSettings(s);
   }
@@ -78,6 +83,13 @@ export default function DirectBookingPage() {
   }, [leads, search]);
 
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
+  // The public pages need the host and the unit, or an enquiry arrives belonging
+  // to nobody. A link copied without them is the enquiry that never appears.
+  const bookQuery = user?.id
+    ? `?u=${encodeURIComponent(user.id)}${account?.activePropertyId ? `&p=${encodeURIComponent(account.activePropertyId)}` : ''}`
+    : '';
+  const bookPath = `/book${bookQuery}`;
+  const bookDirectPath = `/book-direct${bookQuery}`;
 
   if (!settings) return <div className="text-slate-400 text-sm">Loading…</div>;
 
@@ -104,7 +116,7 @@ export default function DirectBookingPage() {
         {tab === 'site' && (
           <div className="flex items-center gap-3">
             <a
-              href="/book"
+              href={bookPath}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 text-sm text-emerald-600 hover:text-emerald-700 font-medium"
@@ -112,7 +124,7 @@ export default function DirectBookingPage() {
               <ExternalLink className="w-4 h-4" /> Preview booking page
             </a>
             <button
-              onClick={() => navigator.clipboard.writeText(`${origin}/book`)}
+              onClick={() => navigator.clipboard.writeText(`${origin}${bookPath}`)}
               className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-700 border border-slate-200 rounded-lg px-3 py-1.5"
             >
               <Copy className="w-3.5 h-3.5" /> Copy link
@@ -155,9 +167,9 @@ export default function DirectBookingPage() {
               <p className="text-slate-500 text-sm font-medium">No direct booking leads yet</p>
               <p className="text-slate-400 text-xs mt-1">
                 Share your{' '}
-                <a href="/book" target="_blank" className="text-emerald-600 underline">/book</a>
+                <a href={bookPath} target="_blank" className="text-emerald-600 underline">/book</a>
                 {' '}page or{' '}
-                <a href="/book-direct" target="_blank" className="text-emerald-600 underline">/book-direct</a>
+                <a href={bookDirectPath} target="_blank" className="text-emerald-600 underline">/book-direct</a>
                 {' '}campaign with past guests.
               </p>
             </div>

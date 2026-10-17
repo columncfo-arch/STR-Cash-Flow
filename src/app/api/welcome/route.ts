@@ -61,6 +61,7 @@ export async function POST(req: Request) {
       phone: phone?.trim() || undefined,
       tcpaConsent: tcpaConsent ?? false,
       source: 'welcome',
+      propertyId: scope.propertyId,
       createdAt: new Date().toISOString(),
     };
     await addLead(userId, lead);

@@ -1,5 +1,6 @@
 'use client';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Home, Check, CreditCard, Calendar, AlertCircle } from 'lucide-react';
 
 interface PropertyInfo {
@@ -50,7 +51,18 @@ const PAYMENT_OPTIONS: { value: PaymentMethod; label: string; note: string; fee:
   { value: 'bank', label: 'Bank Transfer', note: 'No fee', fee: false },
 ];
 
-export default function BookPage() {
+function BookContent() {
+  // The link a guest follows carries ?u= for the host and ?p= for the unit.
+  // Dropping them on the way to the API is how an enquiry ends up belonging to
+  // nobody — the POST below was rejected outright without the host id.
+  const params = useSearchParams();
+  const hostQuery = (() => {
+    const u = params.get('u');
+    const p = params.get('p');
+    if (!u) return '';
+    return `?u=${encodeURIComponent(u)}${p ? `&p=${encodeURIComponent(p)}` : ''}`;
+  })();
+
   const [info, setInfo] = useState<PropertyInfo | null>(null);
   const [blocked, setBlocked] = useState<BlockedRange[]>([]);
   const [step, setStep] = useState<Step>('booking');
@@ -69,13 +81,13 @@ export default function BookPage() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/welcome').then(r => r.json()),
-      fetch('/api/calendar').then(r => r.json()),
+      fetch(`/api/welcome${hostQuery}`).then(r => r.json()),
+      fetch(`/api/calendar${hostQuery}`).then(r => r.json()),
     ]).then(([propInfo, cal]) => {
       setInfo(propInfo);
       setBlocked(cal.blocked ?? []);
     }).catch(() => {});
-  }, []);
+  }, [hostQuery]);
 
   const nights = checkIn && checkOut ? nightsBetween(checkIn, checkOut) : 0;
   const minNights = info?.directMinNights ?? 2;
@@ -96,7 +108,7 @@ export default function BookPage() {
     setSubmitting(true);
     try {
       const preferredDates = `${fmtDate(checkIn)} – ${fmtDate(checkOut)} (${nights} nights)`;
-      const res = await fetch('/api/direct-booking', {
+      const res = await fetch(`/api/direct-booking${hostQuery}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ firstName, lastName, email, phone, preferredDates, tcpaConsent }),
@@ -338,5 +350,13 @@ export default function BookPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function BookPage() {
+  return (
+    <Suspense>
+      <BookContent />
+    </Suspense>
   );
 }

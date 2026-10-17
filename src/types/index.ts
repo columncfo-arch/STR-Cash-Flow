@@ -247,6 +247,13 @@ export interface DirectLead {
   preferredDates?: string;
   tcpaConsent: boolean;
   source: 'direct_booking' | 'welcome';
+  /**
+   * The unit whose welcome code or booking form this came through. Absent on
+   * leads captured before properties existed, which cannot be attributed to one
+   * — so the roster shows them whichever unit is in view rather than hiding
+   * them from all of them.
+   */
+  propertyId?: string;
   createdAt: string;
 }
 

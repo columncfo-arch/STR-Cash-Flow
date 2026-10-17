@@ -1,5 +1,6 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Home, Check, CreditCard, Zap, Shield, Star, ChevronDown, ChevronUp } from 'lucide-react';
 
 type Step = 'hero' | 'submitted' | 'error';
@@ -11,7 +12,18 @@ function fmt(n: number) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n);
 }
 
-export default function BookDirectPage() {
+function BookDirectContent() {
+  // The link a guest follows carries ?u= for the host and ?p= for the unit.
+  // Dropping them on the way to the API is how an enquiry ends up belonging to
+  // nobody — the POST below was rejected outright without the host id.
+  const params = useSearchParams();
+  const hostQuery = (() => {
+    const u = params.get('u');
+    const p = params.get('p');
+    if (!u) return '';
+    return `?u=${encodeURIComponent(u)}${p ? `&p=${encodeURIComponent(p)}` : ''}`;
+  })();
+
   const [step, setStep] = useState<Step>('hero');
   const [propertyName, setPropertyName] = useState('Our Property');
   const [tripBase, setTripBase] = useState(1000);
@@ -26,11 +38,11 @@ export default function BookDirectPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    fetch('/api/welcome')
+    fetch(`/api/welcome${hostQuery}`)
       .then(r => r.json())
       .then(d => { if (d.propertyName) setPropertyName(d.propertyName); })
       .catch(() => {});
-  }, []);
+  }, [hostQuery]);
 
   const platformTotal = tripBase * (1 + PLATFORM_FEE_PCT);
   const directTotal = tripBase * (1 + DIRECT_FEE_PCT);
@@ -42,7 +54,7 @@ export default function BookDirectPage() {
     if (!firstName || !email) return;
     setSubmitting(true);
     try {
-      const res = await fetch('/api/direct-booking', {
+      const res = await fetch(`/api/direct-booking${hostQuery}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ firstName, lastName, email, phone, preferredDates, tcpaConsent }),
@@ -327,5 +339,13 @@ export default function BookDirectPage() {
         </p>
       </div>
     </div>
+  );
+}
+
+export default function BookDirectPage() {
+  return (
+    <Suspense>
+      <BookDirectContent />
+    </Suspense>
   );
 }
