@@ -26,6 +26,13 @@ revenue like parking is, and the actual bills are ordinary operating expenses.
 No matching between a charge and a bill, and over- or under-recovery shows up by
 itself in NOI.
 
+**A lease can end before it was meant to.** A tenant may buy their way out: a
+fee, and a move-out date earlier than the contracted end. Both facts are kept —
+the date the lease was written to run to, and the date the tenant actually left
+— because "this was contracted to December and ended in August" and "this was
+always an August lease" are different facts, and only the first one explains the
+vacancy that follows.
+
 **ADR does not apply to a leased unit.** It is revenue ÷ nights sold, and a
 lease sells no nights. The ledger shows nothing rather than a number that invites
 comparison with a nightly rate.
@@ -51,6 +58,8 @@ interface Lease {
   monthlyRent: number;
   startDate: string;                    // YYYY-MM-DD
   endDate: string | null;               // null ⇒ month-to-month
+  /** Actual move-out, when a tenant left before endDate. Rent stops here. */
+  terminatedOn?: string | null;
   renewalNoticeDate?: string | null;    // the date worth warning about
   depositHeld?: number;
   notes?: string;
@@ -85,15 +94,26 @@ itself.
 one-off is a charge that is not recurring. The expense side proved that rule;
 the revenue side should not grow a second one.
 
+An early termination fee is a `LeaseCharge` dated the move-out, not a field on
+the lease. It then needs no recognition code of its own, and the cases where a
+tenancy ends early without a fee — a mutual agreement, a military clause, a
+buy-out waived — are the ordinary ones rather than a null to work around. The
+lease carries the date; the charge carries the money. The UI should offer to
+create the charge when a termination is recorded, so the two are entered
+together even though they are stored apart.
+
 Storage follows bookings and expenses: `str:leases:<user>:<property>` and
 `str:lease-charges:<user>:<property>`, scoped per property, hashed by id.
 
 ## Recognition
 
-For a month `M`:
+The lease's effective end is the earlier of its contracted end and its actual
+move-out, so terminating one is a single field and the arithmetic below does not
+change. For a month `M`:
 
 ```
-leaseDays   = days of M covered by [startDate, endDate]
+effectiveEnd = earliest of (endDate, terminatedOn)
+leaseDays   = days of M covered by [startDate, effectiveEnd]
 rent        = monthlyRent × leaseDays / daysInMonth
 charges     = Σ amount for each charge occurring in M
               × (proratesWithLease ? leaseDays / daysInMonth : 1)
@@ -104,6 +124,14 @@ Worked: $2,400/month from 20 March, $75 parking, in a 31-day March.
 `leaseDays = 12`, `rent = 2400 × 12/31 = $929.03`, `parking = 75 × 12/31 =
 $29.03`, `leaseRevenue = $958.06`.
 
+Worked, terminated early: the same lease runs to 31 December, the tenant leaves
+on 15 August and pays a $2,400 termination fee. August has `leaseDays = 15`, so
+`rent = $1,161.29` and `parking = $36.29`; the fee lands whole, being a one-off
+charge rather than a monthly one. August recognises `$3,597.58`. September
+onward recognises nothing and reads as vacant, which is the point — the fee
+softens the month the tenant left, and the hole it leaves is still visible in
+every month after it.
+
 Lease revenue joins `grossRevenue` and carries no platform fee or
 platform-remitted tax — nobody takes a cut of rent — so it flows into net
 revenue untouched. `PnLSummary` gains `leaseRevenue` so a mixed unit can be read
@@ -113,8 +141,12 @@ either way, and `MonthlyStatement` gains `leasedDays` for occupancy.
 
 Two dates per lease, for the chart overlay:
 
-- `renewalNoticeDate` — amber. The deadline to give or receive notice.
-- `endDate` — red. The lease ends; the unit is vacant unless re-let.
+- `renewalNoticeDate` — amber. The deadline to give or receive notice. Drops
+  out once `terminatedOn` is set: nobody is renewing a tenancy that has ended.
+- effective end — red. The lease ends and the unit is vacant unless re-let. On a
+  terminated lease this is the actual move-out, not the contracted end, because
+  that is when the unit really empties. The tooltip should say it ended early and
+  name the date it was written to run to.
 
 They plot against the month they fall in. A short-term property has no leases, so
 it has no dots — the conditional rendering the dashboard spec asks for falls out
@@ -131,10 +163,17 @@ which a cash flow dashboard should eventually not do.
 **Concessions.** A free month or a discount is expressible today as a negative
 charge. If that turns out to be common it deserves its own shape.
 
+**Re-letting.** A unit relet after an early termination is a second lease
+starting the day the next tenant moves in. Nothing connects the two, which is
+right for the books and wrong for asking how long the unit sat empty — that
+question wants the gap between one lease's effective end and the next one's
+start, and is worth answering once there are enough leases for it to matter.
+
 ## Build order
 
 1. Types, storage, recognition in `lib/lease.ts`, with tests on the proration
-   arithmetic and the month boundaries.
+   arithmetic, the month boundaries, and an early termination cutting a lease
+   short mid-month.
 2. `buildAnnualStatement` folds lease revenue and leased days in. Existing
    figures for a property with no leases must not move by a cent.
 3. Lease CRUD API and a Leases page under the property in view.
