@@ -33,6 +33,21 @@ the date the lease was written to run to, and the date the tenant actually left
 always an August lease" are different facts, and only the first one explains the
 vacancy that follows.
 
+**Rent paid ahead is still rent.** It is recognised across the months it covers,
+not the month the money arrived — the same rule a booking follows, counting on
+the stay rather than the payout. A tenant paying twelve months up front would
+otherwise show one enormous January and eleven failures, and every pacing figure
+on the dashboard would be wrong in both directions. First and last month up
+front needs nothing new: the last month's rent is recognised in the last month.
+What early payment changes is when the cash arrived, which is the payments
+ledger below, not what was earned.
+
+**A security deposit is not revenue.** It is money held on behalf of the tenant
+and owed back, so it enters no line of the profit and loss. It does sit in the
+bank account, which is the danger: the balance overstates what is actually the
+owner's by the sum of deposits held, and the app should say so rather than let
+it read as cash available.
+
 **ADR does not apply to a leased unit.** It is revenue ÷ nights sold, and a
 lease sells no nights. The ledger shows nothing rather than a number that invites
 comparison with a nightly rate.
@@ -61,6 +76,7 @@ interface Lease {
   /** Actual move-out, when a tenant left before endDate. Rent stops here. */
   terminatedOn?: string | null;
   renewalNoticeDate?: string | null;    // the date worth warning about
+  /** Escrowed, never revenue. Owed back unless withheld at move-out. */
   depositHeld?: number;
   notes?: string;
   createdAt: string;
@@ -137,6 +153,25 @@ platform-remitted tax — nobody takes a cut of rent — so it flows into net
 revenue untouched. `PnLSummary` gains `leaseRevenue` so a mixed unit can be read
 either way, and `MonthlyStatement` gains `leasedDays` for occupancy.
 
+## Deposits
+
+`depositHeld` is excluded from every figure in the profit and loss — gross
+revenue, net revenue, NOI and cash flow alike. It is reported on its own, beside
+the lease and summed across the portfolio, labelled as held rather than earned.
+
+At move-out the deposit resolves one of two ways, and both are ordinary records
+rather than new machinery:
+
+- **Returned.** It stops being held. Nothing touches the profit and loss,
+  because nothing was ever earned.
+- **Withheld, in whole or part.** The withheld amount becomes a `LeaseCharge`
+  dated the move-out: at that point it stops being the tenant's money and starts
+  being the owner's. The repair it paid for is an ordinary operating expense.
+
+Keeping those two separate matters. Netting a $600 withholding against a $900
+repair would show a $300 cost and hide both the income and the damage; recorded
+apart, the ledger shows $600 earned and $900 spent, which is what happened.
+
 ## Milestones
 
 Two dates per lease, for the chart overlay:
@@ -154,11 +189,17 @@ of the data rather than needing a rule.
 
 ## Deferred
 
-**Arrears.** Rent is recognised as due and assumed collected, matching how a
-booking counts once the stay happened. `LeaseCharge` and the monthly recognition
-leave room for a received amount per month, so arrears can be added later without
-re-modelling — but until then a tenant who has not paid still shows as revenue,
-which a cash flow dashboard should eventually not do.
+**The payments ledger.** Rent is recognised as due and assumed collected,
+matching how a booking counts once the stay happened. This is the one place the
+model knowingly diverges from the bank: a tenant three months behind still shows
+as revenue, and a tenant who paid the year up front shows nothing extra in
+January. Both are right for measuring what the property earned and wrong for
+knowing what landed.
+
+Recording receipts — date and amount against a lease — would answer both at once,
+and would also let a deposit be tracked from the day it arrived to the day it was
+returned. The schema leaves room for it; until it exists, arrears and
+prepayments are invisible.
 
 **Concessions.** A free month or a discount is expressible today as a negative
 charge. If that turns out to be common it deserves its own shape.
@@ -172,8 +213,8 @@ start, and is worth answering once there are enough leases for it to matter.
 ## Build order
 
 1. Types, storage, recognition in `lib/lease.ts`, with tests on the proration
-   arithmetic, the month boundaries, and an early termination cutting a lease
-   short mid-month.
+   arithmetic, the month boundaries, an early termination cutting a lease short
+   mid-month, and a deposit never reaching a revenue line.
 2. `buildAnnualStatement` folds lease revenue and leased days in. Existing
    figures for a property with no leases must not move by a cent.
 3. Lease CRUD API and a Leases page under the property in view.
