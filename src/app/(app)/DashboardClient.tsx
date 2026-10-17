@@ -9,7 +9,7 @@ import InfoTip from '@/components/InfoTip';
 import PropertySetup from '@/components/PropertySetup';
 import { addDays } from '@/lib/dateRange';
 import {
-  DayRevenueChart, DayOccupancyChart, MonthProgressChart, DayDatum, ProgressPoint,
+  DayOccupancyChart, MonthProgressChart, DayDatum, ProgressPoint,
 } from '@/components/DayCharts';
 import { YearVarianceChart, VarianceDatum } from '@/components/YearVarianceChart';
 import {
@@ -19,6 +19,80 @@ import {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+
+/**
+ * The four layers of the money, outermost first.
+ *
+ * Gross revenue and cash flow used to be two sections, each with its own tile
+ * row and its own chart — and the charts were the same chart on different
+ * money, so comparing the two meant holding one in your head while scrolling to
+ * the other. Here each layer is a tile, and the tile is the filter that puts its
+ * own layer on the single chart below.
+ */
+const METRICS = [
+  {
+    key: 'grossRevenue',
+    label: 'Gross Revenue',
+    color: '#10b981',
+    tip: 'Everything guests paid, before any deduction.',
+    // Revenue carries dates, so a part-finished period can be judged against
+    // the share of its plan that should have landed by now. The layers below
+    // cannot: a month's operating expenses and mortgage payment land whole
+    // while its revenue is still arriving, so they are judged on closed months.
+    prorates: true,
+    breakeven: false,
+  },
+  {
+    key: 'netRevenue',
+    label: 'Net Revenue',
+    color: '#0ea5e9',
+    tip: 'Gross revenue after platform fees, platform-remitted tax and guest refunds.',
+    prorates: true,
+    breakeven: false,
+  },
+  {
+    key: 'operatingIncome',
+    label: 'Net Operating Income',
+    color: '#8b5cf6',
+    tip: 'Net revenue less operating expenses, before the mortgage — what the property earns as a business.',
+    prorates: false,
+    breakeven: true,
+  },
+  {
+    key: 'netIncome',
+    label: 'Cash Flow',
+    color: '#6366f1',
+    tip: 'What is left after every cost including the whole mortgage payment. Net income is higher by the principal repaid, which builds equity rather than being spent.',
+    prorates: false,
+    breakeven: true,
+  },
+] as const;
+
+type MetricKey = typeof METRICS[number]['key'];
+
+/**
+ * A month as a running total, opening at `start` and moving by each day's
+ * figure. Solid up to today and dashed beyond, with the changeover day in both
+ * series so the two lines meet rather than leaving a gap.
+ *
+ * Module level rather than inline: a running accumulator reassigned during a
+ * component's render is exactly what the React compiler refuses.
+ */
+function runningFrom(start: number, byDay: number[], todayDay: number): ProgressPoint[] {
+  let running = start;
+  return byDay.map((v, i) => {
+    running += v;
+    const day = i + 1;
+    const value = Math.round(running);
+    return {
+      day: String(day),
+      earned: day <= todayDay ? value : null,
+      booked: day >= todayDay ? value : null,
+      today: Math.round(v),
+      isFuture: day > todayDay,
+    };
+  });
+}
 
 function PlatformTable({
   byPlatform, totalRevenue, fmt,
@@ -136,6 +210,8 @@ export default function DashboardClient() {
   // Which span the revenue tile reports on. Months, not days — targets are
   // distributed monthly.
   const [period, setPeriod] = useState<'month' | 'ytd' | 'custom'>('month');
+  // Which layer of the money the chart reports. The tiles above it are the filter.
+  const [metric, setMetric] = useState<MetricKey>('grossRevenue');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [editingTarget, setEditingTarget] = useState(false);
@@ -295,12 +371,8 @@ export default function DashboardClient() {
   const annualForecast = hasTarget
     ? (manualTarget ?? monthlyForecasts.reduce<number>((s, v) => s + (v ?? 0), 0))
     : null;
-  const curMonthForecast = monthlyForecasts[currentMonthIdx];
-  // Prorate current month's forecast by days elapsed so ytdForecast matches the ytdGross horizon
+  // Days of the current month gone, for prorating a month's plan to today
   const daysElapsed = now.getDate();
-  const curMonthForecastProrated = curMonthForecast != null
-    ? Math.round(curMonthForecast * daysElapsed / daysInCurMonth)
-    : 0;
 
   // Day-by-day view of the selected month, shown in place of the year charts when
   // the period is This Month. Both the revenue chart and the occupancy chart read
@@ -366,33 +438,6 @@ export default function DashboardClient() {
     return days;
   })();
 
-  // Gross revenue as the gap to target rather than the level. The section reports
-  // pacing, and a stack split five ways by platform asked the reader to add up
-  // twelve comparisons to find it — the platform mix is already a table below.
-  //
-  // The current month compares like with like: revenue booked to date against
-  // the target prorated to today, so a month half elapsed does not read as a
-  // miss. Months not yet reached have no variance at all — what is on their
-  // books is a forecast, not a shortfall.
-  const varianceChartData: VarianceDatum[] = statement?.months.map((m, i) => {
-    const isCurrent = i === currentMonthIdx;
-    // A month still ahead is measured on what is booked so far against its full
-    // target — the gap is what is left to sell, so the bar is drawn grey.
-    const isForecast = i > currentMonthIdx;
-    const target = isCurrent ? curMonthForecastProrated : monthlyForecasts[i];
-    const actual = isCurrent ? curActualGross : m.grossRevenue;
-    const hasTarget = target != null && target > 0;
-    return {
-      name: MONTHS[i],
-      variance: hasTarget ? actual - target : null,
-      actual,
-      actualLine: hasTarget ? actual : null,
-      target: target ?? null,
-      isCurrent,
-      isForecast,
-    };
-  }) ?? [];
-
   // Net income forecast uses a contribution-margin ratio so fixed PITI is handled correctly.
   // CM ratio = (net + PITI) / gross → isolates variable cost rate from fixed costs.
   // Prefer YTD actuals (best signal); fall back to prior year annual if no current data.
@@ -415,13 +460,44 @@ export default function DashboardClient() {
     return Math.round(monthlyForecasts[i]! * cmRatio - monthlyPITI);
   });
 
-  // Annual projection: Jan–Jul actual + Aug–Dec forecast (current month is in "remaining")
-  // This ensures earned + projRemainingNet = annualNetForecast always reconciles
-  const projRemainingGross = monthlyForecasts.slice(currentMonthIdx).reduce<number>((s, v) => s + (v ?? 0), 0);
-  const projRemainingNet = cmRatio != null
-    ? Math.round(projRemainingGross * cmRatio - monthlyPITI * (12 - currentMonthIdx))
-    : null;
-  const annualNetForecast = projRemainingNet != null ? ytdNetIncome + projRemainingNet : null;
+  // Only gross revenue has a goal anyone set. Net revenue and operating income
+  // are that same goal kept at the margins the property actually ran at last
+  // year — a derived mark rather than a figure anyone chose, and the only way to
+  // hold four layers to one target. It scales the fixed part of operating costs
+  // with revenue, which a thin month does not really do; cash flow avoids that
+  // by using the contribution margin above and subtracting the mortgage whole.
+  const prevNetRevenueMargin = prevStatement && prevAnnualGross > 0
+    ? prevStatement.months.reduce((s, m) => s + m.netRevenue, 0) / prevAnnualGross : null;
+  const prevOperatingMargin = prevStatement && prevAnnualGross > 0
+    ? prevStatement.months.reduce((s, m) => s + m.operatingIncome, 0) / prevAnnualGross : null;
+  const atMargin = (margin: number | null) =>
+    monthlyForecasts.map(v => (v == null || margin == null ? null : Math.round(v * margin)));
+
+  /** Each layer's plan for every month of this year, Jan–Dec. */
+  const monthlyPlans: Record<MetricKey, (number | null)[]> = {
+    grossRevenue: monthlyForecasts,
+    netRevenue: atMargin(prevNetRevenueMargin),
+    operatingIncome: atMargin(prevOperatingMargin),
+    netIncome: monthlyNetForecasts,
+  };
+
+  /**
+   * Where the year lands for a layer if the rest of it goes to plan: the months
+   * that have closed as they actually came out, plus the plan for every month
+   * still to come.
+   *
+   * The month in progress counts as one still to come. All of its costs have
+   * landed while only part of its revenue has, so its actual is not yet a figure
+   * to build a year on — which also makes closed + remaining reconcile exactly
+   * to the projection.
+   */
+  const annualProjection = (key: MetricKey) => {
+    if (!statement) return null;
+    const ahead = monthlyPlans[key].slice(currentMonthIdx);
+    if (ahead.some(v => v == null)) return null;
+    return statement.months.slice(0, currentMonthIdx).reduce((s, m) => s + m[key], 0)
+      + ahead.reduce<number>((s, v) => s + (v ?? 0), 0);
+  };
 
 
 
@@ -450,44 +526,90 @@ export default function DashboardClient() {
     : period === 'ytd' ? `${year} to date`
     : customFrom && customTo ? `${customFrom} to ${customTo}` : 'custom range';
 
-  // Only current-year months carry a target; closed prior-year months are their
-  // own baseline, so they contribute no variance.
-  const periodGrossTarget = periodMonths.reduce((s, m) =>
-    s + (m.year === year ? (monthlyForecasts[m.mi] ?? 0) : (effectivePriorMonthly?.[m.mi] ?? 0)), 0);
-  const periodGrossActual = periodMonths.reduce((s, m) => s + (monthStmt(m)?.grossRevenue ?? 0), 0);
+  // What a layer is held to for one month. Only current-year months carry a
+  // plan; a closed prior-year month is its own baseline, so a custom range
+  // reaching back into one takes no variance from it.
+  const monthPlan = (key: MetricKey, m: { year: number; mi: number }) => {
+    if (m.year === year) return monthlyPlans[key][m.mi] ?? 0;
+    if (key === 'grossRevenue') return effectivePriorMonthly?.[m.mi] ?? 0;
+    return monthStmt(m)?.[key] ?? 0;
+  };
 
-  // Where the period's target should stand by today, rather than where it ends.
-  // Months already closed contribute in full, the month in progress contributes
-  // the share of it that has elapsed, and months still ahead contribute nothing.
-  // Earning 60% of a month's target reads differently on the 17th than the 28th,
-  // and that difference is the only thing the first two columns cannot show.
-  const periodGrossExpectedToDate = periodMonths.reduce((sum, m) => {
-    const monthTarget = m.year === year ? (monthlyForecasts[m.mi] ?? 0) : (effectivePriorMonthly?.[m.mi] ?? 0);
+  /** Every layer's actual and plan for the window, so the tiles and the chart
+   *  beneath them cannot disagree about what the period earned. */
+  const periodTotals = METRICS.reduce((acc, { key }) => {
+    acc[key] = {
+      actual: periodMonths.reduce((s, m) => s + (monthStmt(m)?.[key] ?? 0), 0),
+      plan: periodMonths.reduce((s, m) => s + monthPlan(key, m), 0),
+    };
+    return acc;
+  }, {} as Record<MetricKey, { actual: number; plan: number }>);
+
+  const periodGrossActual = periodTotals.grossRevenue.actual;
+
+  // Where a layer's plan should stand by today, rather than where it ends.
+  // Months already closed count in full, the month in progress counts the share
+  // of it that has elapsed, and months still ahead count nothing. Earning 60% of
+  // a month's plan reads differently on the 17th than on the 28th, and that
+  // difference is the only thing the tiles cannot show.
+  const planToDate = (key: MetricKey) => periodMonths.reduce((sum, m) => {
+    const plan = monthPlan(key, m);
     const isPast = m.year < year || m.mi < currentMonthIdx;
     const isCurrent = m.year === year && m.mi === currentMonthIdx;
-    if (isPast) return sum + monthTarget;
-    if (isCurrent) return sum + monthTarget * (now.getDate() / daysInCurMonth);
+    if (isPast) return sum + plan;
+    if (isCurrent) return sum + plan * (now.getDate() / daysInCurMonth);
     return sum;
   }, 0);
+
   // A period that has not finished is the only one where pace differs from the
   // final result; once it closes, pace is the result.
   const periodStillRunning = periodMonths.some(m => m.year > year || (m.year === year && m.mi >= currentMonthIdx));
-  const periodElapsedPct = periodGrossTarget > 0
-    ? Math.min(100, (periodGrossExpectedToDate / periodGrossTarget) * 100)
-    : null;
+
+  const selectedMetric = METRICS.find(mt => mt.key === metric) ?? METRICS[0];
+
+  const closedMonths = periodMonths.filter(m => m.year < year || m.mi < currentMonthIdx);
   // Revenue lands in lumps on check-in days, so in the first days of a period a
   // single stay that has not arrived yet swings pace to −100%. Withhold the
   // verdict until enough of the period has run for it to mean something.
   const PACE_MIN_ELAPSED_PCT = 10;
-  const paceIsMeaningful = periodGrossExpectedToDate > 0
-    && (periodElapsedPct ?? 0) >= PACE_MIN_ELAPSED_PCT;
-  const pacePct = paceIsMeaningful
-    ? ((periodGrossActual - periodGrossExpectedToDate) / periodGrossExpectedToDate) * 100
-    : null;
 
-  const periodNetTarget = periodMonths.reduce((s, m) =>
-    s + (m.year === year ? (monthlyNetForecasts[m.mi] ?? 0) : (monthStmt(m)?.netIncome ?? 0)), 0);
-  const periodNetActual = periodMonths.reduce((s, m) => s + (monthStmt(m)?.netIncome ?? 0), 0);
+  /**
+   * The fair comparison for a layer over the window, or null while there is
+   * nothing yet to judge.
+   *
+   * A dated layer is measured against the share of its plan that should have
+   * landed by now. A layer carrying whole months of cost is measured on the
+   * months that have closed instead, because the month in progress has all of
+   * its costs and only part of its revenue — against a whole month's plan it
+   * would read as a loss every time, which is the one thing a tile must not do.
+   * The day-by-day chart is what reports the month in progress for those.
+   */
+  const fairPace = (key: MetricKey) => {
+    const prorates = METRICS.find(mt => mt.key === key)?.prorates ?? false;
+    const plan = prorates
+      ? planToDate(key)
+      : closedMonths.reduce((s, m) => s + monthPlan(key, m), 0);
+    const actual = prorates
+      ? periodTotals[key].actual
+      : closedMonths.reduce((s, m) => s + (monthStmt(m)?.[key] ?? 0), 0);
+    const wholePlan = periodTotals[key].plan;
+    const elapsedPct = wholePlan !== 0 ? Math.min(100, (plan / wholePlan) * 100) : 0;
+    if (plan === 0 || elapsedPct < PACE_MIN_ELAPSED_PCT) return null;
+    return { plan, actual, pct: ((actual - plan) / Math.abs(plan)) * 100 };
+  };
+
+  const metricPace = fairPace(metric);
+  const pace = paceStatus(metricPace?.pct ?? null);
+  const paceCaption = metricPace == null
+    ? periodTotals[metric].plan === 0
+      ? 'no plan for this period'
+      : selectedMetric.prorates
+        ? `too early in ${periodLabel} to call`
+        : `${periodLabel} is still open`
+    : periodStillRunning
+      ? `${Math.round((metricPace.actual / Math.abs(metricPace.plan)) * 100)}% of plan to date`
+      : `${periodLabel} closed`;
+  const metricProjection = annualProjection(metric);
 
   // Occupancy is a rate: average across the window rather than a sum.
   const periodNights = periodMonths.reduce((s, m) => s + (monthStmt(m)?.totalNights ?? 0), 0);
@@ -500,72 +622,81 @@ export default function DashboardClient() {
     ? periodOccMonths.reduce((s, m) => s + m.occupancyRate, 0) / periodOccMonths.length
     : null;
 
-  // Cumulative net income through the selected month, shown in place of the year
-  // view when the period is This Month.
-  //
-  // Only the revenue side has dates: bookings carry them, expenses reach the
-  // dashboard as monthly category totals and PITI as one figure. So rather than
-  // invent a daily cost, the month opens in the red by its whole committed cost
-  // and climbs as bookings land. The line crossing zero is the breakeven day.
-  //
-  // Mirrors buildPnL so the last point equals the month's netIncome:
-  //   netIncome = gross − platformFees − fastPay − tax − refunds − opex − piti
-  // Per-booking terms are dated; refunds, opex and piti form the opening debt.
-  // The month's net income as a running total, the same shape as the revenue
-  // chart above it. It opens below zero at the costs the month has already
-  // committed — operating expenses, PITI, refunds — and climbs as stays check
-  // in, so crossing zero is the day the month paid for itself.
-  const cumulativeNetData: ProgressPoint[] = (() => {
+  /**
+   * The selected layer through the month in progress, day by day.
+   *
+   * Only the revenue side has dates: bookings carry them, while expenses reach
+   * the dashboard as monthly category totals and the mortgage as one figure. So
+   * rather than invent a daily cost, the month opens at whatever it has already
+   * committed and climbs as stays check in. Gross revenue opens at zero; the
+   * layers beneath it open in the red, which is why crossing zero is the day the
+   * month paid for itself.
+   *
+   * It mirrors buildPnL so the last point equals the month's own figure:
+   *   netIncome = gross − platformFees − fastPay − tax − refunds − opex − piti
+   * The per-booking terms are dated; refunds, operating expenses and the
+   * mortgage form the opening debt of whichever layers include them.
+   */
+  const cumulativeData: ProgressPoint[] = (() => {
     if (period !== 'month') return [];
     const m = statement?.months[currentMonthIdx];
     if (!m) return [];
-    const daysInMonth = new Date(year, currentMonthIdx + 1, 0).getDate();
-    const committed = m.totalOperatingExpenses + m.piti + m.refunds;
+    const committed =
+      metric === 'grossRevenue' ? 0
+        : metric === 'netRevenue' ? m.refunds
+        : metric === 'operatingIncome' ? m.refunds + m.totalOperatingExpenses
+        : m.refunds + m.totalOperatingExpenses + m.piti;
 
-    const byDay = new Array<number>(daysInMonth).fill(0);
+    const byDay = new Array<number>(daysInCurMonth).fill(0);
     for (const b of m.bookings) {
       // Slice the day out of YYYY-MM-DD; Date would shift it across timezones
       const d = Number(b.checkIn.slice(8, 10));
-      if (d < 1 || d > daysInMonth) continue;
-      byDay[d - 1] += (b.income ?? 0) - (b.platformFee ?? 0) - (b.fastPayFee ?? 0)
-        - (b.taxRemitted ?? 0) - (b.taxWithheld ?? 0);
+      if (d < 1 || d > daysInCurMonth) continue;
+      byDay[d - 1] += metric === 'grossRevenue'
+        ? b.income
+        : b.income - (b.platformFee ?? 0) - (b.fastPayFee ?? 0)
+          - (b.taxRemitted ?? 0) - (b.taxWithheld ?? 0);
     }
 
     const isLiveMonth = now.getFullYear() === year && now.getMonth() === currentMonthIdx;
-    const todayDay = isLiveMonth ? now.getDate() : daysInMonth;
-
-    let running = -committed;
-    return byDay.map((v, i) => {
-      running += v;
-      const day = i + 1;
-      const value = Math.round(running);
-      // Solid to today, dashed beyond — the tail is confirmed bookings not yet
-      // checked in. Both carry today's point so the lines meet.
-      return {
-        day: String(day),
-        earned: day <= todayDay ? value : null,
-        booked: day >= todayDay ? value : null,
-        today: Math.round(v),
-        isFuture: day > todayDay,
-      };
-    });
+    return runningFrom(-committed, byDay, isLiveMonth ? now.getDate() : daysInCurMonth);
   })();
 
-  // Net income against its forecast, as the gap. Completed months only: this
-  // month's costs — a full month of PITI and recurring expenses — have all
-  // landed while its revenue has not, so comparing it to a whole month's
-  // forecast would report a loss that the day-by-day view shows closing. The
-  // gross chart can prorate its target; costs do not prorate.
-  const netVarianceChartData: VarianceDatum[] = statement?.months.map((m, i) => {
-    const target = monthlyNetForecasts[i];
-    const comparable = i < currentMonthIdx && target != null;
+  /**
+   * The year as the gap to plan, month by month, for the selected layer.
+   *
+   * A dated layer can compare the month in progress like with like: what has
+   * been earned against the plan prorated to today, so a month half elapsed does
+   * not read as a miss. The layers below it cannot — a month's costs land whole
+   * while its revenue is still arriving — so for those the month in progress
+   * gets no bar at all and the day-by-day chart reports it instead.
+   *
+   * Months not yet reached show what is already booked against their whole plan,
+   * drawn grey: that gap is revenue left to sell, not revenue missed.
+   */
+  const varianceData: VarianceDatum[] = statement?.months.map((m, i) => {
+    const isCurrent = i === currentMonthIdx;
+    const plan = monthlyPlans[metric][i];
+    const prorated = selectedMetric.prorates && isCurrent && plan != null
+      ? Math.round(plan * daysElapsed / daysInCurMonth)
+      : plan;
+    const actual = selectedMetric.prorates && isCurrent
+      ? curActualBookings.reduce((s, b) => s + (metric === 'grossRevenue'
+        ? b.income
+        : b.income - (b.platformFee ?? 0) - (b.fastPayFee ?? 0)
+          - (b.taxRemitted ?? 0) - (b.taxWithheld ?? 0)), 0)
+      : m[metric];
+    const comparable = selectedMetric.prorates
+      ? prorated != null && prorated > 0
+      : i < currentMonthIdx && plan != null;
     return {
       name: MONTHS[i],
-      variance: comparable ? m.netIncome - target : null,
-      actual: m.netIncome,
-      actualLine: comparable ? m.netIncome : null,
-      target: target ?? null,
-      isCurrent: i === currentMonthIdx,
+      variance: comparable ? actual - (prorated ?? 0) : null,
+      actual,
+      actualLine: comparable ? actual : null,
+      target: prorated ?? null,
+      isCurrent,
+      isForecast: i > currentMonthIdx,
     };
   }) ?? [];
 
@@ -670,325 +801,218 @@ export default function DashboardClient() {
         </div>
       )}
 
+      {/* ── Financial performance: one chart, four layers ──
+          Gross revenue and cash flow were two sections whose charts were the
+          same chart on different money. The tiles are now the filter: each one
+          reports its layer for the selected period and puts that layer on the
+          chart below. */}
       <section className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-100">
-          <h2 className="text-xs uppercase tracking-wide text-slate-900 font-semibold">Gross Revenue</h2>
-        </div>
-
-      {/* One tile per measure, reporting the selected period */}
-      {!selMonth && hasTarget && annualForecast != null && (() => {
-        if (periodMonths.length === 0) {
-          return (
-            <div className="px-5 py-4">
-              <p className="text-sm text-slate-400">Pick a start and end month.</p>
-            </div>
-          );
-        }
-        const earned = periodGrossActual;
-        const target = periodGrossTarget;
-        const hasTargetForPeriod = target > 0;
-        const stillNeeded = Math.max(0, target - earned);
-        // Beating the target is worth reporting, so keep the surplus rather than
-        // clamping it to zero and showing only "Covered".
-        const surplus = hasTargetForPeriod ? Math.max(0, earned - target) : 0;
-        const variance = earned - target;
-        // Uncapped for the caption — 112% of target is the fact. The bar is
-        // capped separately so it cannot overflow its track.
-        const pctOfTarget = hasTargetForPeriod ? (earned / target) * 100 : null;
-        const barPct = pctOfTarget != null ? Math.min(100, pctOfTarget) : 0;
-        const pace = paceStatus(pacePct);
-        return (
-          <div className="px-5 py-4">
-            <div className="flex items-start gap-4 sm:gap-6">
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Earned</p>
-                <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">{fmt(earned)}</p>
-                <p className="text-[11px] text-slate-400 truncate">of {fmt(target)} target · {periodLabel}</p>
-              </div>
-              <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">
-                  {surplus > 0 ? 'Over Target' : 'Still Needed'}
-                </p>
-                <p className={`text-xl font-bold leading-tight mt-0.5 ${
-                  !hasTargetForPeriod ? 'text-slate-400'
-                    : surplus > 0 || stillNeeded === 0 ? 'text-emerald-600'
-                    : 'text-slate-900'
-                }`}>
-                  {!hasTargetForPeriod ? '—'
-                    : surplus > 0 ? `+${fmt(surplus)}`
-                    : stillNeeded === 0 ? 'Covered'
-                    : fmt(stillNeeded)}
-                </p>
-                <p className="text-[11px] text-slate-400 truncate">
-                  {pctOfTarget != null ? `${pctOfTarget.toFixed(0)}% of target earned` : 'no target for this period'}
-                </p>
-              </div>
-              <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold flex items-center gap-1">
-                    Pace
-                    <InfoTip label="What pace means" align="right">
-                      Whether the revenue earned is ahead of where this period&rsquo;s target should stand by
-                      today, rather than where it ends. Within 5% either way counts as on pace.
-                    </InfoTip>
-                  </p>
-                  <div className="flex items-center gap-1 shrink-0 -mt-0.5">
-                    <button onClick={openSeasonalityEditor} className="text-slate-300 hover:text-slate-500 transition-colors"
-                      title={`Edit ${year - 1} monthly actuals — sets how the annual target splits across months`}>
-                      <CalendarDays className="w-3 h-3" />
-                    </button>
-                    <button
-                      onClick={() => { setTargetInput(String(manualTarget ?? Math.round(annualForecast))); setEditingTarget(true); }}
-                      className="text-slate-300 hover:text-slate-500 transition-colors" title="Edit annual target">
-                      <Pencil className="w-3 h-3" />
-                    </button>
-                  </div>
-                </div>
-                {editingTarget ? (
-                  <div className="flex items-center gap-1.5 mt-1">
-                    <span className="text-sm text-slate-400">$</span>
-                    <input type="number" value={targetInput} onChange={e => setTargetInput(e.target.value)}
-                      onBlur={saveTarget} onKeyDown={e => e.key === 'Enter' && saveTarget()}
-                      className="flex-1 min-w-0 text-sm border border-slate-200 rounded-lg px-2 py-1" placeholder="68500" autoFocus />
-                    <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingTarget(false)} className="text-slate-300 hover:text-slate-500">
-                      <X className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                ) : (
-                  <>
-                    <p className={`text-xl font-bold leading-tight mt-0.5 ${pace.color}`}>{pace.label}</p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      {pacePct == null
-                        ? (hasTargetForPeriod ? `too early in ${periodLabel} to call` : 'no target for this period')
-                        : periodStillRunning
-                          ? `${pctOfTarget?.toFixed(0)}% earned · ${periodElapsedPct?.toFixed(0)}% of ${periodLabel} gone`
-                          : `${periodLabel} closed`}
-                    </p>
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
-              <div className={`h-1 rounded-full transition-all ${variance >= 0 ? 'bg-emerald-500' : barPct >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
-                style={{ width: `${barPct}%` }} />
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* 2025 monthly actuals editor */}
-      {editingSeasonality && !selMonth && (
-        <div className="mx-5 mb-4 bg-slate-50 border border-slate-200 rounded-lg p-4">
-          <div className="flex items-center justify-between mb-1">
-            <p className="font-semibold text-slate-800">{year - 1} Monthly Revenue</p>
-            <button onMouseDown={e => e.preventDefault()} onClick={() => { cancelSeasonalitySave(); setEditingSeasonality(false); }} className="text-slate-400 hover:text-slate-600">
-              <X className="w-4 h-4" />
+        <div className="px-5 py-3 border-b border-slate-100 flex items-center justify-between gap-3">
+          <h2 className="text-xs uppercase tracking-wide text-slate-900 font-semibold">Financial Performance</h2>
+          {/* The annual target, and the shape it is spread over, drive every
+              plan figure in this section — so the controls that set them belong
+              to the section rather than to one layer's tile. */}
+          <div className="flex items-center gap-2 shrink-0">
+            <button
+              onClick={openSeasonalityEditor}
+              className="text-slate-300 hover:text-slate-500 transition-colors"
+              title={`Edit ${year - 1} monthly actuals — sets how the annual target splits across months`}
+            >
+              <CalendarDays className="w-3.5 h-3.5" />
+            </button>
+            <button
+              onClick={() => {
+                setTargetInput(manualTarget != null ? String(manualTarget)
+                  : annualForecast != null ? String(Math.round(annualForecast)) : '');
+                setEditingTarget(true);
+              }}
+              className="text-slate-300 hover:text-slate-500 transition-colors"
+              title={`Edit the ${year} revenue target`}
+            >
+              <Pencil className="w-3.5 h-3.5" />
             </button>
           </div>
-          <p className="text-xs text-slate-400 mb-4">
-            Enter your actual {year - 1} gross revenue per month. Monthly targets will be distributed proportionally.
-          </p>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
-            {MONTHS_LONG.map((month, i) => (
-              <div key={i}>
-                <label className="text-xs text-slate-500 block mb-1">{month}</label>
-                <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
-                  <span className="text-xs text-slate-400 px-2">$</span>
-                  <input
-                    type="number"
-                    value={seasonalityInputs[i]}
-                    onChange={e => {
-                      const next = [...seasonalityInputs];
-                      next[i] = e.target.value;
-                      setSeasonalityInputs(next);
-                    }}
-                    onBlur={scheduleSeasonalitySave}
-                    onFocus={cancelSeasonalitySave}
-                    className="flex-1 text-sm py-1.5 pr-2 outline-none min-w-0"
-                    placeholder="0"
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="flex items-center gap-3">
-            <button onMouseDown={e => e.preventDefault()} onClick={() => { cancelSeasonalitySave(); setEditingSeasonality(false); }} className="text-slate-500 text-sm hover:text-slate-700">Close</button>
-            <span className="text-xs text-slate-400 ml-auto">
-              Total: {fmt(seasonalityInputs.reduce((s, v) => s + (parseFloat(v) || 0), 0))}
-            </span>
-          </div>
         </div>
-      )}
-        <div className="border-t border-slate-100">
-      {/* Chart */}
-      <div className="px-5 py-4">
-        <p className="text-xs font-medium text-slate-500 mb-4 flex items-center gap-1.5">
-          <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-          {period === 'month'
-            ? `${MONTHS_LONG[currentMonthIdx]} against target`
-            : 'Over or under target by month'}
-          <InfoTip label="How to read this chart">
-            {period === 'month'
-              ? 'Revenue adding up through the month, dashed where it is booked but not yet earned. The flat line is the month\u2019s target.'
-              : 'Each bar is how far a month landed above or below its target, grey where the month is still ahead and the gap is left to sell. The faint line is revenue booked. Click a month to drill into its P&L.'}
-          </InfoTip>
-        </p>
-        {!hasData ? (
-          <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
-            No data yet. Import your earnings CSV to get started.
-          </div>
-        ) : period === 'month' ? (
-          <DayRevenueChart
-            data={dailyChartData}
-            monthLabel={MONTHS_LONG[currentMonthIdx]}
-            fmt={fmt}
-            target={periodGrossTarget}
-          />
-        ) : (
-          <>
-            <YearVarianceChart
-              data={varianceChartData}
-              fmt={fmt}
-              selectedIndex={selectedMonth}
-              onSelect={handleChartClick}
+
+        {editingTarget && (
+          <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
+            <span className="text-xs text-slate-500 whitespace-nowrap">{year} revenue target</span>
+            <span className="text-sm text-slate-400">$</span>
+            <input
+              type="number" value={targetInput} onChange={e => setTargetInput(e.target.value)}
+              onBlur={saveTarget} onKeyDown={e => e.key === 'Enter' && saveTarget()}
+              className="flex-1 min-w-0 text-sm border border-slate-200 rounded-lg px-2 py-1"
+              placeholder="68500" autoFocus
             />
-            {!prevHasData && manualTarget == null && (
-              <p className="text-xs text-amber-700 border border-amber-200 rounded-lg px-3 py-2 mt-3">
-                No prior-year data — set an annual target on the pacing card above to enable the forecast line, or{' '}
-                <a href="/settings" className="underline font-medium">import 2025 baseline data</a>.
-              </p>
-            )}
-          </>
-        )}
-      </div>
-        </div>
-      </section>
-
-      <section className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
-        <div className="px-5 py-3 border-b border-slate-100">
-          <h2 className="text-xs uppercase tracking-wide text-slate-900 font-semibold">Cash Flow</h2>
-        </div>
-
-      {/* One tile: what the period earned after costs, and against projection */}
-      {!selMonth && hasData && (() => {
-        if (periodMonths.length === 0) return null;
-        const net = periodNetActual;
-        const projected = periodNetTarget;
-        const variance = net - projected;
-        const hasProjection = projected !== 0;
-        const variancePct = hasProjection ? (variance / Math.abs(projected)) * 100 : null;
-        const status = pacingStatus(variancePct);
-
-        // Costs behind the figure, for the same window
-        const revenue = periodMonths.reduce((s, m) => s + (monthStmt(m)?.netRevenue ?? 0), 0);
-        const opex = periodMonths.reduce((s, m) => s + (monthStmt(m)?.totalOperatingExpenses ?? 0), 0);
-        const piti = periodMonths.reduce((s, m) => s + (monthStmt(m)?.piti ?? 0), 0);
-        // The part of the mortgage payment that bought equity rather than being
-        // spent. This tile reports cash flow, which subtracts it — so a month
-        // reading as a loss may still have moved the owner forward.
-        const principal = periodMonths.reduce((s, m) => s + (monthStmt(m)?.mortgagePrincipal ?? 0), 0);
-
-        // No red wash behind a negative month: the figure and the status are
-        // already red, and tinting the whole tile only makes them harder to read
-        return (
-          <div className="px-5 py-4">
-            <div className="flex items-start gap-4 sm:gap-6">
-              {/* Same sequence as Gross Revenue: the total, the gap to what was
-                  projected, then the verdict. Named for what it is inside the
-                  section, the way that section's first column is "Earned" —
-                  repeating the section title told the reader nothing. */}
-              <div className="min-w-0 flex-1">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold flex items-center gap-1">
-                  Bottom Line
-                  {principal > 0 && (
-                    <InfoTip label="How cash flow differs from net income">
-                      Net income was {fmt(net + principal)}. Cash flow is {fmt(principal)} lower because that much
-                      of the mortgage payment repaid principal — equity built rather than money spent.
-                    </InfoTip>
-                  )}
-                </p>
-                <p className={`text-xl font-bold leading-tight mt-0.5 ${net < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
-                  {net >= 0 ? '+' : ''}{fmt(net)}
-                </p>
-                {/* The costs that produced it, sitting under the figure they explain
-                    rather than in a column of their own. */}
-                <p className="text-[11px] text-slate-400 truncate">
-                  {periodLabel} · {fmt(revenue)} revenue − {fmt(opex + piti)} costs
-                </p>
-              </div>
-              <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">
-                  {hasProjection && variance >= 0 ? 'Over Projection' : 'Still Needed'}
-                </p>
-                <p className={`text-xl font-bold leading-tight mt-0.5 ${
-                  !hasProjection ? 'text-slate-400' : variance >= 0 ? 'text-emerald-600' : 'text-slate-900'
-                }`}>
-                  {!hasProjection ? '—'
-                    : variance >= 0 ? `+${fmt(variance)}`
-                    : fmt(Math.abs(variance))}
-                </p>
-                <p className="text-[11px] text-slate-400 truncate">
-                  {hasProjection ? `of ${fmt(projected)} projected` : 'no projection for this period'}
-                </p>
-              </div>
-              <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
-                <p className={`text-xl font-bold leading-tight mt-0.5 ${status.color}`}>{status.label}</p>
-                {/* The annual anchor, matching Gross Revenue's status caption. No
-                    percentage: a month projected at $120 turns a $1,553 miss into
-                    1,294%, which reads as a data error rather than a shortfall. */}
-                <p className="text-[11px] text-slate-400 truncate">
-                  {annualNetForecast != null
-                    ? `${fmt(annualNetForecast)} annual projection`
-                    : periodLabel}
-                </p>
-              </div>
-            </div>
-            {projected > 0 && (
-              <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
-                <div className="h-1 rounded-full bg-indigo-500 transition-all"
-                  style={{ width: `${Math.min(100, Math.max(0, (net / projected) * 100))}%` }} />
-              </div>
-            )}
+            <button onMouseDown={e => e.preventDefault()} onClick={() => setEditingTarget(false)} className="text-slate-300 hover:text-slate-500">
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
-        );
-      })()}
+        )}
 
-        <div className="border-t border-slate-100">
-      {/* P&L Chart */}
-      {hasData && (
+        {/* Prior-year monthly actuals: what the annual target is spread over */}
+        {editingSeasonality && (
+          <div className="mx-5 my-4 bg-slate-50 border border-slate-200 rounded-lg p-4">
+            <div className="flex items-center justify-between mb-1">
+              <p className="font-semibold text-slate-800">{year - 1} Monthly Revenue</p>
+              <button onMouseDown={e => e.preventDefault()} onClick={() => { cancelSeasonalitySave(); setEditingSeasonality(false); }} className="text-slate-400 hover:text-slate-600">
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-400 mb-4">
+              Enter your actual {year - 1} gross revenue per month. Monthly targets will be distributed proportionally.
+            </p>
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-4">
+              {MONTHS_LONG.map((month, i) => (
+                <div key={i}>
+                  <label className="text-xs text-slate-500 block mb-1">{month}</label>
+                  <div className="flex items-center border border-slate-200 rounded-lg overflow-hidden">
+                    <span className="text-xs text-slate-400 px-2">$</span>
+                    <input
+                      type="number"
+                      value={seasonalityInputs[i]}
+                      onChange={e => {
+                        const next = [...seasonalityInputs];
+                        next[i] = e.target.value;
+                        setSeasonalityInputs(next);
+                      }}
+                      onBlur={scheduleSeasonalitySave}
+                      onFocus={cancelSeasonalitySave}
+                      className="flex-1 text-sm py-1.5 pr-2 outline-none min-w-0"
+                      placeholder="0"
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-3">
+              <button onMouseDown={e => e.preventDefault()} onClick={() => { cancelSeasonalitySave(); setEditingSeasonality(false); }} className="text-slate-500 text-sm hover:text-slate-700">Close</button>
+              <span className="text-xs text-slate-400 ml-auto">
+                Total: {fmt(seasonalityInputs.reduce((s, v) => s + (parseFloat(v) || 0), 0))}
+              </span>
+            </div>
+          </div>
+        )}
+
+        {/* ── The four layers, each one a filter for the chart below ── */}
+        {!selMonth && (periodMonths.length === 0 ? (
+          <div className="px-5 py-4">
+            <p className="text-sm text-slate-400">Pick a start and end month.</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 lg:grid-cols-4">
+            {METRICS.map((mt, i) => {
+              const { actual, plan } = periodTotals[mt.key];
+              const hasPlan = plan !== 0;
+              // The verdict is read against where the plan should stand by now,
+              // not against the whole window — mid-month every layer is short of
+              // a figure it still has half a month to earn.
+              const tilePace = fairPace(mt.key);
+              const verdict = tilePace ? paceStatus(tilePace.pct) : null;
+              const pctOfPlan = plan > 0 ? (actual / plan) * 100 : null;
+              const on = metric === mt.key;
+              return (
+                <button
+                  key={mt.key}
+                  type="button"
+                  onClick={() => setMetric(mt.key)}
+                  aria-pressed={on}
+                  title={mt.tip}
+                  className={`relative text-left px-4 py-4 border-b border-slate-100 transition-colors
+                    ${i % 2 === 1 ? 'border-l border-slate-100' : ''}
+                    ${i >= 2 ? 'border-t border-slate-100' : ''} lg:border-t-0
+                    ${i > 0 ? 'lg:border-l lg:border-slate-100' : 'lg:border-l-0'}
+                    ${on ? '' : 'hover:bg-slate-50/60'}`}
+                >
+                  <p className={`text-[11px] uppercase tracking-wide font-semibold truncate ${on ? 'text-slate-700' : 'text-slate-400'}`}>
+                    {mt.label}
+                  </p>
+                  <p className={`text-xl font-bold leading-tight mt-1 ${actual < 0 ? 'text-red-600' : 'text-slate-900'}`}>
+                    {fmt(actual)}
+                  </p>
+                  <p className="text-[11px] truncate mt-0.5 text-slate-400">
+                    {hasPlan ? `of ${fmt(plan)} plan` : 'no plan for this period'}
+                    {verdict && <span className={`ml-1 font-medium ${verdict.color}`}>· {verdict.label}</span>}
+                  </p>
+                  {plan > 0 && (
+                    <div className="w-full bg-slate-100 rounded-full h-1 mt-2.5">
+                      <div
+                        className={`h-1 rounded-full transition-all ${
+                          verdict == null ? 'bg-slate-300'
+                            : verdict.color === 'text-red-600' ? 'bg-red-400'
+                            : 'bg-emerald-500'
+                        }`}
+                        style={{ width: `${Math.min(100, Math.max(0, pctOfPlan ?? 0))}%` }}
+                      />
+                    </div>
+                  )}
+                  {/* The chart sits directly below, so the selected tile is
+                      underlined into it like a tab rather than filled in. */}
+                  <span className={`absolute left-0 right-0 -bottom-px h-0.5 ${on ? 'bg-slate-900' : 'bg-transparent'}`} />
+                </button>
+              );
+            })}
+          </div>
+        ))}
+
+        {/* ── The selected layer, actual against plan ── */}
         <div className="px-5 py-4">
-          <p className="text-xs font-medium text-slate-500 mb-4 flex items-center gap-1.5">
-            {period === 'month'
-              ? `${MONTHS_LONG[currentMonthIdx]} against plan`
-              : 'Over or under plan by month'}
-            <InfoTip label="How to read this chart">
+          <div className="flex items-start justify-between gap-3 mb-4">
+            <p className="text-xs font-medium text-slate-500 flex items-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5" style={{ color: selectedMetric.color }} />
               {period === 'month'
-                ? 'Opens at the month\u2019s committed costs and climbs as bookings land. Crossing zero is breakeven.'
-                : 'Each bar is how far a month landed above or below its projection. The faint line is net income itself. Months still open have no bar — their costs land before their revenue does.'}
-            </InfoTip>
-          </p>
-          {period === 'month' ? (
+                ? `${selectedMetric.label} through ${MONTHS_LONG[currentMonthIdx]}`
+                : `${selectedMetric.label} over or under plan by month`}
+              <InfoTip label="How to read this chart">
+                {selectedMetric.tip}{' '}
+                {period === 'month'
+                  ? selectedMetric.breakeven
+                    ? 'The month opens at the costs it has already committed and climbs as stays check in, so crossing zero is the day it paid for itself. Dashed where it is booked but not yet earned.'
+                    : 'Adding up through the month, dashed where it is booked but not yet earned. The flat line is the plan.'
+                  : selectedMetric.prorates
+                    ? 'Each bar is how far a month landed above or below its plan, grey where the month is still ahead and the gap is left to sell. The faint line is the level itself. Click a month to drill into its P&L.'
+                    : 'Each bar is how far a month landed above or below its plan. The month in progress has no bar — its costs land before its revenue does. The faint line is the level itself. Click a month to drill into its P&L.'}
+              </InfoTip>
+            </p>
+            <div className="text-right shrink-0">
+              <p className={`text-xs font-semibold ${pace.color}`}>{pace.label}</p>
+              <p className="text-[10px] text-slate-400">{paceCaption}</p>
+              {metricProjection != null && (
+                <p className="text-[10px] text-slate-400">{fmt(metricProjection)} projected for {year}</p>
+              )}
+            </div>
+          </div>
+          {!hasData ? (
+            <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
+              No data yet. Import your earnings CSV to get started.
+            </div>
+          ) : period === 'month' ? (
             <MonthProgressChart
-              points={cumulativeNetData}
+              points={cumulativeData}
               monthLabel={MONTHS_LONG[currentMonthIdx]}
               fmt={fmt}
-              target={periodNetTarget !== 0 ? periodNetTarget : null}
-              color="#6366f1"
-              breakeven
+              target={periodTotals[metric].plan !== 0 ? periodTotals[metric].plan : null}
+              color={selectedMetric.color}
+              breakeven={selectedMetric.breakeven}
             />
           ) : (
-            <YearVarianceChart
-              data={netVarianceChartData}
-              fmt={fmt}
-              selectedIndex={selectedMonth}
-              onSelect={handleChartClick}
-              actualLabel="Net income"
-              pendingNote="Not closed out yet"
-            />
+            <>
+              <YearVarianceChart
+                data={varianceData}
+                fmt={fmt}
+                selectedIndex={selectedMonth}
+                onSelect={handleChartClick}
+                actualLabel={selectedMetric.label}
+                pendingNote={selectedMetric.prorates ? 'Not reached yet' : 'Not closed out yet'}
+              />
+              {!prevHasData && manualTarget == null && (
+                <p className="text-xs text-amber-700 border border-amber-200 rounded-lg px-3 py-2 mt-3">
+                  No prior-year data — set an annual target with the pencil above to enable the plan, or{' '}
+                  <a href="/settings" className="underline font-medium">import {year - 1} baseline data</a>.
+                </p>
+              )}
+            </>
           )}
-        </div>
-      )}
         </div>
       </section>
 

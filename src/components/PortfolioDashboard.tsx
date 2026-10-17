@@ -209,14 +209,15 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
           <h1 className="text-2xl font-bold text-slate-900 flex items-center gap-2">
             {focusedRow ? focusedRow.name : live > 1 ? 'Portfolio' : rows[0]?.name ?? 'Portfolio'}
           </h1>
-          <p className="text-slate-500 text-sm mt-1">
-            {focusedRow
-              ? 'One property · '
-              : live > 1
-                ? `${live} properties · `
-                : ''}
-            {periodLabel}
-          </p>
+          {/* With one unit the roll-up below is hidden, so there is no window
+              for this to describe — the property's own dashboard carries its
+              period filter. */}
+          {live > 1 && (
+            <p className="text-slate-500 text-sm mt-1">
+              {focusedRow ? 'One property · ' : `${live} properties · `}
+              {periodLabel}
+            </p>
+          )}
         </div>
         <div className="flex items-center gap-1.5">
           {focused && (
@@ -227,7 +228,7 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
               <ArrowLeft className="w-3 h-3" /> All properties
             </button>
           )}
-          {PERIODS.map(p => (
+          {live > 1 && PERIODS.map(p => (
             <button
               key={p.id}
               onClick={() => setPeriod(p.id)}
@@ -243,7 +244,11 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
         </div>
       </div>
 
-      {/* ── The four layers ── */}
+      {/* ── The four layers, rolled up across every unit ──
+          Only with more than one unit. With a single property this said exactly
+          what the property's own Financial Performance tiles say below, over a
+          second period filter of its own. */}
+      {live > 1 && (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {LAYERS.map(layer => {
           const { pct, variance, status } = layerPacing(layer.key);
@@ -275,6 +280,7 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
           );
         })}
       </div>
+      )}
 
       {/* ── The properties ── */}
       {live > 1 && (

@@ -47,26 +47,6 @@ export type ProgressPoint = {
   isFuture: boolean;
 };
 
-/**
- * Each day's cumulative revenue, split into the part already earned and the part
- * still only booked. The changeover day belongs to both series so the solid line
- * hands over to the dashed one without a break.
- */
-export function runningTotals(data: DayDatum[]): ProgressPoint[] {
-  const lastActual = data.reduce((acc, d, i) => (d.isFuture ? acc : i), -1);
-  let running = 0;
-  return data.map((d, i) => {
-    running += d.revenue;
-    return {
-      day: d.day,
-      earned: i <= lastActual ? running : null,
-      booked: i >= lastActual ? running : null,
-      today: d.revenue,
-      isFuture: d.isFuture,
-    };
-  });
-}
-
 function RunningTooltip({
   active, payload, monthLabel, fmt, target,
 }: {
@@ -113,9 +93,9 @@ function RunningTooltip({
  * against a flat line at the target. Where the dashed line ends is where the
  * month lands if nothing else sells.
  *
- * Gross revenue and net income are the same chart on different money, so they
- * share this one — net income opens below zero at the month's committed costs
- * and marks where it breaks even.
+ * All four layers of the money are the same chart on different money, so they
+ * share this one — the layers carrying costs open below zero at what the month
+ * has already committed and mark where they break even.
  */
 export function MonthProgressChart({
   points, monthLabel, fmt, target, color = COLORS.earned, breakeven = false,
@@ -194,25 +174,6 @@ export function MonthProgressChart({
         </span>
       </div>
     </>
-  );
-}
-
-/** The gross revenue month view: the running total of what each day's check-ins brought in. */
-export function DayRevenueChart({
-  data, monthLabel, fmt, target,
-}: {
-  data: DayDatum[];
-  monthLabel: string;
-  fmt: (n: number) => string;
-  target?: number | null;
-}) {
-  return (
-    <MonthProgressChart
-      points={runningTotals(data)}
-      monthLabel={monthLabel}
-      fmt={fmt}
-      target={target}
-    />
   );
 }
 

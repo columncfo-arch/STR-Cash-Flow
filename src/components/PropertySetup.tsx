@@ -34,7 +34,7 @@ export default function PropertySetup({
     {
       done: hasTarget,
       title: 'Set this year’s revenue target',
-      body: 'The pencil on the Gross Revenue tile. Pacing, the plan rings and every status read against it.',
+      body: 'The pencil on the Financial Performance section. Pacing, the plan rings and every status read against it.',
       href: null,
     },
     {
