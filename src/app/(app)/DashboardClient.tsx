@@ -4,7 +4,7 @@ import { AnnualStatement, MonthlyStatement, Settings, Platform } from '@/types';
 import StatCard from '@/components/StatCard';
 import { TrendingUp, X, Pencil, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
-import { pacingStatus } from '@/lib/pacing';
+import { pacingStatus, paceStatus } from '@/lib/pacing';
 import InfoTip from '@/components/InfoTip';
 import { addDays } from '@/lib/dateRange';
 import {
@@ -455,6 +455,35 @@ export default function DashboardClient() {
     s + (m.year === year ? (monthlyForecasts[m.mi] ?? 0) : (effectivePriorMonthly?.[m.mi] ?? 0)), 0);
   const periodGrossActual = periodMonths.reduce((s, m) => s + (monthStmt(m)?.grossRevenue ?? 0), 0);
 
+  // Where the period's target should stand by today, rather than where it ends.
+  // Months already closed contribute in full, the month in progress contributes
+  // the share of it that has elapsed, and months still ahead contribute nothing.
+  // Earning 60% of a month's target reads differently on the 17th than the 28th,
+  // and that difference is the only thing the first two columns cannot show.
+  const periodGrossExpectedToDate = periodMonths.reduce((sum, m) => {
+    const monthTarget = m.year === year ? (monthlyForecasts[m.mi] ?? 0) : (effectivePriorMonthly?.[m.mi] ?? 0);
+    const isPast = m.year < year || m.mi < currentMonthIdx;
+    const isCurrent = m.year === year && m.mi === currentMonthIdx;
+    if (isPast) return sum + monthTarget;
+    if (isCurrent) return sum + monthTarget * (now.getDate() / daysInCurMonth);
+    return sum;
+  }, 0);
+  // A period that has not finished is the only one where pace differs from the
+  // final result; once it closes, pace is the result.
+  const periodStillRunning = periodMonths.some(m => m.year > year || (m.year === year && m.mi >= currentMonthIdx));
+  const periodElapsedPct = periodGrossTarget > 0
+    ? Math.min(100, (periodGrossExpectedToDate / periodGrossTarget) * 100)
+    : null;
+  // Revenue lands in lumps on check-in days, so in the first days of a period a
+  // single stay that has not arrived yet swings pace to −100%. Withhold the
+  // verdict until enough of the period has run for it to mean something.
+  const PACE_MIN_ELAPSED_PCT = 10;
+  const paceIsMeaningful = periodGrossExpectedToDate > 0
+    && (periodElapsedPct ?? 0) >= PACE_MIN_ELAPSED_PCT;
+  const pacePct = paceIsMeaningful
+    ? ((periodGrossActual - periodGrossExpectedToDate) / periodGrossExpectedToDate) * 100
+    : null;
+
   const periodNetTarget = periodMonths.reduce((s, m) =>
     s + (m.year === year ? (monthlyNetForecasts[m.mi] ?? 0) : (monthStmt(m)?.netIncome ?? 0)), 0);
   const periodNetActual = periodMonths.reduce((s, m) => s + (monthStmt(m)?.netIncome ?? 0), 0);
@@ -659,12 +688,11 @@ export default function DashboardClient() {
         // clamping it to zero and showing only "Covered".
         const surplus = hasTargetForPeriod ? Math.max(0, earned - target) : 0;
         const variance = earned - target;
-        const variancePct = hasTargetForPeriod ? (variance / target) * 100 : null;
         // Uncapped for the caption — 112% of target is the fact. The bar is
         // capped separately so it cannot overflow its track.
         const pctOfTarget = hasTargetForPeriod ? (earned / target) * 100 : null;
         const barPct = pctOfTarget != null ? Math.min(100, pctOfTarget) : 0;
-        const status = pacingStatus(variancePct, { reached: stillNeeded === 0 && hasTargetForPeriod, label: 'Target Met' });
+        const pace = paceStatus(pacePct);
         return (
           <div className="px-5 py-4">
             <div className="flex items-start gap-4 sm:gap-6">
@@ -693,7 +721,13 @@ export default function DashboardClient() {
               </div>
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
+                  <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold flex items-center gap-1">
+                    Pace
+                    <InfoTip label="What pace means" align="right">
+                      Whether the revenue earned is ahead of where this period&rsquo;s target should stand by
+                      today, rather than where it ends. Within 5% either way counts as on pace.
+                    </InfoTip>
+                  </p>
                   <div className="flex items-center gap-1 shrink-0 -mt-0.5">
                     <button onClick={openSeasonalityEditor} className="text-slate-300 hover:text-slate-500 transition-colors"
                       title={`Edit ${year - 1} monthly actuals — sets how the annual target splits across months`}>
@@ -718,14 +752,13 @@ export default function DashboardClient() {
                   </div>
                 ) : (
                   <>
-                    <p className={`text-xl font-bold leading-tight mt-0.5 ${status.color}`}>{status.label}</p>
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${pace.color}`}>{pace.label}</p>
                     <p className="text-[11px] text-slate-400 truncate">
-                      {variancePct != null
-                        ? <>
-                            <span className={status.color}>{variance >= 0 ? '▲' : '▼'}{Math.abs(variancePct).toFixed(1)}%</span>
-                            {` · ${fmt(annualForecast)} annual target`}
-                          </>
-                        : 'no target for this period'}
+                      {pacePct == null
+                        ? (hasTargetForPeriod ? `too early in ${periodLabel} to call` : 'no target for this period')
+                        : periodStillRunning
+                          ? `${pctOfTarget?.toFixed(0)}% earned · ${periodElapsedPct?.toFixed(0)}% of ${periodLabel} gone`
+                          : `${periodLabel} closed`}
                     </p>
                   </>
                 )}
