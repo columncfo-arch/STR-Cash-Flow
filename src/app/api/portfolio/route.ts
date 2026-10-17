@@ -19,6 +19,15 @@ export interface PortfolioEntry {
     priorMonthlyRevenue: number[] | null;
     occupancyPct: number | null;
     adr: number | null;
+    monthlyPITI: number;
+    /**
+     * What each layer kept of gross last year. Only gross revenue has a goal
+     * anybody set, so these are what turn it into a goal for the layers beneath
+     * — and they come from a finished year rather than from the figures being
+     * judged, which would make every layer hit its mark by construction.
+     * Null when there is no prior year to learn from.
+     */
+    priorMargins: { netRevenue: number; operatingIncome: number; contribution: number } | null;
   };
 }
 
@@ -44,10 +53,21 @@ export async function GET(req: Request) {
 
     const entries = await Promise.all(
       allScopes(userId, account).map(async ({ property, scope }): Promise<PortfolioEntry> => {
-        const [{ statement }, settings] = await Promise.all([
+        const [{ statement }, { statement: priorYear }, settings] = await Promise.all([
           buildAnnualStatement(scope, year),
+          buildAnnualStatement(scope, year - 1),
           loadSettings(scope),
         ]);
+        const priorGross = priorYear.grossRevenue;
+        // Contribution margin is taken before PITI so the fixed payment is
+        // subtracted once, at the window's own length, rather than being baked
+        // into a ratio and scaled by revenue.
+        const priorMargins = priorGross > 0 ? {
+          netRevenue: priorYear.netRevenue / priorGross,
+          operatingIncome: priorYear.operatingIncome / priorGross,
+          contribution: (priorYear.netIncome + priorYear.piti) / priorGross,
+        } : null;
+
         const override = settings.forecastOverrides?.[String(year)];
         const prior = settings.forecastOverrides?.[String(year - 1)]?.monthlyRevenue;
         return {
@@ -61,6 +81,8 @@ export async function GET(req: Request) {
             priorMonthlyRevenue: prior && prior.some(v => v > 0) ? prior : null,
             occupancyPct: settings.targetOccupancyPct ?? null,
             adr: settings.targetAdr ?? null,
+            monthlyPITI: settings.monthlyPITI ?? 0,
+            priorMargins,
           },
         };
       }),

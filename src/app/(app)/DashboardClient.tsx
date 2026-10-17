@@ -617,12 +617,6 @@ export default function DashboardClient() {
 
   return (
     <div className="max-w-6xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-2xl font-bold text-slate-900">
-            {settings?.propertyName ? `CFO Dashboard for ${settings.propertyName}` : 'CFO Dashboard'}
-          </h1>
-        <p className="text-slate-500 text-sm mt-1">{year} overview</p>
-      </div>
 
       {/* ── Period filter: drives every tile on the page ── */}
       {!selMonth && (
