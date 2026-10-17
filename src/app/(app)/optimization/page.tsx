@@ -118,6 +118,8 @@ export default function OptimizationPage() {
   const [draftRate, setDraftRate] = useState('');
   const [draftValue, setDraftValue] = useState('');
   const [draftBalance, setDraftBalance] = useState('');
+  const [draftPropertyTax, setDraftPropertyTax] = useState('');
+  const [draftInsurance, setDraftInsurance] = useState('');
   const [draftLoanTerm, setDraftLoanTerm] = useState('');
   const [draftLoanStructure, setDraftLoanStructure] = useState<LoanStructure>('fixed');
   const [savedSection, setSavedSection] = useState<string | null>(null);
@@ -157,6 +159,8 @@ export default function OptimizationPage() {
       setDraftRate(s.mortgageRate ? String(s.mortgageRate) : '');
       setDraftValue(s.propertyValue ? String(s.propertyValue) : '');
       setDraftBalance(s.loanBalance ? String(s.loanBalance) : '');
+      setDraftPropertyTax(s.monthlyPropertyTax ? String(s.monthlyPropertyTax) : '');
+      setDraftInsurance(s.monthlyInsurance ? String(s.monthlyInsurance) : '');
       setDraftLoanTerm(s.loanTermYears ? String(s.loanTermYears) : '');
       setDraftLoanStructure(s.loanStructure ?? 'fixed');
       setDraftFeePerStay(s.guestCleaningFeePerBooking ? String(s.guestCleaningFeePerBooking) : '');
@@ -225,6 +229,8 @@ export default function OptimizationPage() {
       mortgageRate: parseFloat(draftRate) || undefined,
       propertyValue: parseFloat(draftValue) || undefined,
       loanBalance: parseFloat(draftBalance) || undefined,
+      monthlyPropertyTax: parseFloat(draftPropertyTax) || undefined,
+      monthlyInsurance: parseFloat(draftInsurance) || undefined,
       loanTermYears: parseInt(draftLoanTerm) || undefined,
       loanStructure: draftLoanStructure,
       totalCapitalDeployed: parseFloat(draftCapitalDeployed) || undefined,
@@ -1044,6 +1050,10 @@ export default function OptimizationPage() {
                       unit="$" placeholder="e.g. 196000" note="All-in: down pmt + reno + startup" />
                     <InlineInput label="Renovation + Startup" value={draftRenovationCosts} onChange={setDraftRenovationCosts} onBlur={savePiti}
                       unit="$" placeholder="e.g. 120000" note="Capital beyond the down payment" />
+                    <InlineInput label="Property Tax / mo" value={draftPropertyTax} onChange={setDraftPropertyTax} onBlur={savePiti}
+                      unit="$" placeholder="e.g. 450" note="The T in PITI" />
+                    <InlineInput label="Insurance / mo" value={draftInsurance} onChange={setDraftInsurance} onBlur={savePiti}
+                      unit="$" placeholder="e.g. 180" note="The second I in PITI" />
                   </div>
                   <div className="mt-4">
                     <p className="text-xs text-slate-500 mb-2">Loan Structure</p>

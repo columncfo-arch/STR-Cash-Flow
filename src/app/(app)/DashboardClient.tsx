@@ -5,101 +5,19 @@ import StatCard from '@/components/StatCard';
 import { TrendingUp, X, Pencil, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
 import { pacingStatus } from '@/lib/pacing';
+import InfoTip from '@/components/InfoTip';
+import { addDays } from '@/lib/dateRange';
+import {
+  DayRevenueChart, DayOccupancyChart, MonthProgressChart, DayDatum, ProgressPoint,
+} from '@/components/DayCharts';
+import { YearVarianceChart, VarianceDatum } from '@/components/YearVarianceChart';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  Legend, Cell, ReferenceLine,
+  Cell, ReferenceLine,
 } from 'recharts';
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-
-const PLATFORM_COLORS: Record<string, string> = {
-  airbnb: '#f43f5e',
-  booking: '#3b82f6',
-  vrbo: '#6366f1',
-  direct: '#0d9488',
-  other: '#9ca3af',
-};
-
-type TooltipEntry = { payload: Record<string, number | null> };
-
-function ChartTooltip({
-  active, payload, label, fmt,
-}: {
-  active?: boolean;
-  payload?: TooltipEntry[];
-  label?: string;
-  fmt: (n: number) => string;
-}) {
-  if (!active || !payload?.length) return null;
-  const d = payload[0].payload;
-  const gross = d._gross as number | null;
-  const target = d['Monthly Target'] as number | null;
-  const bookedRevenue = ((d.Airbnb ?? 0) as number) + ((d['Booking.com'] ?? 0) as number) + ((d.VRBO ?? 0) as number) + ((d.Direct ?? 0) as number) + ((d.Other ?? 0) as number);
-  const hasActual = gross != null;
-  const hasPreBooked = !hasActual && bookedRevenue > 0;
-  if (!hasActual && !hasPreBooked && target == null) return null;
-
-  const variance = hasActual && target ? gross! - target : null;
-
-  return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm min-w-[190px]">
-      <p className="font-semibold text-slate-800 mb-2">{label}</p>
-      {hasActual && (
-        <div className="flex justify-between gap-6">
-          <span className="text-slate-500">Revenue</span>
-          <span className="font-medium">{fmt(gross!)}</span>
-        </div>
-      )}
-      {hasPreBooked && (
-        <div className="flex justify-between gap-6">
-          <span className="text-slate-500">On books</span>
-          <span className="font-medium text-slate-600">{fmt(bookedRevenue)}</span>
-        </div>
-      )}
-      {target != null && (
-        <div className={`flex justify-between gap-6 ${hasActual || hasPreBooked ? 'border-t border-slate-100 mt-2 pt-2' : ''}`}>
-          <span className="text-slate-500">Monthly Target</span>
-          <span className="font-medium text-slate-600">{fmt(target)}</span>
-        </div>
-      )}
-      {variance != null && (
-        <div className="flex justify-between gap-6">
-          <span className="text-slate-500">vs. Target</span>
-          <span className={`font-semibold ${variance >= 0 ? 'text-emerald-600' : 'text-red-500'}`}>
-            {variance >= 0 ? '+' : ''}{fmt(variance)}
-          </span>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function PnLTooltip({
-  active, payload, label, fmt,
-}: {
-  active?: boolean;
-  payload?: { name: string; value: number | null; color: string }[];
-  label?: string;
-  fmt: (n: number) => string;
-}) {
-  if (!active || !payload?.length) return null;
-  const entries = payload.filter(p => p.value != null);
-  if (!entries.length) return null;
-  return (
-    <div className="bg-white border border-slate-200 rounded-lg shadow-lg p-3 text-sm min-w-[190px]">
-      <p className="font-semibold text-slate-800 mb-2">{label}</p>
-      {entries.map(e => (
-        <div key={e.name} className="flex justify-between gap-6">
-          <span className="text-slate-500">{e.name}</span>
-          <span className={`font-medium ${e.name === 'Net Income' && e.value! < 0 ? 'text-red-500' : ''}`}>
-            {fmt(e.value!)}
-          </span>
-        </div>
-      ))}
-    </div>
-  );
-}
 
 function PlatformTable({
   byPlatform, totalRevenue, fmt,
@@ -140,7 +58,10 @@ function PlatformTable({
   );
 }
 
-type PnLData = Pick<MonthlyStatement, 'grossRevenue' | 'platformFees' | 'fastPayFees' | 'taxRemitted' | 'refunds' | 'netRevenue' | 'ownerTaxes' | 'totalOperatingExpenses' | 'operatingIncome' | 'piti' | 'netIncome'>;
+type PnLData = Pick<MonthlyStatement,
+  'grossRevenue' | 'platformFees' | 'fastPayFees' | 'taxRemitted' | 'refunds' | 'netRevenue'
+  | 'ownerTaxes' | 'totalOperatingExpenses' | 'operatingIncome' | 'piti'
+  | 'mortgageInterest' | 'mortgagePrincipal' | 'mortgageTaxesInsurance' | 'netProfit' | 'netIncome'>;
 
 // Green = on/above target · Amber = missing by ≤25 · Red = missing by >25
 // missMagnitude: absolute pct or pts below target (pass null → defaults to red)
@@ -164,8 +85,16 @@ function PnLTable({ m, fmt }: { m: PnLData; fmt: (n: number) => string }) {
     ...(m.ownerTaxes > 0 ? [{ label: 'State & Local Taxes (Owner Remits)', value: m.ownerTaxes, indent: true, negative: true }] : []),
     ...(otherOpEx > 0 ? [{ label: 'Other Operating Expenses', value: otherOpEx, indent: true, negative: true }] : []),
     { label: 'Operating Income', value: m.operatingIncome, bold: true, separator: true, accent: true },
-    ...(m.piti > 0 ? [{ label: 'PITI', value: m.piti, negative: true, indent: true }] : []),
-    { label: 'Net Income', value: m.netIncome, bold: true, separator: true, accent: true },
+    // Interest and escrow are costs; the principal below is equity, so it sits
+    // under net income rather than inside it — as on the Income Statement
+    ...(m.mortgageInterest > 0 ? [{ label: 'Mortgage Interest', value: m.mortgageInterest, negative: true, indent: true }] : []),
+    ...(m.mortgageTaxesInsurance > 0 ? [{ label: 'Taxes, Insurance & Escrow', value: m.mortgageTaxesInsurance, negative: true, indent: true }] : []),
+    ...(m.piti > 0 && m.mortgageInterest === 0 && m.mortgageTaxesInsurance === 0
+      ? [{ label: 'PITI', value: m.piti, negative: true, indent: true }] : []),
+    { label: 'Net Income', value: m.netProfit, bold: true, separator: true, accent: true },
+    ...(m.mortgagePrincipal > 0 ? [{ label: 'Principal Repaid (equity built)', value: m.mortgagePrincipal, negative: true, indent: true }] : []),
+    ...(m.mortgagePrincipal > 0
+      ? [{ label: 'Cash Flow', value: m.netIncome, bold: true, separator: true, accent: true }] : []),
   ];
 
   return (
@@ -174,9 +103,13 @@ function PnLTable({ m, fmt }: { m: PnLData; fmt: (n: number) => string }) {
         {rows.map((r, i) => (
           <tr key={i} className={`${r.separator ? 'border-t-2 border-slate-200' : 'border-t border-slate-50'} ${r.bold ? 'font-semibold' : ''}`}>
             <td className={`py-2 text-slate-700 ${r.indent ? 'pl-6 text-slate-500 text-xs' : ''}`}>{r.label}</td>
+            {/* Only the accented rows — operating and net income — are a verdict.
+                Deductions are set in slate and already read as deductions from the
+                parentheses; red on every one of them made routine costs look like
+                losses. */}
             <td className={`py-2 text-right text-sm ${
               r.accent ? (r.value >= 0 ? 'text-emerald-700' : 'text-red-600') :
-              r.negative ? 'text-red-500' :
+              r.negative ? 'text-slate-500' :
               r.bold ? 'text-slate-800' : 'text-slate-600'
             }`}>
               {(r.negative && r.value > 0) ? `(${fmt(r.value)})` : fmt(r.value)}
@@ -192,8 +125,6 @@ function MonthPnL({ m, fmt }: { m: MonthlyStatement; fmt: (n: number) => string 
   return <PnLTable m={m} fmt={fmt} />;
 }
 
-type HealthScore = 1 | 0 | -1;
-type HealthVerdict = { verdict: string; level: 'exceeding' | 'on-track' | 'at-risk' };
 
 export default function DashboardClient() {
   const [statement, setStatement] = useState<AnnualStatement | null>(null);
@@ -202,7 +133,7 @@ export default function DashboardClient() {
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null); // 0-indexed
   // Which span the revenue tile reports on. Months, not days — targets are
   // distributed monthly.
-  const [period, setPeriod] = useState<'month' | 'ytd' | 'last12' | 'custom'>('month');
+  const [period, setPeriod] = useState<'month' | 'ytd' | 'custom'>('month');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
   const [editingTarget, setEditingTarget] = useState(false);
@@ -234,11 +165,10 @@ export default function DashboardClient() {
   const fmt = (n: number) =>
     new Intl.NumberFormat('en-US', { style: 'currency', currency: settings?.currency ?? 'USD', maximumFractionDigits: 0 }).format(n);
 
-  // YTD stats — tile/pacing metrics filter current month to check-ins on or before today;
-  // ytdMonths (full current month) is kept for the P&L and platform tables below.
+  // YTD stats — tile and pacing metrics filter the current month to check-ins on
+  // or before today.
   const todayStr = `${year}-${String(currentMonthIdx + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
   const completedMonths = statement?.months.slice(0, currentMonthIdx) ?? [];
-  const ytdMonths = statement?.months.slice(0, currentMonthIdx + 1) ?? [];
 
   const curMonthStmt = statement?.months[currentMonthIdx] ?? null;
   const curActualBookings = curMonthStmt?.bookings.filter(b => b.checkIn <= todayStr) ?? [];
@@ -249,62 +179,16 @@ export default function DashboardClient() {
   const ytdGross = completedMonths.reduce((s, m) => s + m.grossRevenue, 0) + curActualGross;
   // Net income: completed months only — mixing partial-month revenue with full-month expenses/PITI is misleading
   const ytdNetIncome = completedMonths.reduce((s, m) => s + m.netIncome, 0);
-  const ytdNights = completedMonths.reduce((s, m) => s + m.totalNights, 0) + curActualNights;
   const daysInCurMonth = new Date(year, currentMonthIdx + 1, 0).getDate();
   const curMonthPartialOccupancy = curActualNights / daysInCurMonth;
   const occupancyMonthCount = completedMonths.length + (curMonthStmt ? 1 : 0);
   const ytdOccupancy = occupancyMonthCount > 0
     ? (completedMonths.reduce((s, m) => s + m.occupancyRate, 0) + curMonthPartialOccupancy) / occupancyMonthCount
     : 0;
-  const ytdAdr = ytdNights > 0 ? ytdGross / ytdNights : null;
 
-  // Confirmed future bookings in the current year (checkIn > today)
-  const futureConfirmedGross = statement?.months.reduce((total, m, i) => {
-    const eligible = i === currentMonthIdx
-      ? m.bookings.filter(b => b.checkIn > todayStr)
-      : i > currentMonthIdx
-      ? m.bookings
-      : [];
-    return total + eligible.reduce((s, b) => s + b.income, 0);
-  }, 0) ?? 0;
-
-  // Confirmed future nights (for open-nights calculation)
-  const futureConfirmedNights = statement?.months.reduce((total, m, i) => {
-    if (i === currentMonthIdx) {
-      return total + m.bookings.filter(b => b.checkIn > todayStr).reduce((s, b) => s + b.nights, 0);
-    }
-    return i > currentMonthIdx ? total + m.totalNights : total;
-  }, 0) ?? 0;
-
-  // Days remaining in the year from today (inclusive)
-  const yearEnd = new Date(year, 11, 31);
-  const daysRemainingInYear = Math.round((yearEnd.getTime() - now.getTime()) / 86400000) + 1;
-  const openNights = Math.max(0, daysRemainingInYear - futureConfirmedNights);
   // P&L table uses completed months only — the only period where revenue and expenses are both fully settled
-  const ytdPnL: PnLData = {
-    grossRevenue: completedMonths.reduce((s, m) => s + m.grossRevenue, 0),
-    platformFees: completedMonths.reduce((s, m) => s + m.platformFees, 0),
-    fastPayFees: completedMonths.reduce((s, m) => s + m.fastPayFees, 0),
-    taxRemitted: completedMonths.reduce((s, m) => s + m.taxRemitted, 0),
-    refunds: completedMonths.reduce((s, m) => s + m.refunds, 0),
-    netRevenue: completedMonths.reduce((s, m) => s + m.netRevenue, 0),
-    ownerTaxes: completedMonths.reduce((s, m) => s + m.ownerTaxes, 0),
-    totalOperatingExpenses: completedMonths.reduce((s, m) => s + m.totalOperatingExpenses, 0),
-    operatingIncome: completedMonths.reduce((s, m) => s + m.operatingIncome, 0),
-    piti: completedMonths.reduce((s, m) => s + m.piti, 0),
-    netIncome: ytdNetIncome,
-  };
 
   // Aggregate YTD byPlatform for the platform table
-  const ytdByPlatform = ytdMonths.reduce((acc, m) => {
-    (Object.keys(m.byPlatform) as Platform[]).forEach(p => {
-      if (!acc[p]) acc[p] = { income: 0, nights: 0, bookings: 0 };
-      acc[p].income += m.byPlatform[p].income;
-      acc[p].nights += m.byPlatform[p].nights;
-      acc[p].bookings += m.byPlatform[p].bookings;
-    });
-    return acc;
-  }, {} as Record<Platform, { income: number; nights: number; bookings: number }>);
 
   // Selected month data
   const selMonth: MonthlyStatement | null = (selectedMonth !== null && statement) ? statement.months[selectedMonth] : null;
@@ -410,33 +294,100 @@ export default function DashboardClient() {
     ? (manualTarget ?? monthlyForecasts.reduce<number>((s, v) => s + (v ?? 0), 0))
     : null;
   const curMonthForecast = monthlyForecasts[currentMonthIdx];
-  const stillToBook = annualForecast != null ? Math.max(0, annualForecast - ytdGross - futureConfirmedGross) : null;
-  const breakEvenAdr = openNights > 0 && stillToBook != null && stillToBook > 0 ? Math.ceil(stillToBook / openNights) : null;
   // Prorate current month's forecast by days elapsed so ytdForecast matches the ytdGross horizon
   const daysElapsed = now.getDate();
   const curMonthForecastProrated = curMonthForecast != null
     ? Math.round(curMonthForecast * daysElapsed / daysInCurMonth)
     : 0;
-  const ytdForecast = hasTarget
-    ? monthlyForecasts.slice(0, currentMonthIdx).reduce<number>((s, v) => s + (v ?? 0), 0) + curMonthForecastProrated
-    : null;
-  const pacingVariance = ytdForecast != null ? ytdGross - ytdForecast : null;
-  const pacingVariancePct = ytdForecast && ytdForecast > 0 ? (pacingVariance! / ytdForecast) * 100 : null;
 
-  const hasDirectIncome = statement?.months.some(m => m.byPlatform.direct.income > 0) ?? false;
-  const hasOtherIncome = statement?.months.some(m => m.byPlatform.other.income > 0) ?? false;
+  // Day-by-day view of the selected month, shown in place of the year charts when
+  // the period is This Month. Both the revenue chart and the occupancy chart read
+  // from this: revenue is what the day earned, rate is what the night sold for.
+  //
+  // A booking's whole income lands on its check-in day, matching how the API
+  // assigns revenue to months (checkIn prefix). Spreading it across nights would
+  // leak revenue into adjacent months and the bars would stop summing to the
+  // Earned figure in the tile above.
+  //
+  // Revenue alone reads wrong though: the rest of a multi-night stay has no bar,
+  // which looks identical to a vacant night. So each night also carries its
+  // occupancy, and the bar for a stay is drawn as one block spanning its nights
+  // (see DayBar) over a shaded "booked" band.
+  const dailyChartData: DayDatum[] = (() => {
+    if (period !== 'month') return [];
+    const daysInMonth = new Date(year, currentMonthIdx + 1, 0).getDate();
+    const monthPrefix = `${year}-${String(currentMonthIdx + 1).padStart(2, '0')}-`;
+    const isLiveMonth = now.getFullYear() === year && now.getMonth() === currentMonthIdx;
 
-  const chartData = statement?.months.map((m, i) => {
-    const isActual = i <= currentMonthIdx;
+    const days: DayDatum[] = Array.from({ length: daysInMonth }, (_, i) => ({
+      day: String(i + 1),
+      revenue: 0,
+      occupied: false,
+      rate: 0,
+      stayNight: 0,
+      stayNights: 0,
+      guest: '',
+      // Days still to come are greyed so an empty bar reads as "not yet"
+      // rather than "earned nothing"
+      isFuture: isLiveMonth && i + 1 > now.getDate(),
+    }));
+
+    // Every booking, not just this month's: a stay that checked in last month can
+    // still occupy the first nights of this one.
+    for (const b of statement?.months.flatMap(m => m.bookings) ?? []) {
+      const nights = Math.max(1, b.nights || 0);
+      const guest = b.guestName?.trim() || b.summary || '';
+      // What the night sold for. The stay's gross spread evenly over its nights —
+      // the same basis as the ADR figures elsewhere on the page.
+      const nightlyRate = b.income / nights;
+
+      for (let n = 0; n < nights; n++) {
+        const night = addDays(b.checkIn, n);
+        if (!night.startsWith(monthPrefix)) continue;
+        // Slice the day out of YYYY-MM-DD rather than parsing — Date would shift it
+        const day = days[Number(night.slice(8, 10)) - 1];
+        if (!day) continue;
+        day.occupied = true;
+        day.rate = nightlyRate;
+        day.stayNight = n + 1;
+        day.stayNights = nights;
+        day.guest = guest;
+      }
+
+      if (!b.checkIn.startsWith(monthPrefix)) continue;
+      const checkInDay = Number(b.checkIn.slice(8, 10));
+      const day = days[checkInDay - 1];
+      if (!day) continue;
+      day.revenue += b.income;
+    }
+
+    return days;
+  })();
+
+  // Gross revenue as the gap to target rather than the level. The section reports
+  // pacing, and a stack split five ways by platform asked the reader to add up
+  // twelve comparisons to find it — the platform mix is already a table below.
+  //
+  // The current month compares like with like: revenue booked to date against
+  // the target prorated to today, so a month half elapsed does not read as a
+  // miss. Months not yet reached have no variance at all — what is on their
+  // books is a forecast, not a shortfall.
+  const varianceChartData: VarianceDatum[] = statement?.months.map((m, i) => {
+    const isCurrent = i === currentMonthIdx;
+    // A month still ahead is measured on what is booked so far against its full
+    // target — the gap is what is left to sell, so the bar is drawn grey.
+    const isForecast = i > currentMonthIdx;
+    const target = isCurrent ? curMonthForecastProrated : monthlyForecasts[i];
+    const actual = isCurrent ? curActualGross : m.grossRevenue;
+    const hasTarget = target != null && target > 0;
     return {
       name: MONTHS[i],
-      Airbnb: m.byPlatform.airbnb.income,
-      'Booking.com': m.byPlatform.booking.income,
-      VRBO: m.byPlatform.vrbo.income,
-      ...(hasDirectIncome ? { Direct: m.byPlatform.direct.income } : {}),
-      ...(hasOtherIncome ? { Other: m.byPlatform.other.income } : {}),
-      'Monthly Target': monthlyForecasts[i],
-      _gross: isActual ? m.grossRevenue : null,
+      variance: hasTarget ? actual - target : null,
+      actual,
+      actualLine: hasTarget ? actual : null,
+      target: target ?? null,
+      isCurrent,
+      isForecast,
     };
   }) ?? [];
 
@@ -470,14 +421,6 @@ export default function DashboardClient() {
     : null;
   const annualNetForecast = projRemainingNet != null ? ytdNetIncome + projRemainingNet : null;
 
-  // NI pacing: compare completed months actual vs completed months forecast (same time horizon)
-  const ytdGrossForecastTotal = monthlyForecasts.slice(0, currentMonthIdx).reduce<number>((s, v) => s + (v ?? 0), 0);
-  const ytdNetForecast = cmRatio != null
-    ? Math.round(ytdGrossForecastTotal * cmRatio - ytdPITITotal)
-    : null;
-  const netPacingVariance = ytdNetForecast != null ? ytdNetIncome - ytdNetForecast : null;
-  const netPacingVariancePct = ytdNetForecast != null && ytdNetForecast !== 0
-    ? (netPacingVariance! / Math.abs(ytdNetForecast)) * 100 : null;
 
 
   // ── Selected period ────────────────────────────────────────────────────────
@@ -487,12 +430,6 @@ export default function DashboardClient() {
   const periodMonths: { year: number; mi: number }[] = (() => {
     if (period === 'month') return [{ year, mi: currentMonthIdx }];
     if (period === 'ytd') return Array.from({ length: currentMonthIdx + 1 }, (_, i) => ({ year, mi: i }));
-    if (period === 'last12') {
-      return Array.from({ length: 12 }, (_, k) => {
-        const off = currentMonthIdx - 11 + k;
-        return off < 0 ? { year: year - 1, mi: off + 12 } : { year, mi: off };
-      });
-    }
     if (!customFrom || !customTo || customFrom > customTo) return [];
     const out: { year: number; mi: number }[] = [];
     for (const y of [year - 1, year]) {
@@ -509,7 +446,6 @@ export default function DashboardClient() {
 
   const periodLabel = period === 'month' ? MONTHS_LONG[currentMonthIdx]
     : period === 'ytd' ? `${year} to date`
-    : period === 'last12' ? 'last 12 months'
     : customFrom && customTo ? `${customFrom} to ${customTo}` : 'custom range';
 
   // Only current-year months carry a target; closed prior-year months are their
@@ -533,12 +469,72 @@ export default function DashboardClient() {
     ? periodOccMonths.reduce((s, m) => s + m.occupancyRate, 0) / periodOccMonths.length
     : null;
 
-  const pnlChartData = statement?.months.map((m, i) => {
-    const isActual = i <= currentMonthIdx;
+  // Cumulative net income through the selected month, shown in place of the year
+  // view when the period is This Month.
+  //
+  // Only the revenue side has dates: bookings carry them, expenses reach the
+  // dashboard as monthly category totals and PITI as one figure. So rather than
+  // invent a daily cost, the month opens in the red by its whole committed cost
+  // and climbs as bookings land. The line crossing zero is the breakeven day.
+  //
+  // Mirrors buildPnL so the last point equals the month's netIncome:
+  //   netIncome = gross − platformFees − fastPay − tax − refunds − opex − piti
+  // Per-booking terms are dated; refunds, opex and piti form the opening debt.
+  // The month's net income as a running total, the same shape as the revenue
+  // chart above it. It opens below zero at the costs the month has already
+  // committed — operating expenses, PITI, refunds — and climbs as stays check
+  // in, so crossing zero is the day the month paid for itself.
+  const cumulativeNetData: ProgressPoint[] = (() => {
+    if (period !== 'month') return [];
+    const m = statement?.months[currentMonthIdx];
+    if (!m) return [];
+    const daysInMonth = new Date(year, currentMonthIdx + 1, 0).getDate();
+    const committed = m.totalOperatingExpenses + m.piti + m.refunds;
+
+    const byDay = new Array<number>(daysInMonth).fill(0);
+    for (const b of m.bookings) {
+      // Slice the day out of YYYY-MM-DD; Date would shift it across timezones
+      const d = Number(b.checkIn.slice(8, 10));
+      if (d < 1 || d > daysInMonth) continue;
+      byDay[d - 1] += (b.income ?? 0) - (b.platformFee ?? 0) - (b.fastPayFee ?? 0)
+        - (b.taxRemitted ?? 0) - (b.taxWithheld ?? 0);
+    }
+
+    const isLiveMonth = now.getFullYear() === year && now.getMonth() === currentMonthIdx;
+    const todayDay = isLiveMonth ? now.getDate() : daysInMonth;
+
+    let running = -committed;
+    return byDay.map((v, i) => {
+      running += v;
+      const day = i + 1;
+      const value = Math.round(running);
+      // Solid to today, dashed beyond — the tail is confirmed bookings not yet
+      // checked in. Both carry today's point so the lines meet.
+      return {
+        day: String(day),
+        earned: day <= todayDay ? value : null,
+        booked: day >= todayDay ? value : null,
+        today: Math.round(v),
+        isFuture: day > todayDay,
+      };
+    });
+  })();
+
+  // Net income against its forecast, as the gap. Completed months only: this
+  // month's costs — a full month of PITI and recurring expenses — have all
+  // landed while its revenue has not, so comparing it to a whole month's
+  // forecast would report a loss that the day-by-day view shows closing. The
+  // gross chart can prorate its target; costs do not prorate.
+  const netVarianceChartData: VarianceDatum[] = statement?.months.map((m, i) => {
+    const target = monthlyNetForecasts[i];
+    const comparable = i < currentMonthIdx && target != null;
     return {
       name: MONTHS[i],
-      'Net Income': isActual ? m.netIncome : null,
-      'Net Forecast': monthlyNetForecasts[i],
+      variance: comparable ? m.netIncome - target : null,
+      actual: m.netIncome,
+      actualLine: comparable ? m.netIncome : null,
+      target: target ?? null,
+      isCurrent: i === currentMonthIdx,
     };
   }) ?? [];
 
@@ -582,54 +578,6 @@ export default function DashboardClient() {
   const targetOcc = displayOccTarget;
   const occVariance = targetOcc != null ? ytdOccupancy - targetOcc : null;
 
-  // Year Health: composite score from the key pacing and coverage signals
-  const healthSignals: { label: string; score: HealthScore; detail: string }[] = [];
-
-  if (pacingVariancePct != null) {
-    const score: HealthScore = pacingVariancePct > 5 ? 1 : pacingVariancePct >= -10 ? 0 : -1;
-    healthSignals.push({ label: 'Revenue', score, detail: `${pacingVariancePct >= 0 ? '+' : ''}${pacingVariancePct.toFixed(1)}% vs target` });
-  }
-  // Only score NI pacing when the base is large enough to be meaningful — a $20 forecast
-  // base produces absurd percentages that mislead the health verdict.
-  if (netPacingVariancePct != null && ytdNetForecast != null && Math.abs(ytdNetForecast) >= 500) {
-    const score: HealthScore = netPacingVariancePct > 5 ? 1 : netPacingVariancePct >= -15 ? 0 : -1;
-    healthSignals.push({ label: 'Net Income', score, detail: `${netPacingVariancePct >= 0 ? '+' : ''}${netPacingVariancePct.toFixed(1)}% vs projection` });
-  }
-  if (annualForecast != null) {
-    if (breakEvenAdr == null) {
-      healthSignals.push({ label: 'Target Path', score: 1, detail: 'Bookings cover target' });
-    } else if (ytdAdr != null && ytdAdr > 0) {
-      const stretchRatio = breakEvenAdr / ytdAdr;
-      const score: HealthScore = stretchRatio <= 1.1 ? 1 : stretchRatio <= 1.4 ? 0 : -1;
-      healthSignals.push({ label: 'Target Path', score, detail: `$${breakEvenAdr}/night · ${openNights} open nights` });
-    }
-  }
-  if (occVariance != null) {
-    const score: HealthScore = occVariance >= 0 ? 1 : occVariance >= -10 ? 0 : -1;
-    healthSignals.push({ label: 'Occupancy', score, detail: `${occVariance >= 0 ? '+' : ''}${occVariance.toFixed(1)}pts vs target` });
-  }
-  // Annual NI projection: if the full-year outcome is negative, cap the verdict at "On Track"
-  // regardless of how well individual signals are pacing — a projected loss is a loss.
-  const annualNiIsNegative = annualNetForecast != null && annualNetForecast < 0;
-
-  const healthTotal = healthSignals.reduce((s, sig) => s + sig.score, 0);
-  const healthNorm = healthSignals.length > 0 ? healthTotal / healthSignals.length : 0;
-  const yearHealth: HealthVerdict | null =
-    healthSignals.length < 2 ? null
-    : healthNorm > 0.6 && !annualNiIsNegative ? { verdict: 'Exceeding', level: 'exceeding' }
-    : healthNorm > -0.4 ? { verdict: 'On Track', level: 'on-track' }
-    : { verdict: 'At Risk', level: 'at-risk' };
-
-  // The one signal worth surfacing is the binding constraint — the weakest —
-  // since that is what would have to change. Ties break on which measure
-  // matters most, not on the order the signals happen to be pushed.
-  const HEALTH_PRIORITY = ['Net Income', 'Revenue', 'Occupancy', 'Target Path'];
-  const mainSignal = healthSignals.length > 0
-    ? [...healthSignals].sort((a, b) =>
-        (a.score - b.score) ||
-        (HEALTH_PRIORITY.indexOf(a.label) - HEALTH_PRIORITY.indexOf(b.label)))[0]
-    : null;
-
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   function handleChartClick(data: any) {
     const idx: number | null | undefined = data?.activeTooltipIndex;
@@ -653,7 +601,6 @@ export default function DashboardClient() {
             {([
               ['month', 'This Month'],
               ['ytd', 'YTD'],
-              ['last12', 'Last 12 Months'],
               ['custom', 'Custom'],
             ] as const).map(([id, label]) => (
               <button
@@ -705,11 +652,18 @@ export default function DashboardClient() {
         }
         const earned = periodGrossActual;
         const target = periodGrossTarget;
+        const hasTargetForPeriod = target > 0;
         const stillNeeded = Math.max(0, target - earned);
+        // Beating the target is worth reporting, so keep the surplus rather than
+        // clamping it to zero and showing only "Covered".
+        const surplus = hasTargetForPeriod ? Math.max(0, earned - target) : 0;
         const variance = earned - target;
-        const variancePct = target > 0 ? (variance / target) * 100 : null;
-        const pctOfTarget = target > 0 ? Math.min(100, (earned / target) * 100) : 0;
-        const status = pacingStatus(variancePct, { reached: stillNeeded === 0 && target > 0, label: 'Target Met' });
+        const variancePct = hasTargetForPeriod ? (variance / target) * 100 : null;
+        // Uncapped for the caption — 112% of target is the fact. The bar is
+        // capped separately so it cannot overflow its track.
+        const pctOfTarget = hasTargetForPeriod ? (earned / target) * 100 : null;
+        const barPct = pctOfTarget != null ? Math.min(100, pctOfTarget) : 0;
+        const status = pacingStatus(variancePct, { reached: stillNeeded === 0 && hasTargetForPeriod, label: 'Target Met' });
         return (
           <div className="px-5 py-4">
             <div className="flex items-start gap-4 sm:gap-6">
@@ -719,11 +673,22 @@ export default function DashboardClient() {
                 <p className="text-[11px] text-slate-400 truncate">of {fmt(target)} target · {periodLabel}</p>
               </div>
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Still Needed</p>
-                <p className={`text-xl font-bold leading-tight mt-0.5 ${stillNeeded === 0 ? 'text-emerald-600' : 'text-slate-900'}`}>
-                  {stillNeeded === 0 ? 'Covered' : fmt(stillNeeded)}
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">
+                  {surplus > 0 ? 'Over Target' : 'Still Needed'}
                 </p>
-                <p className="text-[11px] text-slate-400 truncate">{pctOfTarget.toFixed(0)}% of target earned</p>
+                <p className={`text-xl font-bold leading-tight mt-0.5 ${
+                  !hasTargetForPeriod ? 'text-slate-400'
+                    : surplus > 0 || stillNeeded === 0 ? 'text-emerald-600'
+                    : 'text-slate-900'
+                }`}>
+                  {!hasTargetForPeriod ? '—'
+                    : surplus > 0 ? `+${fmt(surplus)}`
+                    : stillNeeded === 0 ? 'Covered'
+                    : fmt(stillNeeded)}
+                </p>
+                <p className="text-[11px] text-slate-400 truncate">
+                  {pctOfTarget != null ? `${pctOfTarget.toFixed(0)}% of target earned` : 'no target for this period'}
+                </p>
               </div>
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                 <div className="flex items-start justify-between gap-2">
@@ -766,8 +731,8 @@ export default function DashboardClient() {
               </div>
             </div>
             <div className="w-full bg-slate-100 rounded-full h-1 mt-3.5">
-              <div className={`h-1 rounded-full transition-all ${variance >= 0 ? 'bg-emerald-500' : pctOfTarget >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
-                style={{ width: `${pctOfTarget}%` }} />
+              <div className={`h-1 rounded-full transition-all ${variance >= 0 ? 'bg-emerald-500' : barPct >= 60 ? 'bg-amber-400' : 'bg-red-400'}`}
+                style={{ width: `${barPct}%` }} />
             </div>
           </div>
         );
@@ -819,70 +784,36 @@ export default function DashboardClient() {
         <div className="border-t border-slate-100">
       {/* Chart */}
       <div className="px-5 py-4">
-        <p className="text-xs font-medium text-slate-500 mb-1 flex items-center gap-1.5">
+        <p className="text-xs font-medium text-slate-500 mb-4 flex items-center gap-1.5">
           <TrendingUp className="w-3.5 h-3.5 text-emerald-600" />
-          Target vs actual by month
+          {period === 'month'
+            ? `${MONTHS_LONG[currentMonthIdx]} against target`
+            : 'Over or under target by month'}
+          <InfoTip label="How to read this chart">
+            {period === 'month'
+              ? 'Revenue adding up through the month, dashed where it is booked but not yet earned. The flat line is the month\u2019s target.'
+              : 'Each bar is how far a month landed above or below its target, grey where the month is still ahead and the gap is left to sell. The faint line is revenue booked. Click a month to drill into its P&L.'}
+          </InfoTip>
         </p>
-        <p className="text-xs text-slate-400 mb-4">Click a month to drill into its P&amp;L</p>
-        {hasData ? (
+        {!hasData ? (
+          <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
+            No data yet. Import your earnings CSV to get started.
+          </div>
+        ) : period === 'month' ? (
+          <DayRevenueChart
+            data={dailyChartData}
+            monthLabel={MONTHS_LONG[currentMonthIdx]}
+            fmt={fmt}
+            target={periodGrossTarget}
+          />
+        ) : (
           <>
-            <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart data={chartData} onClick={handleChartClick} style={{ cursor: 'pointer' }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="name" tick={(props) => {
-                  const { x, y, payload, index } = props;
-                  const isSelected = index === selectedMonth;
-                  return (
-                    <g transform={`translate(${x},${y})`}>
-                      <text
-                        x={0} y={0} dy={16}
-                        textAnchor="middle"
-                        fontSize={12}
-                        fontWeight={isSelected ? 700 : 400}
-                        fill={isSelected ? '#0f172a' : '#94a3b8'}
-                      >
-                        {payload.value}
-                      </text>
-                      {isSelected && (
-                        <line x1={-20} y1={4} x2={20} y2={4} stroke="#0f172a" strokeWidth={2} />
-                      )}
-                    </g>
-                  );
-                }} />
-                <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-                <Tooltip content={(props) => (
-                  <ChartTooltip
-                    active={props.active}
-                    payload={props.payload as unknown as TooltipEntry[]}
-                    label={String(props.label ?? '')}
-                    fmt={fmt}
-                  />
-                )} />
-                <Legend />
-                {(
-                  [
-                    'Airbnb',
-                    'Booking.com',
-                    'VRBO',
-                    ...(hasDirectIncome ? ['Direct'] : []),
-                    ...(hasOtherIncome ? ['Other'] : []),
-                  ] as string[]
-                ).map(p => (
-                  <Bar key={p} dataKey={p} stackId="a" fill={PLATFORM_COLORS[p.toLowerCase().replace('.com', '')]}>
-                    {chartData.map((_, i) => (
-                      <Cell
-                        key={i}
-                        opacity={selectedMonth === null || selectedMonth === i ? 1 : 0.18}
-                      />
-                    ))}
-                  </Bar>
-                ))}
-                <Line
-                  type="monotone" dataKey="Monthly Target" stroke="#475569"
-                  strokeWidth={2} strokeDasharray="6 3" dot={{ r: 4, fill: '#475569', strokeWidth: 0 }}
-                />
-              </ComposedChart>
-            </ResponsiveContainer>
+            <YearVarianceChart
+              data={varianceChartData}
+              fmt={fmt}
+              selectedIndex={selectedMonth}
+              onSelect={handleChartClick}
+            />
             {!prevHasData && manualTarget == null && (
               <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mt-3">
                 No prior-year data — set an annual target on the pacing card above to enable the forecast line, or{' '}
@@ -890,10 +821,6 @@ export default function DashboardClient() {
               </p>
             )}
           </>
-        ) : (
-          <div className="h-[300px] flex items-center justify-center text-slate-400 text-sm">
-            No data yet. Import your earnings CSV to get started.
-          </div>
         )}
       </div>
         </div>
@@ -901,7 +828,7 @@ export default function DashboardClient() {
 
       <section className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
         <div className="px-5 py-3 border-b border-slate-100">
-          <h2 className="text-xs uppercase tracking-wide text-slate-900 font-semibold">Net Income</h2>
+          <h2 className="text-xs uppercase tracking-wide text-slate-900 font-semibold">Cash Flow</h2>
         </div>
 
       {/* One tile: what the period earned after costs, and against projection */}
@@ -910,41 +837,70 @@ export default function DashboardClient() {
         const net = periodNetActual;
         const projected = periodNetTarget;
         const variance = net - projected;
-        const variancePct = projected !== 0 ? (variance / Math.abs(projected)) * 100 : null;
+        const hasProjection = projected !== 0;
+        const variancePct = hasProjection ? (variance / Math.abs(projected)) * 100 : null;
         const status = pacingStatus(variancePct);
 
         // Costs behind the figure, for the same window
         const revenue = periodMonths.reduce((s, m) => s + (monthStmt(m)?.netRevenue ?? 0), 0);
         const opex = periodMonths.reduce((s, m) => s + (monthStmt(m)?.totalOperatingExpenses ?? 0), 0);
         const piti = periodMonths.reduce((s, m) => s + (monthStmt(m)?.piti ?? 0), 0);
+        // The part of the mortgage payment that bought equity rather than being
+        // spent. This tile reports cash flow, which subtracts it — so a month
+        // reading as a loss may still have moved the owner forward.
+        const principal = periodMonths.reduce((s, m) => s + (monthStmt(m)?.mortgagePrincipal ?? 0), 0);
 
         return (
           <div className={`px-5 py-4 ${net < 0 ? 'bg-red-50/40' : ''}`}>
             <div className="flex items-start gap-4 sm:gap-6">
+              {/* Same sequence as Gross Revenue: the total, the gap to what was
+                  projected, then the verdict. Named for what it is inside the
+                  section, the way that section's first column is "Earned" —
+                  repeating the section title told the reader nothing. */}
               <div className="min-w-0 flex-1">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Net Income</p>
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold flex items-center gap-1">
+                  Bottom Line
+                  {principal > 0 && (
+                    <InfoTip label="How cash flow differs from net income">
+                      Net income was {fmt(net + principal)}. Cash flow is {fmt(principal)} lower because that much
+                      of the mortgage payment repaid principal — equity built rather than money spent.
+                    </InfoTip>
+                  )}
+                </p>
                 <p className={`text-xl font-bold leading-tight mt-0.5 ${net < 0 ? 'text-red-600' : 'text-emerald-700'}`}>
                   {net >= 0 ? '+' : ''}{fmt(net)}
                 </p>
-                <p className="text-[11px] text-slate-400 truncate">{periodLabel}</p>
+                {/* The costs that produced it, sitting under the figure they explain
+                    rather than in a column of their own. */}
+                <p className="text-[11px] text-slate-400 truncate">
+                  {periodLabel} · {fmt(revenue)} revenue − {fmt(opex + piti)} costs
+                </p>
               </div>
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">After Costs</p>
-                <p className="text-xl font-bold text-red-500 leading-tight mt-0.5">−{fmt(opex + piti)}</p>
+                <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">
+                  {hasProjection && variance >= 0 ? 'Over Projection' : 'Still Needed'}
+                </p>
+                <p className={`text-xl font-bold leading-tight mt-0.5 ${
+                  !hasProjection ? 'text-slate-400' : variance >= 0 ? 'text-emerald-600' : 'text-slate-900'
+                }`}>
+                  {!hasProjection ? '—'
+                    : variance >= 0 ? `+${fmt(variance)}`
+                    : fmt(Math.abs(variance))}
+                </p>
                 <p className="text-[11px] text-slate-400 truncate">
-                  {fmt(revenue)} net revenue · {fmt(opex)} opex · {fmt(piti)} PITI
+                  {hasProjection ? `of ${fmt(projected)} projected` : 'no projection for this period'}
                 </p>
               </div>
               <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                 <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
                 <p className={`text-xl font-bold leading-tight mt-0.5 ${status.color}`}>{status.label}</p>
+                {/* The annual anchor, matching Gross Revenue's status caption. No
+                    percentage: a month projected at $120 turns a $1,553 miss into
+                    1,294%, which reads as a data error rather than a shortfall. */}
                 <p className="text-[11px] text-slate-400 truncate">
-                  {variancePct != null
-                    ? <>
-                        <span className={status.color}>{variance >= 0 ? '▲' : '▼'}{fmt(Math.abs(variance))}</span>
-                        {` vs ${fmt(projected)} projected`}
-                      </>
-                    : 'no projection for this period'}
+                  {annualNetForecast != null
+                    ? `${fmt(annualNetForecast)} annual projection`
+                    : periodLabel}
                 </p>
               </div>
             </div>
@@ -962,47 +918,35 @@ export default function DashboardClient() {
       {/* P&L Chart */}
       {hasData && (
         <div className="px-5 py-4">
-          <p className="text-xs font-medium text-slate-500 mb-1">By month</p>
-          <p className="text-xs text-slate-400 mb-4">Actuals and projected</p>
-          <ResponsiveContainer width="100%" height={280}>
-            <ComposedChart data={pnlChartData} barGap={4} barCategoryGap="30%">
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="name" tick={{ fontSize: 12, fill: '#94a3b8' }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-              <Tooltip content={(props) => (
-                <PnLTooltip
-                  active={props.active}
-                  payload={props.payload as unknown as { name: string; value: number | null; color: string }[]}
-                  label={String(props.label ?? '')}
-                  fmt={fmt}
-                />
-              )} />
-              <Legend />
-              <ReferenceLine y={0} stroke="#cbd5e1" />
-              <Bar dataKey="Net Income" fill="#6366f1" radius={[3, 3, 0, 0]}>
-                {/* Loss-making months read red; the rounded corner follows the bar's direction */}
-                {pnlChartData.map((d, i) => {
-                  const v = d['Net Income'] as number | null;
-                  const negative = v != null && v < 0;
-                  return (
-                    <Cell
-                      key={i}
-                      fill={negative ? '#ef4444' : '#6366f1'}
-                      radius={(negative ? [0, 0, 3, 3] : [3, 3, 0, 0]) as unknown as number}
-                    />
-                  );
-                })}
-              </Bar>
-              <Line
-                dataKey="Net Forecast"
-                stroke="#6366f1"
-                strokeWidth={2}
-                strokeDasharray="6 3"
-                dot={{ r: 3, fill: '#6366f1', strokeWidth: 0 }}
-                connectNulls
-              />
-            </ComposedChart>
-          </ResponsiveContainer>
+          <p className="text-xs font-medium text-slate-500 mb-4 flex items-center gap-1.5">
+            {period === 'month'
+              ? `${MONTHS_LONG[currentMonthIdx]} against plan`
+              : 'Over or under plan by month'}
+            <InfoTip label="How to read this chart">
+              {period === 'month'
+                ? 'Opens at the month\u2019s committed costs and climbs as bookings land. Crossing zero is breakeven.'
+                : 'Each bar is how far a month landed above or below its projection. The faint line is net income itself. Months still open have no bar — their costs land before their revenue does.'}
+            </InfoTip>
+          </p>
+          {period === 'month' ? (
+            <MonthProgressChart
+              points={cumulativeNetData}
+              monthLabel={MONTHS_LONG[currentMonthIdx]}
+              fmt={fmt}
+              target={periodNetTarget !== 0 ? periodNetTarget : null}
+              color="#6366f1"
+              breakeven
+            />
+          ) : (
+            <YearVarianceChart
+              data={netVarianceChartData}
+              fmt={fmt}
+              selectedIndex={selectedMonth}
+              onSelect={handleChartClick}
+              actualLabel="Net income"
+              pendingNote="Not closed out yet"
+            />
+          )}
         </div>
       )}
         </div>
@@ -1054,48 +998,39 @@ export default function DashboardClient() {
               </div>
             ) : (
               <>
+                {/* Same sequence as the other two sections: the measure, the gap
+                    to what it is held to, then the verdict. The daily rate moves
+                    under the occupancy it was earned at — it is context for the
+                    figure, not a second thing to compare. */}
                 <div className="flex items-start gap-4 sm:gap-6">
-                  {/* Occupancy */}
                   <div className="min-w-0 flex-1">
                     <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Occupancy</p>
                     <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
                       {occ != null ? `${occ.toFixed(1)}%` : '—'}
                     </p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      {baseline != null ? `of ${baseline.toFixed(1)}% baseline · ${periodLabel}` : periodLabel}
-                    </p>
-                  </div>
-
-                  {/* Daily rate */}
-                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-                    <div className="flex items-start justify-between gap-2">
-                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Daily Rate</p>
+                    <div className="flex items-center gap-1 min-w-0">
+                      <p className="text-[11px] text-slate-400 truncate">
+                        {periodLabel}
+                        {periodAdr != null && ` · ${fmt(periodAdr)}/night`}
+                        {periodAdr != null && displayAdrTarget != null && ` of ${fmt(displayAdrTarget)} target`}
+                      </p>
                       {derivedAdrTarget == null && (
                         <button
                           onClick={() => { setAdrTargetInput(String(settings?.targetAdr ?? '')); setEditingAdrTarget(true); }}
-                          className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
+                          className="text-slate-300 hover:text-slate-500 transition-colors shrink-0"
                           title="Set daily rate target">
                           <Pencil className="w-3 h-3" />
                         </button>
                       )}
                     </div>
-                    <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">
-                      {periodAdr != null ? fmt(periodAdr) : '—'}
-                    </p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      {displayAdrTarget != null
-                        ? <>
-                            of {fmt(displayAdrTarget)} target
-                            {derivedAdrTarget != null && ` @ ${displayOccTarget?.toFixed(1)}% occ`}
-                          </>
-                        : `${periodNights} nights booked`}
-                    </p>
                   </div>
 
-                  {/* Status — occupancy against its baseline */}
+                  {/* Gap to the baseline, carrying the pencil that sets it */}
                   <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
+                      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">
+                        {variancePts != null && variancePts >= 0 ? 'Over Baseline' : 'Still Needed'}
+                      </p>
                       <button
                         onClick={() => { setOccTargetInput(String(settings?.targetOccupancyPct ?? '')); setEditingOccTarget(true); }}
                         className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
@@ -1103,15 +1038,26 @@ export default function DashboardClient() {
                         <Pencil className="w-3 h-3" />
                       </button>
                     </div>
-                    <p className={`text-xl font-bold leading-tight mt-0.5 ${status.color}`}>{status.label}</p>
-                    <p className="text-[11px] text-slate-400 truncate">
-                      {variancePts != null
-                        ? <>
-                            <span className={status.color}>{variancePts >= 0 ? '▲' : '▼'}{Math.abs(variancePts).toFixed(1)}pts</span>
-                            {` vs baseline · ${occBaselineLabel}`}
-                          </>
-                        : 'no baseline set'}
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${
+                      variancePts == null ? 'text-slate-400'
+                        : variancePts >= 0 ? 'text-emerald-600'
+                        : 'text-slate-900'
+                    }`}>
+                      {variancePts == null ? '—'
+                        : variancePts >= 0 ? `+${variancePts.toFixed(1)} pts`
+                        : `${Math.abs(variancePts).toFixed(1)} pts`}
                     </p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {baseline != null ? `of ${baseline.toFixed(1)}% baseline` : 'no baseline set'}
+                    </p>
+                  </div>
+
+                  <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
+                    <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Status</p>
+                    <p className={`text-xl font-bold leading-tight mt-0.5 ${status.color}`}>{status.label}</p>
+                    {/* Where the baseline comes from, the way Gross Revenue's status
+                        caption names the annual target behind it. */}
+                    <p className="text-[11px] text-slate-400 truncate">baseline · {occBaselineLabel}</p>
                   </div>
                 </div>
 
@@ -1132,14 +1078,30 @@ export default function DashboardClient() {
       {hasData && (
         <div className="px-5 py-4">
           <div className="flex items-center justify-between mb-1">
-            <p className="text-xs font-medium text-slate-500">Rate and occupancy by month</p>
+            <p className="text-xs font-medium text-slate-500 mb-3 flex items-center gap-1.5">
+              {period === 'month'
+                ? `${MONTHS_LONG[currentMonthIdx]} night by night`
+                : 'Rate and occupancy by month'}
+              <InfoTip label="How to read this chart">
+                {period === 'month'
+                  ? `Which nights sold and what they sold for; gaps are open nights.${displayAdrTarget != null ? ` The dashed line is the ${fmt(displayAdrTarget)} target rate.` : ''}`
+                  : `Bars are occupancy, faded where they are confirmed bookings rather than nights already stayed. The line is the rate per night.${targetOcc != null ? ` The dashed line is the ${targetOcc.toFixed(1)}% baseline.` : ''}`}
+              </InfoTip>
+            </p>
             {targetOcc != null && (
               <span className={`text-xs font-semibold px-2 py-1 rounded-lg ${perfColor(occVariance ?? 0, occVariance != null ? Math.abs(occVariance) : null, true)}`}>
                 YTD {ytdOccupancy.toFixed(1)}% {occVariance != null ? `(${occVariance >= 0 ? '+' : ''}${occVariance.toFixed(1)}pts vs target)` : ''}
               </span>
             )}
           </div>
-          <p className="text-xs text-slate-400 mb-4">Monthly occupancy (bars) · faded = confirmed bookings only · ADR per night (line) · baseline {targetOcc != null ? `${targetOcc.toFixed(1)}%` : 'not set'}</p>
+          {period === 'month' ? (
+          <DayOccupancyChart
+            data={dailyChartData}
+            monthLabel={MONTHS_LONG[currentMonthIdx]}
+            fmt={fmt}
+            adrTarget={displayAdrTarget}
+          />
+          ) : (
           <ResponsiveContainer width="100%" height={280}>
             <ComposedChart data={occChartData} barCategoryGap="35%">
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
@@ -1195,48 +1157,26 @@ export default function DashboardClient() {
               <Line yAxisId="adr" dataKey="ADR" type="monotone" stroke="#6366f1" strokeWidth={2} dot={{ r: 3, fill: '#6366f1' }} activeDot={{ r: 5 }} connectNulls={false} />
             </ComposedChart>
           </ResponsiveContainer>
+          )}
         </div>
       )}
         </div>
       </section>
 
 
-      {/* ── Year Health + YTD tables — hidden when a month is drilled into ── */}
+      {/* ── Hidden when a month is drilled into ── */}
       {hasData && !selMonth && (
         <>
-          {yearHealth && (
-            <div className={`rounded-xl border p-4 mb-6 ${
-              yearHealth.level === 'exceeding' ? 'bg-emerald-50 border-emerald-200' :
-              yearHealth.level === 'on-track' ? 'bg-slate-50 border-slate-200' :
-              'bg-red-50 border-red-200'
-            }`}>
-              <div className="flex items-baseline flex-wrap gap-x-3 gap-y-1">
-                <p className="text-[11px] uppercase tracking-wide font-semibold text-slate-400">Year Health</p>
-                <p className={`text-xl font-bold ${
-                  yearHealth.level === 'exceeding' ? 'text-emerald-700' :
-                  yearHealth.level === 'on-track' ? 'text-slate-700' :
-                  'text-red-700'
-                }`}>{yearHealth.verdict}</p>
-                {mainSignal && (
-                  <p className="text-xs text-slate-500">
-                    {mainSignal.score === 1 ? '▲' : mainSignal.score === -1 ? '▼' : '~'}{' '}
-                    <span className="font-medium text-slate-700">{mainSignal.label}</span>{' '}
-                    {mainSignal.detail}
-                  </p>
-                )}
-              </div>
-            </div>
-          )}
-          <div className="space-y-6 mb-8">
-            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-              <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Year-to-Date P&amp;L (Jan–{MONTHS[currentMonthIdx - 1] ?? MONTHS[0]})</h3>
-              <PnLTable m={ytdPnL} fmt={fmt} />
-            </div>
-            <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm">
-              <h3 className="text-sm uppercase tracking-wide text-slate-400 font-semibold mb-4">Platform Breakdown</h3>
-              <PlatformTable byPlatform={ytdByPlatform} totalRevenue={ytdGross} fmt={fmt} />
-            </div>
-          </div>
+          {/* The year-to-date P&L and the platform split used to sit here as two
+              bare tables, in a page that is otherwise sections of tiles. The
+              Income Statement tab already presents both, over any period and
+              with a CSV export, so they live there and this points at them. */}
+          <p className="text-xs text-slate-400 mb-8">
+            Full profit &amp; loss and revenue by platform live in the{' '}
+            <a href="/income-statement" className="text-slate-500 hover:text-slate-700 underline underline-offset-2">
+              Income Statement
+            </a>.
+          </p>
         </>
       )}
 

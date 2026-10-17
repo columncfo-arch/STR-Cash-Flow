@@ -75,6 +75,8 @@ export interface Booking {
   updatedAt: string;
 }
 
+export type RecurrenceFrequency = 'monthly' | 'quarterly' | 'annual';
+
 export interface Expense {
   id: string;
   date: string;          // YYYY-MM-DD, first occurrence for recurring expenses
@@ -83,7 +85,10 @@ export interface Expense {
   description: string;
   amount: number;
   bookingId?: string;    // optional link to a specific booking
-  recurring?: boolean;       // repeats monthly starting at `date`
+  recurring?: boolean;       // repeats from `date` at recurrenceFrequency
+  // How often it repeats. Absent on records saved before frequencies existed,
+  // which were all monthly — so absent means monthly.
+  recurrenceFrequency?: RecurrenceFrequency;
   recurrenceEnd?: string | null; // YYYY-MM-DD, optional last month it applies to
   createdAt: string;
   updatedAt: string;
@@ -126,6 +131,8 @@ export interface Settings {
   totalCapitalDeployed?: number;
   benchmarkReturnPct?: number;  // annualised return the property is judged against (e.g. 8 for an index fund)
   renovationCosts?: number;
+  monthlyPropertyTax?: number;    // the T in PITI, per month
+  monthlyInsurance?: number;      // the second I in PITI, per month
   mortgageRate?: number;          // current interest rate %
   propertyValue?: number;         // estimated current value
   loanBalance?: number;           // current outstanding balance
@@ -182,6 +189,14 @@ export interface PnLSummary {
   totalOperatingExpenses: number;
   operatingIncome: number;
   piti: number;
+  // PITI split three ways. Interest, tax and insurance are costs; principal is
+  // equity built. The three always sum to `piti`.
+  mortgageInterest: number;
+  mortgagePrincipal: number;
+  mortgageTaxesInsurance: number;
+  /** Profit after the costs of carrying the property, before principal repayment. */
+  netProfit: number;
+  /** What actually leaves the bank: netProfit less the principal repaid. */
   netIncome: number;
 }
 

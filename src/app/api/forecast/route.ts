@@ -2,39 +2,19 @@ import { NextResponse } from 'next/server';
 import { loadBookings, loadExpenses, loadSettings } from '@/lib/storage';
 import { requireAuth, unauthorized } from '@/lib/auth';
 import { ForecastYear, Expense } from '@/types';
+import { occursInMonth, occurrencesIn } from '@/lib/recurrence';
 import { getYear } from 'date-fns';
 
 // Returns all matching expense records for a single month (YYYY-MM prefix)
 function expensesForMonth(expenses: Expense[], prefix: string): Expense[] {
-  const result: Expense[] = [];
-  for (const e of expenses) {
-    if (!e.recurring) {
-      if (e.date.startsWith(prefix)) result.push(e);
-      continue;
-    }
-    const startPrefix = e.date.slice(0, 7);
-    const endPrefix = e.recurrenceEnd ? e.recurrenceEnd.slice(0, 7) : null;
-    if (prefix >= startPrefix && (!endPrefix || prefix <= endPrefix)) result.push(e);
-  }
-  return result;
+  return expenses.filter(e => occursInMonth(e, prefix));
 }
 
-// Returns all matching expense records for a full year
+// Returns one copy of each expense per month of the year it lands in, so a
+// recurring cost counts once per occurrence rather than once for the year
 function expensesForYear(expenses: Expense[], year: number): Expense[] {
-  const result: Expense[] = [];
   const yearPrefixes = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`);
-  for (const e of expenses) {
-    if (!e.recurring) {
-      if (e.date.startsWith(String(year))) result.push(e);
-      continue;
-    }
-    const startPrefix = e.date.slice(0, 7);
-    const endPrefix = e.recurrenceEnd ? e.recurrenceEnd.slice(0, 7) : null;
-    for (const p of yearPrefixes) {
-      if (p >= startPrefix && (!endPrefix || p <= endPrefix)) result.push(e);
-    }
-  }
-  return result;
+  return expenses.flatMap(e => occurrencesIn(e, yearPrefixes).map(() => e));
 }
 
 function sumExpenseDetail(detail: Record<string, number>): number {

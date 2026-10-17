@@ -9,6 +9,18 @@ const pad = (n: number) => String(n).padStart(2, '0');
 
 export const isoDate = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
+/**
+ * Shift a YYYY-MM-DD string by whole days.
+ *
+ * Built from local date parts so it never drifts a day the way
+ * `new Date('2026-08-01')` (parsed as UTC midnight) does. Day overflow is
+ * handled by Date itself, so Aug 30 + 3 lands on Sep 2.
+ */
+export function addDays(date: string, days: number): string {
+  const [y, m, d] = date.split('-').map(Number);
+  return isoDate(new Date(y, m - 1, d + days));
+}
+
 export type RangePreset = 'month' | 'ytd' | 'last12' | 'all' | 'custom';
 
 export interface DateRange {

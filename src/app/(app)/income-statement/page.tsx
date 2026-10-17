@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { AnnualStatement, MonthlyStatement, Platform, PnLSummary, Settings } from '@/types';
 import { getMonth, getYear } from 'date-fns';
 import { Download } from 'lucide-react';
+import InfoTip from '@/components/InfoTip';
 import {
   ComposedChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   ReferenceLine, Cell,
@@ -15,6 +16,18 @@ const MONTHS_LONG = [
 const MONTHS_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 
 const PLATFORMS = ['airbnb','booking','vrbo','direct','other'] as Platform[];
+/**
+ * An axis tick that stays distinct when the range is narrow. Rounding everything
+ * to whole thousands printed "$-3k" on every gridline of a one-month year.
+ */
+const axisMoney = (v: number) => {
+  const abs = Math.abs(v);
+  const s = abs >= 10000 ? `$${Math.round(abs / 1000)}k`
+    : abs >= 1000 ? `$${(abs / 1000).toFixed(1)}k`
+    : `$${Math.round(abs)}`;
+  return v < 0 ? `\u2212${s}` : s;
+};
+
 const platformLabel = (p: string) => p === 'booking' ? 'Booking.com' : p.charAt(0).toUpperCase() + p.slice(1);
 
 type Mode = 'month' | 'ytd' | 'prior_year' | 'full_year';
@@ -34,6 +47,9 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
   let refunds = 0;
   let totalOperatingExpenses = 0;
   let piti = 0;
+  let mortgageInterest = 0;
+  let mortgagePrincipal = 0;
+  let mortgageTaxesInsurance = 0;
 
   let fastPayFees = 0;
   let taxRemitted = 0;
@@ -51,6 +67,9 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
     refunds += m.refunds;
     totalOperatingExpenses += m.totalOperatingExpenses;
     piti += m.piti;
+    mortgageInterest += m.mortgageInterest;
+    mortgagePrincipal += m.mortgagePrincipal;
+    mortgageTaxesInsurance += m.mortgageTaxesInsurance;
     for (const cat of Object.keys(expensesByCategory) as (keyof typeof expensesByCategory)[]) {
       expensesByCategory[cat] += m.expensesByCategory[cat] ?? 0;
     }
@@ -63,12 +82,17 @@ function sumMonths(months: MonthlyStatement[]): PnLSummary & { totalNights: numb
 
   const netRevenue = grossRevenue - platformFees - fastPayFees - taxRemitted - refunds;
   const operatingIncome = netRevenue - totalOperatingExpenses;
+  // Profit after what the property costs to carry; cash flow after the principal
+  // repayment on top, which is equity rather than an expense
+  const netProfit = operatingIncome - mortgageInterest - mortgageTaxesInsurance;
   const netIncome = operatingIncome - piti;
 
   return {
     grossRevenue, platformFees, fastPayFees, taxRemitted, refunds, netRevenue,
     expensesByCategory, ownerTaxes, totalOperatingExpenses,
-    operatingIncome, piti, netIncome,
+    operatingIncome, piti,
+    mortgageInterest, mortgagePrincipal, mortgageTaxesInsurance,
+    netProfit, netIncome,
     totalNights,
     avgOccupancy: months.length ? totalOccupancy / months.length : 0,
     byPlatform,
@@ -129,6 +153,9 @@ export default function IncomeStatementPage() {
     const hasRefunds = pnl.refunds > 0;
     const hasExpenses = pnl.totalOperatingExpenses > 0;
     const hasPITI = pnl.piti > 0;
+    // Only separate interest from principal when the loan settings support it;
+    // otherwise the payment stays one line rather than an invented split.
+    const splitDerived = pnl.mortgagePrincipal > 0 || pnl.mortgageInterest > 0;
 
     function Row({ label: l, value, indent = false, bold = false, accent = false, negative = false, separator = false }: {
       label: string; value: number; indent?: boolean; bold?: boolean; accent?: boolean; negative?: boolean; separator?: boolean;
@@ -199,18 +226,43 @@ export default function IncomeStatementPage() {
 
             <Row label="Operating Income" value={pnl.operatingIncome} bold separator accent />
 
-            {/* PITI */}
+            {/* PITI, split into what it costs and what it buys. Principal
+                repayment is not an expense — it is cash moving into equity — so
+                it sits below net income rather than inside it. */}
             {hasPITI && (
               <>
                 <tr>
-                  <td colSpan={2} className="px-4 pt-3 pb-1 text-xs font-semibold text-slate-400 uppercase tracking-wide border-t border-slate-100">Debt Service</td>
+                  <td colSpan={2} className="px-4 pt-3 pb-1 text-xs font-semibold text-slate-400 uppercase tracking-wide border-t border-slate-100">
+                    Cost of Carrying the Property
+                  </td>
                 </tr>
-                <Row label={`PITI (${monthCount} mo × ${fmt((settings?.monthlyPITI ?? 0))})`} value={pnl.piti} indent negative />
-                <Row label="Total PITI" value={pnl.piti} bold separator negative />
+                {splitDerived ? (
+                  <>
+                    <Row label={`Mortgage Interest (${monthCount} mo)`} value={pnl.mortgageInterest} indent negative />
+                    <Row label={`Taxes, Insurance & Escrow (${monthCount} mo)`} value={pnl.mortgageTaxesInsurance} indent negative />
+                  </>
+                ) : (
+                  <Row label={`PITI (${monthCount} mo × ${fmt(settings?.monthlyPITI ?? 0)})`} value={pnl.piti} indent negative />
+                )}
               </>
             )}
 
-            <Row label="Net Income" value={pnl.netIncome} bold separator accent />
+            <Row label="Net Income" value={pnl.netProfit} bold separator accent />
+
+            {hasPITI && splitDerived && (
+              <>
+                <tr>
+                  <td colSpan={2} className="px-4 pt-3 pb-1 text-xs font-semibold text-slate-400 uppercase tracking-wide border-t border-slate-100">
+                    Cash Flow
+                  </td>
+                </tr>
+                <Row label={`Principal Repaid (${monthCount} mo, equity built)`} value={pnl.mortgagePrincipal} indent negative />
+                <Row label="Cash Flow" value={pnl.netIncome} bold separator accent />
+              </>
+            )}
+            {hasPITI && !splitDerived && (
+              <Row label="Cash Flow" value={pnl.netIncome} bold separator accent />
+            )}
           </tbody>
         </table>
       </div>
@@ -219,12 +271,16 @@ export default function IncomeStatementPage() {
 
   function KPICards({ pnl }: { pnl: ReturnType<typeof sumMonths> }) {
     return (
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
         {[
           { l: 'Gross Revenue', v: fmt(pnl.grossRevenue) },
           { l: 'Net Revenue', v: fmt(pnl.netRevenue) },
           { l: 'Operating Income', v: fmt(pnl.operatingIncome), accent: true },
-          { l: 'Net Income', v: fmt(pnl.netIncome), accent: true },
+          // Both, and labelled apart: they differ by the principal repaid, and
+          // showing one of them under the other's name is what made the page
+          // disagree with the dashboard
+          { l: 'Net Income', v: fmt(pnl.netProfit), accent: true },
+          { l: 'Cash Flow', v: fmt(pnl.netIncome), accent: true },
         ].map(c => (
           <div key={c.l} className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm">
             <p className="text-xs text-slate-500">{c.l}</p>
@@ -258,8 +314,12 @@ export default function IncomeStatementPage() {
       [],
       ['Operating Income', pnl.operatingIncome.toFixed(2)],
       [],
-      ['PITI', (-pnl.piti).toFixed(2)],
-      ['Net Income', pnl.netIncome.toFixed(2)],
+      ['Mortgage Interest', (-pnl.mortgageInterest).toFixed(2)],
+      ['Taxes, Insurance & Escrow', (-pnl.mortgageTaxesInsurance).toFixed(2)],
+      ['Net Income', pnl.netProfit.toFixed(2)],
+      [],
+      ['Principal Repaid (equity built)', (-pnl.mortgagePrincipal).toFixed(2)],
+      ['Cash Flow', pnl.netIncome.toFixed(2)],
     ];
     const csv = rows.map(r => r.join(',')).join('\n');
     const a = document.createElement('a');
@@ -282,6 +342,18 @@ export default function IncomeStatementPage() {
 
   const pitiMonths = mode === 'month' ? 1 : mode === 'ytd' ? currentMonthIdx + 1 : 12;
 
+  // This page is built from bookings alone. A year can also carry figures typed
+  // straight into the forecast, and those drive the projections without ever
+  // appearing here — which looks like missing data rather than data kept
+  // somewhere else. Say which it is instead of leaving the reader to guess.
+  const override = settings?.forecastOverrides?.[String(fetchYear)];
+  const hasManualFigures = Boolean(
+    override && (override.isManualYear || override.revenue != null || override.monthlyRevenue?.some(v => v > 0)),
+  );
+  const monthsWithBookings = activeMonthsSlice.filter(m => m.grossRevenue > 0).length;
+  const emptyPitiMonths = Math.max(0, pitiMonths - monthsWithBookings);
+  const pitiOnEmptyMonths = emptyPitiMonths * (settings?.monthlyPITI ?? 0);
+
   return (
     <div className="max-w-5xl mx-auto">
       {/* Header */}
@@ -298,11 +370,15 @@ export default function IncomeStatementPage() {
         </button>
       </div>
 
-      {/* Net Income overview chart */}
+      {/* Monthly cash flow overview chart */}
       {statement && (
         <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
-          <h2 className="font-semibold text-slate-800 mb-1">Monthly Net Income — {fetchYear}</h2>
-          <p className="text-xs text-slate-400 mb-4">Net income after all expenses and debt service</p>
+          <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-1.5">
+            Monthly Cash Flow — {fetchYear}
+            <InfoTip label="What this chart shows">
+              After every cost including the whole mortgage payment — the same figure the dashboard reports.
+            </InfoTip>
+          </h2>
           <ResponsiveContainer width="100%" height={200}>
             <ComposedChart data={statement.months.map(m => ({
               name: MONTHS_SHORT[m.month - 1],
@@ -310,10 +386,10 @@ export default function IncomeStatementPage() {
             }))}>
               <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
               <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={axisMoney} width={62} />
               <Tooltip formatter={(v) => fmt(Number(v))} />
               <ReferenceLine y={0} stroke="#cbd5e1" />
-              <Bar dataKey="netIncome" name="Net Income" radius={[3, 3, 0, 0]}>
+              <Bar dataKey="netIncome" name="Cash Flow" radius={[3, 3, 0, 0]}>
                 {statement.months.map((m, i) => (
                   <Cell key={i} fill={m.netIncome >= 0 ? '#10b981' : '#ef4444'} />
                 ))}
@@ -378,6 +454,26 @@ export default function IncomeStatementPage() {
         <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{activeLabel}</span>
       </div>
 
+      {activePnL && hasManualFigures && monthsWithBookings < pitiMonths && (
+        <div className="bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-6 text-sm text-amber-900">
+          <p className="font-semibold mb-0.5">{fetchYear} is partly a typed-in year</p>
+          <p className="text-amber-800 leading-relaxed">
+            This statement is built from bookings, and {fetchYear} has {monthsWithBookings} month
+            {monthsWithBookings === 1 ? '' : 's'} of them. The figures driving the forecast for {fetchYear} were
+            entered by hand and live with the forecast, not here — which is why the two do not agree. Import that
+            year&rsquo;s earnings to see it in full.
+          </p>
+        </div>
+      )}
+      {activePnL && pitiOnEmptyMonths > 0 && mode !== 'month' && (
+        <div className="bg-slate-50 border border-slate-200 rounded-xl px-4 py-3 mb-6 text-sm text-slate-700">
+          <p className="leading-relaxed">
+            PITI is charged for all {pitiMonths} months of this period, {emptyPitiMonths} of which have no
+            bookings — {fmt(pitiOnEmptyMonths)} of the total. If you did not own the property for those
+            months, that much of the loss is not real.
+          </p>
+        </div>
+      )}
       {activePnL && <KPICards pnl={activePnL} />}
       {activePnL && <PnLTable pnl={activePnL} label={activeLabel} months={pitiMonths} />}
     </div>

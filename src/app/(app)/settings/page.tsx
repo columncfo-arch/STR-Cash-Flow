@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Settings } from '@/types';
 import { AlertTriangle } from 'lucide-react';
 import ImportEarnings from '@/components/ImportEarnings';
+import InfoTip from '@/components/InfoTip';
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -108,7 +109,13 @@ export default function SettingsPage() {
             </select>
           </div>
           <div>
-            <label className="text-xs text-slate-500 block mb-1">Cleaning Fee per Booking ($)</label>
+            <label className="text-xs text-slate-500 mb-1 flex items-center gap-1">
+              Cleaning Fee per Booking ($)
+              <InfoTip label="How this is applied">
+                Added to cleaning expenses automatically for every booking in the period, on top of any
+                cleaning you logged by hand.
+              </InfoTip>
+            </label>
             <input
               type="number"
               value={settings.cleaningFeePerBooking ?? 0}
@@ -118,9 +125,6 @@ export default function SettingsPage() {
               placeholder="0"
               min="0"
             />
-            <p className="text-xs text-slate-400 mt-1">
-              Added to cleaning expenses automatically for every booking in the period. Combined with any manually logged cleaning expenses.
-            </p>
           </div>
         </div>
       </section>
