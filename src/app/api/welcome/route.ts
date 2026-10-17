@@ -10,6 +10,14 @@ function resolveUserId(req: Request): string | null {
   return searchParams.get('u') ?? process.env.DEFAULT_HOST_USER_ID ?? null;
 }
 
+/**
+ * Which unit the code was printed for. Codes made before properties existed
+ * carry no p, and fall back to the active property as they always did.
+ */
+function resolvePropertyId(req: Request): string | null {
+  return new URL(req.url).searchParams.get('p');
+}
+
 export async function POST(req: Request) {
   try {
     const userId = resolveUserId(req);
@@ -23,7 +31,7 @@ export async function POST(req: Request) {
 
     // Leads belong to the account — the welcome link carries only a user id —
     // while the stay being matched belongs to a property.
-    const { scope } = await resolveScope(userId);
+    const { scope } = await resolveScope(userId, resolvePropertyId(req));
     const [settings, bookings] = await Promise.all([loadSettings(scope), loadBookings(scope)]);
 
     const guestName = [firstName, lastName].filter(Boolean).join(' ') || undefined;
@@ -76,10 +84,11 @@ export async function GET(req: Request) {
     const userId = resolveUserId(req);
     if (!userId) return NextResponse.json({ error: 'Missing host identifier' }, { status: 400 });
 
-    const { scope } = await resolveScope(userId);
+    const { account, scope } = await resolveScope(userId, resolvePropertyId(req));
     const settings = await loadSettings(scope);
+    const property = account.properties.find(p => p.id === scope.propertyId);
     return NextResponse.json({
-      propertyName: settings.propertyName,
+      propertyName: property?.name ?? settings.propertyName,
       welcomeMessage: settings.welcomeMessage ?? null,
       hasWifi: !!(settings.wifiNetwork || settings.wifiPassword),
       hasLocalGuide: !!settings.localGuideUrl,

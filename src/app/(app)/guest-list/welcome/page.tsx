@@ -1,16 +1,23 @@
 'use client';
 import { useEffect, useState } from 'react';
 import { useUser } from '@clerk/nextjs';
-import { Settings } from '@/types';
+import { Account, Settings } from '@/types';
 import { Wifi, Copy, ExternalLink } from 'lucide-react';
 
 export default function WelcomeSettingsPage() {
   const { user } = useUser();
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [account, setAccount] = useState<Account | null>(null);
 
   useEffect(() => {
     fetch('/api/settings').then(r => r.json()).then(setSettings);
+    fetch('/api/account').then(r => r.json()).then(setAccount).catch(() => {});
   }, []);
+
+  // The unit this code is for: the one in view, since that is the one whose
+  // welcome details are being edited on this page.
+  const propertyId = account?.activePropertyId ?? null;
+  const propertyName = account?.properties.find(p => p.id === propertyId)?.name ?? null;
 
   async function save(updated: Settings) {
     await fetch('/api/settings', {
@@ -22,10 +29,18 @@ export default function WelcomeSettingsPage() {
 
   if (!settings) return <div className="text-slate-400 text-sm">Loading…</div>;
 
+
   const origin = typeof window !== 'undefined' ? window.location.origin : '';
   // ?u= tells the public endpoint which account a sign-up belongs to. A link
   // shared without it has no account to attach to and the sign-up is dropped.
-  const guestPath = user?.id ? `/welcome?u=${encodeURIComponent(user.id)}` : '/welcome';
+  //
+  // ?p= names the unit. Without it a guest scanning the code at one property
+  // sees whichever property the owner last had open, and their stay is matched
+  // against that unit's bookings. Codes printed before this carry no p and
+  // still land on the active property, as they did.
+  const guestPath = user?.id
+    ? `/welcome?u=${encodeURIComponent(user.id)}${propertyId ? `&p=${encodeURIComponent(propertyId)}` : ''}`
+    : '/welcome';
   const guestLink = `${origin}${guestPath}`;
 
   return (
@@ -97,7 +112,14 @@ export default function WelcomeSettingsPage() {
       </section>
 
       <section className="bg-white border border-slate-200 rounded-xl p-6 shadow-sm mb-6">
-        <h2 className="font-semibold text-slate-800 mb-3">Guest Link</h2>
+        <h2 className="font-semibold text-slate-800 mb-1">Guest Link</h2>
+        {/* A code is for one unit. Say which, so three printed codes do not all
+            look alike on the desk they are printed at. */}
+        {propertyName && (
+          <p className="text-xs text-slate-400 mb-3">
+            For {propertyName}. Switch property in the sidebar to make a code for another unit.
+          </p>
+        )}
         <div className="flex items-center gap-2 bg-slate-50 rounded-lg px-4 py-3 mb-3">
           <code className="text-sm text-slate-700 flex-1 truncate">{guestLink}</code>
         </div>
