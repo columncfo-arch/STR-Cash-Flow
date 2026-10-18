@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { loadAccount, saveAccount } from '@/lib/storage';
+import { loadAccount, saveAccount, loadSettings, saveSettings } from '@/lib/storage';
 import { requireAuth, unauthorized, AuthError } from '@/lib/auth';
 import { Property, PropertyModel } from '@/types';
 
@@ -31,7 +31,12 @@ export async function POST(req: Request) {
   try {
     const userId = await requireAuth();
     const account = await loadAccount(userId);
-    const { name, model } = await req.json() as { name?: string; model?: string };
+    const { name, model, monthlyPITI } = await req.json() as {
+      name?: string; model?: string; monthlyPITI?: number;
+    };
+    if (monthlyPITI != null && (typeof monthlyPITI !== 'number' || !isFinite(monthlyPITI) || monthlyPITI < 0)) {
+      return NextResponse.json({ error: 'The mortgage payment has to be a number' }, { status: 400 });
+    }
 
     const clean = cleanName(name, account.properties.map(p => p.name));
     if (!clean) {
@@ -47,6 +52,17 @@ export async function POST(req: Request) {
     // Switch to it: the only reason to add one is to set it up
     const next = { ...account, properties: [...account.properties, property], activePropertyId: property.id };
     await saveAccount(userId, next);
+
+    // The mortgage is the one cost a unit carries before it has earned
+    // anything, and without it every cost figure is revenue minus nothing.
+    // Written here rather than by a second call from the browser so a unit
+    // cannot exist for a moment with a payment the caller meant it to have.
+    if (monthlyPITI != null && monthlyPITI > 0) {
+      const scope = { userId, propertyId: property.id };
+      const settings = await loadSettings(scope);
+      await saveSettings(scope, { ...settings, propertyName: clean, monthlyPITI });
+    }
+
     return NextResponse.json(next, { status: 201 });
   } catch (err) {
     if (err instanceof AuthError) return unauthorized();
