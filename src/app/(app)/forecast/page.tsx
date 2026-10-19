@@ -2,7 +2,10 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { ForecastYear, Settings, ForecastOverride } from '@/types';
 import { pacingStatus } from '@/lib/pacing';
-import { balanceAfterMonths } from '@/lib/mortgage';
+import {
+  capRatePct, cashOnCashPct, dscr, dscrStatus, equityGain, noi,
+} from '@/lib/returns';
+import { balanceAfterMonths, splitPiti } from '@/lib/mortgage';
 import InfoTip from '@/components/InfoTip';
 import { Pencil, Check, X, Plus, Trash2, TrendingUp } from 'lucide-react';
 import {
@@ -62,6 +65,9 @@ function KpiCard({ label, value, sub, positive, large }: KpiCardProps) {
 
 export default function ForecastPage() {
   const [rows, setRows] = useState<ForecastYear[]>([]);
+  // Five years is what an owner can hold assumptions for with a straight face;
+  // ten is there because a paydown curve says little over five.
+  const [horizon, setHorizon] = useState<5 | 10>(5);
   const [settings, setSettings] = useState<Settings | null>(null);
 
   const [editingYear, setEditingYear] = useState<number | null>(null);
@@ -89,7 +95,10 @@ export default function ForecastPage() {
     }).format(n), [settings]);
 
   async function load() {
-    const [fr, sr] = await Promise.all([fetch('/api/forecast'), fetch('/api/settings')]);
+    const [fr, sr] = await Promise.all([
+      fetch(`/api/forecast?horizon=${horizon}`),
+      fetch('/api/settings'),
+    ]);
     const fd = await fr.json();
     const sd = await sr.json();
     setRows(fd.rows ?? []);
@@ -97,7 +106,8 @@ export default function ForecastPage() {
     setConfigDraft(sd);
   }
 
-  useEffect(() => { load(); }, []);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { load(); }, [horizon]);
 
   // ── Row override (pencil edit) ──────────────────────────────────────────────
 
@@ -317,6 +327,46 @@ export default function ForecastPage() {
     ? annualisedReturnPct - benchmarkPct
     : null;
   const returnStatus = pacingStatus(benchmarkVariancePct);
+
+  // ── What the money in the property is earning ─────────────────────────────
+  // Cash flow says whether the year paid its way. These say what the asset
+  // yields however it was financed, what the cash put in is earning, and
+  // whether the income covers the loan by enough to refinance it.
+  //
+  // The split of the payment is the whole game: tax and insurance live inside
+  // PITI here, and net operating income is after them but before debt service.
+  const piti = splitPiti(settings ?? ({} as Settings));
+  const statedEscrow = (settings?.monthlyPropertyTax ?? 0) + (settings?.monthlyInsurance ?? 0);
+  // Only a figure that was derived from the loan, or stated outright, is good
+  // enough to build a cap rate on — otherwise there is no honest NOI to report
+  const annualEscrow = piti.derived ? piti.taxesInsurance * 12
+    : statedEscrow > 0 ? statedEscrow * 12
+    : null;
+  const annualDebtService = (piti.interest + piti.principal) * 12;
+
+  const returnsRow = currentYearRow ?? finalRow;
+  const returnsNoi = returnsRow ? noi({
+    grossRevenue: returnsRow.grossRevenue,
+    platformFees: returnsRow.platformFees,
+    operatingExpenses: returnsRow.operatingExpenses,
+    taxesInsurance: annualEscrow,
+  }) : null;
+  const capRate = capRatePct(returnsNoi, propertyValue);
+  const coc = cashOnCashPct(returnsRow?.netIncome ?? 0, deployedCapital);
+  const coverage = dscr(returnsNoi, annualDebtService);
+  const coverageStatus = dscrStatus(coverage);
+
+  // Equity gained over the horizon, split into the half that is contractual and
+  // the half that is a forecast about a market nobody controls
+  const horizonEquity = hasEquityData && equityData.length > 0
+    ? equityGain(
+      { value: propertyValue, owed: loanBalance },
+      {
+        value: equityData[equityData.length - 1].propValue,
+        owed: equityData[equityData.length - 1].loanBal,
+      },
+    )
+    : null;
 
 
   return (
@@ -617,6 +667,67 @@ export default function ForecastPage() {
           </div>
 
         </div>
+      )}
+
+      {/* ── What the money in it is earning ──
+          Cash flow says whether a year paid its way. These say what the
+          asset yields however it was financed, what the cash put in is
+          earning, and whether the income covers the loan. */}
+      {hasData && (
+        <section className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-xs uppercase tracking-wide text-slate-900 font-semibold">
+              Returns · {returnsRow?.year ?? currentYear}
+            </h2>
+            <div className="flex items-center gap-1.5">
+              {([5, 10] as const).map(h => (
+                <button
+                  key={h}
+                  onClick={() => setHorizon(h)}
+                  aria-pressed={horizon === h}
+                  className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
+                    horizon === h
+                      ? 'bg-slate-900 text-white'
+                      : 'border border-slate-200 text-slate-600 hover:border-slate-300'
+                  }`}
+                >
+                  {h}-year
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4">
+            <ReturnTile
+              label="Cap Rate"
+              value={capRate != null ? `${capRate.toFixed(1)}%` : '—'}
+              sub={returnsNoi != null ? `${fmt(returnsNoi)} NOI` : 'needs loan or escrow detail'}
+              tip="Net operating income over what the property is worth — after operating costs, property tax and insurance, but before the mortgage. It ignores how the place was financed, which is what makes it the figure to compare against other buildings. Market rates are quoted net of management; running it yourself and taking no fee makes this read a little high."
+            />
+            <ReturnTile
+              label="Cash on Cash"
+              value={coc != null ? `${coc.toFixed(1)}%` : '—'}
+              sub={deployedCapital > 0 ? `on ${fmt(deployedCapital)} invested` : 'set capital deployed'}
+              tone={coc != null && coc < 0 ? 'text-red-600' : undefined}
+              tip="This year's cash flow over the cash actually put in. Unlike cap rate it knows about the mortgage, so it is the one that answers what your money is earning."
+            />
+            <ReturnTile
+              label="Debt Coverage"
+              value={coverage != null ? `${coverage.toFixed(2)}×` : '—'}
+              sub={coverageStatus.label}
+              tone={coverage != null ? coverageStatus.color : undefined}
+              tip="Net operating income over the principal and interest due — the figure a lender asks for when you refinance. Below 1.00 the property does not cover its own loan; most want 1.20 or better on a short let."
+            />
+            <ReturnTile
+              label={`Equity in ${horizon} Years`}
+              value={horizonEquity ? fmt(horizonEquity.total) : '—'}
+              sub={horizonEquity
+                ? `${fmt(horizonEquity.paydown)} paydown · ${fmt(horizonEquity.appreciation)} appreciation`
+                : 'set property value and loan balance'}
+              tone={horizonEquity && horizonEquity.total < 0 ? 'text-red-600' : undefined}
+              tip="What the property gains you beyond cash flow. Paydown is contractual and happens whatever the market does; appreciation is a forecast about a market nobody controls, so they are shown apart."
+            />
+          </div>
+        </section>
       )}
 
       {/* ── Hero KPI Cards ── */}
@@ -1224,5 +1335,31 @@ function TypeBadge({ type, manual, blended }: { type: ForecastYear['type']; manu
   );
   return (
     <span className="text-[10px] uppercase tracking-wide text-slate-500 px-1.5 py-0.5 rounded font-medium">Forecast</span>
+  );
+}
+
+/**
+ * One return figure, with the explanation behind it kept out of the way.
+ *
+ * These are ratios rather than money, and a ratio with no definition beside it
+ * is an invitation to read it as the wrong one — a cap rate that quietly left
+ * tax and insurance in would look like a good year.
+ */
+function ReturnTile({ label, value, sub, tip, tone }: {
+  label: string;
+  value: string;
+  sub: string;
+  tip: string;
+  tone?: string;
+}) {
+  return (
+    <div className="px-4 py-4 border-b border-slate-100 even:border-l even:border-slate-100 lg:border-b-0 lg:border-l lg:first:border-l-0">
+      <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold flex items-center gap-1">
+        {label}
+        <InfoTip label={label}>{tip}</InfoTip>
+      </p>
+      <p className={`text-xl font-bold leading-tight mt-1 ${tone ?? 'text-slate-900'}`}>{value}</p>
+      <p className="text-[11px] text-slate-400 truncate mt-0.5">{sub}</p>
+    </div>
   );
 }

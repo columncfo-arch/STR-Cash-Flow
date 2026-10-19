@@ -54,7 +54,7 @@ function computeMonthActuals(
   };
 }
 
-export async function GET() {
+export async function GET(req: Request) {
   try {
     const { scope } = await requireScope();
     const [allBookings, allExpenses, settings] = await Promise.all([
@@ -76,7 +76,12 @@ export async function GET() {
       .map(([yr]) => parseInt(yr))
       .filter(yr => !isNaN(yr));
 
-    const futureYears = [1, 2, 3, 4, 5].map(n => currentYear + n);
+    const { searchParams } = new URL(req.url);
+    // How far out to project. Five years is the default because that is the
+    // span an owner can hold assumptions for with a straight face; ten is
+    // offered because a mortgage paydown curve says little over five.
+    const horizon = Math.min(10, Math.max(1, parseInt(searchParams.get('horizon') ?? '5') || 5));
+    const futureYears = Array.from({ length: horizon }, (_, i) => currentYear + i + 1);
     const allYears = [...new Set([...historicalYears, ...manualYears, currentYear, ...futureYears])].sort();
 
     // Annual actuals (booking data) per year — ytd for current year
