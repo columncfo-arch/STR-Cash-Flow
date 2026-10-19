@@ -1,9 +1,61 @@
 import { NextResponse } from 'next/server';
 import { requireScope, unauthorized } from '@/lib/auth';
 import { AuthError } from '@/lib/auth';
-import { allScopes, loadSettings } from '@/lib/storage';
+import { allScopes, loadLeases, loadSettings } from '@/lib/storage';
 import { buildAnnualStatement } from '@/lib/statement';
-import { AnnualStatement, MonthlyStatement, Property } from '@/types';
+import { depositsHeld, effectiveEnd, isActiveOn } from '@/lib/lease';
+import { AnnualStatement, Lease, MonthlyStatement, Property } from '@/types';
+import { isoDate } from '@/lib/dateRange';
+
+/** A date on a lease that is worth seeing coming. */
+export interface Milestone {
+  date: string;
+  /** Notice is amber and can still be acted on; an end is red and empties the unit. */
+  kind: 'notice' | 'end';
+  tenant: string;
+  /** Set where a tenancy ended before the date it was written to run to. */
+  contractedEnd?: string;
+}
+
+/** What the tenancies add to a unit, for a view that reads both models at once. */
+export interface LeaseSummary {
+  /** Whoever is in it today, or null where nobody is. */
+  tenant: string | null;
+  /** Tenancies running today. More than one means the unit is split. */
+  running: number;
+  /** Held on behalf of tenants and owed back — in no line of the P&L. */
+  deposits: number;
+  /** Every notice date and lease end in the year, earliest first. */
+  milestones: Milestone[];
+}
+
+/**
+ * The dates on a unit's leases that fall in the year, as milestones.
+ *
+ * A notice date drops out once the tenancy has ended: nobody is renewing that.
+ * An end is the effective one — the actual move-out where there was one, not
+ * the date the lease was written to run to, because that is when the unit
+ * really empties. The contracted end rides along so the view can say it ended
+ * early and name the date it was meant to run to.
+ */
+function milestonesIn(leases: Lease[], year: number): Milestone[] {
+  const inYear = (d: string | null | undefined): d is string => Boolean(d?.startsWith(String(year)));
+  return leases
+    .flatMap<Milestone>(l => {
+      const end = effectiveEnd(l);
+      const notice = !l.terminatedOn && inYear(l.renewalNoticeDate)
+        ? [{ date: l.renewalNoticeDate!, kind: 'notice' as const, tenant: l.tenantName }]
+        : [];
+      const ending = inYear(end)
+        ? [{
+          date: end, kind: 'end' as const, tenant: l.tenantName,
+          ...(l.terminatedOn && l.endDate && l.terminatedOn < l.endDate ? { contractedEnd: l.endDate } : {}),
+        }]
+        : [];
+      return [...notice, ...ending];
+    })
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
 
 /** A property's year, and what it is being held to. */
 export interface PortfolioEntry {
@@ -29,6 +81,7 @@ export interface PortfolioEntry {
      */
     priorMargins: { netRevenue: number; operatingIncome: number; contribution: number } | null;
   };
+  leases: LeaseSummary;
 }
 
 /** A month's totals without the stays behind them. */
@@ -53,11 +106,14 @@ export async function GET(req: Request) {
 
     const entries = await Promise.all(
       allScopes(userId, account).map(async ({ property, scope }): Promise<PortfolioEntry> => {
-        const [{ statement }, { statement: priorYear }, settings] = await Promise.all([
+        const [{ statement }, { statement: priorYear }, settings, leases] = await Promise.all([
           buildAnnualStatement(scope, year),
           buildAnnualStatement(scope, year - 1),
           loadSettings(scope),
+          loadLeases(scope),
         ]);
+        const today = isoDate(new Date());
+        const live = leases.filter(l => isActiveOn(l, today));
         const priorGross = priorYear.grossRevenue;
         // Contribution margin is taken before PITI so the fixed payment is
         // subtracted once, at the window's own length, rather than being baked
@@ -83,6 +139,12 @@ export async function GET(req: Request) {
             adr: settings.targetAdr ?? null,
             monthlyPITI: settings.monthlyPITI ?? 0,
             priorMargins,
+          },
+          leases: {
+            tenant: live[0]?.tenantName ?? null,
+            running: live.length,
+            deposits: depositsHeld(leases, today),
+            milestones: milestonesIn(leases, year),
           },
         };
       }),

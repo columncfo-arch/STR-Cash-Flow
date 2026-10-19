@@ -344,6 +344,12 @@ export default function IncomeStatementPage() {
 
   const pitiMonths = mode === 'month' ? 1 : mode === 'ytd' ? currentMonthIdx + 1 : 12;
 
+  /** Is this month (1-12) inside the period the picker has chosen? */
+  const inWindow = (month: number) =>
+    mode === 'month' ? month === selectedMonth
+      : mode === 'ytd' ? month <= currentMonthIdx + 1
+      : true;
+
   // This page is built from bookings alone. A year can also carry figures typed
   // straight into the forecast, and those drive the projections without ever
   // appearing here — which looks like missing data rather than data kept
@@ -372,36 +378,7 @@ export default function IncomeStatementPage() {
         </button>
       </div>
 
-      {/* Monthly cash flow overview chart */}
-      {statement && (
-        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
-          <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-1.5">
-            Monthly Cash Flow — {fetchYear}
-            <InfoTip label="What this chart shows">
-              After every cost including the whole mortgage payment — the same figure the dashboard reports.
-            </InfoTip>
-          </h2>
-          <ResponsiveContainer width="100%" height={200}>
-            <ComposedChart data={statement.months.map(m => ({
-              name: MONTHS_SHORT[m.month - 1],
-              netIncome: m.grossRevenue > 0 ? m.netIncome : null,
-            }))}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
-              <YAxis tick={{ fontSize: 12 }} tickFormatter={axisMoney} width={62} />
-              <Tooltip formatter={(v) => fmt(Number(v))} />
-              <ReferenceLine y={0} stroke="#cbd5e1" />
-              <Bar dataKey="netIncome" name="Cash Flow" radius={[3, 3, 0, 0]}>
-                {statement.months.map((m, i) => (
-                  <Cell key={i} fill={m.netIncome >= 0 ? '#10b981' : '#ef4444'} />
-                ))}
-              </Bar>
-            </ComposedChart>
-          </ResponsiveContainer>
-        </div>
-      )}
-
-      {/* Mode selector */}
+      {/* ── The period, which everything below answers to ── */}
       <div className="flex flex-wrap items-center gap-3 mb-6">
         <div className="flex gap-1 bg-slate-100 rounded-lg p-1">
           {([
@@ -451,6 +428,42 @@ export default function IncomeStatementPage() {
           </select>
         )}
       </div>
+
+      {/* Monthly cash flow overview chart */}
+      {statement && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
+          <h2 className="font-semibold text-slate-800 mb-4 flex items-center gap-1.5">
+            Monthly Cash Flow — {activeLabel}
+            <InfoTip label="What this chart shows">
+              After every cost including the whole mortgage payment — the same figure the dashboard reports.
+            </InfoTip>
+          </h2>
+          <ResponsiveContainer width="100%" height={200}>
+            <ComposedChart data={statement.months.map(m => ({
+              name: MONTHS_SHORT[m.month - 1],
+              netIncome: m.grossRevenue > 0 ? m.netIncome : null,
+            }))}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+              <XAxis dataKey="name" tick={{ fontSize: 12 }} />
+              <YAxis tick={{ fontSize: 12 }} tickFormatter={axisMoney} width={62} />
+              <Tooltip formatter={(v) => fmt(Number(v))} />
+              <ReferenceLine y={0} stroke="#cbd5e1" />
+              {/* Months outside the selected period are faded rather than
+                  dropped: one bar is not a chart, and the point of keeping the
+                  year on screen is to see the chosen window against it. */}
+              <Bar dataKey="netIncome" name="Cash Flow" radius={[3, 3, 0, 0]}>
+                {statement.months.map((m, i) => (
+                  <Cell
+                    key={i}
+                    fill={m.netIncome >= 0 ? '#10b981' : '#ef4444'}
+                    fillOpacity={inWindow(m.month) ? 1 : 0.2}
+                  />
+                ))}
+              </Bar>
+            </ComposedChart>
+          </ResponsiveContainer>
+        </div>
+      )}
 
       <div className="mb-4">
         <span className="text-xs font-semibold text-slate-400 uppercase tracking-wide">{activeLabel}</span>

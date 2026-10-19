@@ -5,7 +5,9 @@ import { pacingStatus, planShare } from '@/lib/pacing';
 import PacingRing from '@/components/PacingRing';
 import InfoTip from '@/components/InfoTip';
 import AddPropertyForm from '@/components/AddPropertyForm';
-import type { PortfolioEntry } from '@/app/api/portfolio/route';
+import type { PortfolioEntry, Milestone } from '@/app/api/portfolio/route';
+import type { PropertyModel } from '@/types';
+import { isoDate } from '@/lib/dateRange';
 
 const MONTHS_LONG = ['January','February','March','April','May','June','July','August','September','October','November','December'];
 
@@ -19,6 +21,9 @@ const LAYERS = [
 
 type LayerKey = typeof LAYERS[number]['key'];
 
+const rowsForModel = (rows: Row[], model: PropertyModel | 'all') =>
+  model === 'all' ? rows : rows.filter(r => r.model === model);
+
 /** One property's figures for the window in view. */
 interface Row {
   id: string;
@@ -27,9 +32,20 @@ interface Row {
   netRevenue: number;
   operatingIncome: number;
   netIncome: number;
+  model: PropertyModel;
   nights: number;
+  /** Rent, of the gross above. A mixed unit can then be read either way. */
+  leaseRevenue: number;
   occupancy: number;
+  /**
+   * Revenue ÷ nights sold. A lease sells no nights, so a unit let only on
+   * leases shows nothing here rather than a figure that invites comparison
+   * with a nightly rate.
+   */
   adr: number | null;
+  tenant: string | null;
+  deposits: number;
+  milestones: Milestone[];
   /** What the window should have produced by now, layer by layer. Null where
    *  there is no goal, or no finished year to derive one of the lower layers
    *  from. */
@@ -69,6 +85,9 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
   const [period, setPeriod] = useState<Period>('ytd');
   const [sortBy, setSortBy] = useState<LayerKey>('netIncome');
   const [focused, setFocused] = useState<string | null>(null);
+  // Which way of letting is in view. The roll-up above the table narrows with
+  // it, because a total over both models answers a question nobody asked.
+  const [onlyModel, setOnlyModel] = useState<PropertyModel | 'all'>('all');
   const [adding, setAdding] = useState(false);
 
   useEffect(() => {
@@ -121,21 +140,47 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
         : null,
     };
 
+    const leaseRevenue = sum(m => m.leaseRevenue);
     return {
       id: entry.property.id,
       name: entry.property.name,
+      model: entry.property.model ?? 'str',
       grossRevenue: gross,
       netRevenue: sum(m => m.netRevenue),
       operatingIncome: sum(m => m.operatingIncome),
       netIncome: sum(m => m.netIncome),
       nights,
+      leaseRevenue,
       occupancy: months.length ? months.reduce((s, m) => s + m.occupancyRate, 0) / months.length : 0,
-      adr: nights > 0 ? gross / nights : null,
+      // Nights, not days: rent is not a nightly rate and must not be averaged
+      // into one. A unit with both reports the rate its stays actually sold at.
+      adr: nights > 0 ? (gross - leaseRevenue) / nights : null,
+      tenant: entry.leases.tenant,
+      deposits: entry.leases.deposits,
+      milestones: entry.leases.milestones,
       targets: layerTargets,
     };
   }), [data, monthsInWindow, monthIdx, today, year]);
 
-  const inView = focused ? rows.filter(r => r.id === focused) : rows;
+  /**
+   * Every lease date still ahead, across the units in view, soonest first.
+   *
+   * Only what has not happened: a notice date that has passed is not a thing
+   * to do, and a tenancy that has already ended is reported by the unit
+   * reading vacant rather than by a reminder about it.
+   */
+  const upcoming = useMemo(() => {
+    const from = isoDate(new Date());
+    return (focused ? rows.filter(r => r.id === focused) : rowsForModel(rows, onlyModel))
+      .flatMap(r => r.milestones
+        .filter(m => m.date >= from)
+        .map(m => ({ ...m, propertyId: r.id, propertyName: r.name })))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(0, 6);
+  }, [rows, onlyModel, focused]);
+
+  const byModel = useMemo(() => rowsForModel(rows, onlyModel), [rows, onlyModel]);
+  const inView = focused ? rows.filter(r => r.id === focused) : byModel;
 
   const totals = useMemo(() => {
     const actual: Record<LayerKey, number> = { grossRevenue: 0, netRevenue: 0, operatingIncome: 0, netIncome: 0 };
@@ -158,8 +203,8 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
   // Worst first. An average hides the one unit losing money, and the whole
   // point of a portfolio view is that it cannot.
   const sorted = useMemo(
-    () => [...rows].sort((a, b) => a[sortBy] - b[sortBy]),
-    [rows, sortBy],
+    () => [...byModel].sort((a, b) => a[sortBy] - b[sortBy]),
+    [byModel, sortBy],
   );
 
   /** Make a property the one the whole app is showing, not just these tiles. */
@@ -177,6 +222,8 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
   }
 
   const live = rows.length;
+  const models = new Set(rows.map(r => r.model));
+  const mixed = models.size > 1;
   const focusedRow = focused ? rows.find(r => r.id === focused) : null;
   const periodLabel = period === 'month' ? `${MONTHS_LONG[monthIdx]} ${year}`
     : period === 'ytd' ? `Jan – ${MONTHS_LONG[monthIdx].slice(0, 3)} ${year}`
@@ -212,7 +259,9 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
               period filter. */}
           {live > 1 && (
             <p className="text-slate-500 text-sm mt-1">
-              {focusedRow ? 'One property · ' : `${live} properties · `}
+              {focusedRow
+                ? 'One property · '
+                : `${byModel.length}${byModel.length === live ? '' : ` of ${live}`} ${byModel.length === 1 ? 'property' : 'properties'} · `}
               {periodLabel}
             </p>
           )}
@@ -249,6 +298,35 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
           ))}
         </div>
       </div>
+
+      {/* ── Short-term, long-term, or both ──
+          Only where there is something to choose between: with one way of
+          letting, a filter that can only be left alone is furniture. */}
+      {mixed && !focused && (
+        <div className="flex flex-wrap items-center gap-1.5 mb-5">
+          {([
+            { id: 'all' as const, label: 'All properties' },
+            { id: 'str' as const, label: 'Short-term' },
+            { id: 'ltr' as const, label: 'Long-term' },
+          ]).map(opt => (
+            <button
+              key={opt.id}
+              onClick={() => setOnlyModel(opt.id)}
+              aria-pressed={onlyModel === opt.id}
+              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                onlyModel === opt.id
+                  ? 'bg-slate-900 text-white'
+                  : 'border border-slate-200 text-slate-600 hover:border-slate-300 bg-white'
+              }`}
+            >
+              {opt.label}
+              <span className="ml-1.5 text-[10px] opacity-60">
+                {opt.id === 'all' ? rows.length : rows.filter(r => r.model === opt.id).length}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* A new unit becomes the one in view, so the whole app — its dashboard,
           its settings, its leases — is already pointed at it */}
@@ -302,6 +380,38 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
       </div>
       )}
 
+      {/* ── What is coming on the tenancies ──
+          A short-term unit has no leases, so it contributes no dates and this
+          disappears by itself rather than by a rule about models. */}
+      {upcoming.length > 0 && (
+        <div className="bg-white border border-slate-200 rounded-xl shadow-sm mb-6 overflow-hidden">
+          <div className="px-5 py-3 border-b border-slate-100 flex items-center gap-2">
+            <span className="text-xs uppercase tracking-wide text-slate-900 font-semibold">Coming up</span>
+            <InfoTip label="What these dates are">
+              Amber is a deadline to give or receive notice, which can still be acted on. Red is a tenancy
+              ending and a unit standing empty unless it is re-let.
+            </InfoTip>
+          </div>
+          <ul className="divide-y divide-slate-50">
+            {upcoming.map(m => (
+              <li key={`${m.propertyId}-${m.kind}-${m.date}`} className="flex items-center gap-3 px-5 py-2.5">
+                <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${m.kind === 'notice' ? 'bg-amber-500' : 'bg-red-500'}`} />
+                <span className="text-sm text-slate-700 min-w-0 truncate">
+                  {m.kind === 'notice' ? 'Notice due' : 'Tenancy ends'} · {m.tenant}
+                </span>
+                <span className="text-xs text-slate-400 truncate">{m.propertyName}</span>
+                <span className="ml-auto text-xs text-slate-500 shrink-0">
+                  {m.date}
+                  {m.contractedEnd && (
+                    <span className="text-slate-400"> · early, written to {m.contractedEnd}</span>
+                  )}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
       {/* ── The properties ── */}
       {live > 1 && (
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
@@ -336,6 +446,7 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-slate-500 text-left text-xs">
                   <th className="px-5 py-2.5 font-medium">Property</th>
+                  <th className="px-3 py-2.5 font-medium">In it</th>
                   <th className="px-3 py-2.5 font-medium text-right">Gross</th>
                   <th className="px-3 py-2.5 font-medium text-right">Net Revenue</th>
                   <th className="px-3 py-2.5 font-medium text-right">NOI</th>
@@ -358,7 +469,19 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
                       <span className="flex items-center gap-2">
                         <Building2 className="w-3.5 h-3.5 text-slate-300 shrink-0" />
                         <span className="truncate">{r.name}</span>
+                        {r.model === 'ltr' && (
+                          <span className="text-[9px] uppercase tracking-wide text-slate-400 border border-slate-200 rounded px-1 shrink-0">
+                            LTR
+                          </span>
+                        )}
                       </span>
+                    </td>
+                    {/* Who is in it: the tenant on a long let, the nights sold
+                        on a short one. Both answer the same question. */}
+                    <td className="px-3 py-3 text-slate-600">
+                      {r.model === 'ltr'
+                        ? (r.tenant ?? <span className="text-amber-700">Vacant</span>)
+                        : <span className="text-slate-400">{r.nights} night{r.nights === 1 ? '' : 's'}</span>}
                     </td>
                     <td className="px-3 py-3 text-right text-slate-700">{fmt(r.grossRevenue)}</td>
                     <td className="px-3 py-3 text-right text-slate-700">{fmt(r.netRevenue)}</td>
@@ -367,6 +490,7 @@ export default function PortfolioDashboard({ children }: { children?: React.Reac
                       {fmt(r.netIncome)}
                     </td>
                     <td className="px-3 py-3 text-right text-slate-600">{r.occupancy.toFixed(1)}%</td>
+                    {/* A lease sells no nights, so there is no rate to show */}
                     <td className="px-3 py-3 text-right text-slate-600">{r.adr != null ? fmt(r.adr) : '—'}</td>
                     <td className="px-5 py-3 text-right">
                       <span className="inline-flex items-center gap-1 text-[11px] text-slate-400 whitespace-nowrap">

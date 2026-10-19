@@ -1,7 +1,23 @@
 'use client';
 import {
   ComposedChart, Bar, Line, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine,
+  ReferenceDot,
 } from 'recharts';
+
+/**
+ * A lease date, plotted against the month it falls in.
+ *
+ * Amber is a deadline to give or receive notice and can still be acted on; red
+ * is a tenancy ending and a unit standing empty unless it is re-let. A unit let
+ * nightly has no leases, so it has no dots — the conditional rendering falls
+ * out of the data rather than needing a rule about models.
+ */
+export type ChartMilestone = {
+  /** The month's own label, which is what the category axis is keyed on. */
+  month: string;
+  kind: 'notice' | 'end';
+  label: string;
+};
 
 /** A month measured against its target, for a year chart. */
 export type VarianceDatum = {
@@ -85,6 +101,7 @@ function VarianceTooltip({
  */
 export function YearVarianceChart({
   data, fmt, selectedIndex, onSelect, actualLabel = 'Earned', pendingNote = 'Not reached yet',
+  milestones = [],
 }: {
   data: VarianceDatum[];
   fmt: (n: number) => string;
@@ -93,6 +110,8 @@ export function YearVarianceChart({
   onSelect: (data: unknown) => void;
   actualLabel?: string;
   pendingNote?: string;
+  /** Lease dates to mark on the months they fall in. */
+  milestones?: ChartMilestone[];
 }) {
   return (
     <ResponsiveContainer width="100%" height={300}>
@@ -152,6 +171,18 @@ export function YearVarianceChart({
           stroke="#cbd5e1" strokeWidth={2} dot={false} connectNulls={false}
           isAnimationActive={false}
         />
+        {/* On the target line, which is the one place on this chart that is a
+            fixed height — a dot hung off a bar would move with the bar. Small
+            and unlabelled: what each one is belongs to the line beneath the
+            chart, which has room for a date and a name. */}
+        {milestones.map(m => (
+          <ReferenceDot
+            key={`${m.month}-${m.kind}-${m.label}`}
+            x={m.month} y={0} r={4}
+            fill={m.kind === 'notice' ? '#f59e0b' : '#ef4444'}
+            stroke="#fff" strokeWidth={1.5}
+          />
+        ))}
         <Bar dataKey="variance" isAnimationActive={false}>
           {data.map((d, i) => (
             <Cell

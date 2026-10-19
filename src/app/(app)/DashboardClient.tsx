@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { AnnualStatement, MonthlyStatement, Settings, Platform } from '@/types';
+import { AnnualStatement, Lease, MonthlyStatement, Settings, Platform } from '@/types';
 import StatCard from '@/components/StatCard';
 import { TrendingUp, X, Pencil, CalendarDays } from 'lucide-react';
 import { format } from 'date-fns';
@@ -12,7 +12,8 @@ import { addDays } from '@/lib/dateRange';
 import {
   DayOccupancyChart, MonthProgressChart, DayDatum, ProgressPoint,
 } from '@/components/DayCharts';
-import { YearVarianceChart, VarianceDatum } from '@/components/YearVarianceChart';
+import { YearVarianceChart, VarianceDatum, ChartMilestone } from '@/components/YearVarianceChart';
+import { effectiveEnd } from '@/lib/lease';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   Cell, ReferenceLine,
@@ -238,6 +239,7 @@ export default function DashboardClient() {
   const [statement, setStatement] = useState<AnnualStatement | null>(null);
   const [prevStatement, setPrevStatement] = useState<AnnualStatement | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [leases, setLeases] = useState<Lease[]>([]);
   const [selectedMonth, setSelectedMonth] = useState<number | null>(null); // 0-indexed
   // Which span the revenue tile reports on. Months, not days — targets are
   // distributed monthly.
@@ -269,6 +271,8 @@ export default function DashboardClient() {
       .then(d => setStatement(d.statement));
     fetch('/api/income-statement?year=' + (year - 1)).then(r => r.json()).then(d => setPrevStatement(d.statement));
     fetch('/api/settings').then(r => r.json()).then(setSettings);
+    // A unit let nightly has none, and then nothing below it draws anything
+    fetch('/api/leases').then(r => r.json()).then(d => setLeases(d.leases ?? [])).catch(() => {});
   }, []);
 
 
@@ -773,6 +777,27 @@ export default function DashboardClient() {
     };
   }) ?? [];
 
+  /**
+   * The lease dates falling in this year, against the months they fall in.
+   *
+   * A notice date drops out once the tenancy has ended — nobody is renewing
+   * that — and an end is the effective one, the actual move-out where there was
+   * one, because that is when the unit really empties.
+   */
+  const chartMilestones: ChartMilestone[] = leases.flatMap(l => {
+    const inYear = (d: string | null | undefined) => Boolean(d?.startsWith(String(year)));
+    const at = (date: string, kind: 'notice' | 'end') => ({
+      month: MONTHS[Number(date.slice(5, 7)) - 1],
+      kind,
+      label: `${kind === 'notice' ? 'Notice due' : 'Ends'} ${date} · ${l.tenantName}`,
+    });
+    const end = effectiveEnd(l);
+    return [
+      ...(!l.terminatedOn && inYear(l.renewalNoticeDate) ? [at(l.renewalNoticeDate!, 'notice')] : []),
+      ...(inYear(end) ? [at(end!, 'end')] : []),
+    ];
+  });
+
   const occChartData = statement?.months.map((m, i) => ({
     name: MONTHS[i],
     Occupancy: i <= currentMonthIdx ? parseFloat(m.occupancyRate.toFixed(1)) : null,
@@ -1086,7 +1111,18 @@ export default function DashboardClient() {
                 onSelect={handleChartClick}
                 actualLabel={selectedMetric.label}
                 pendingNote={selectedMetric.prorates ? 'Not reached yet' : 'Not closed out yet'}
+                milestones={chartMilestones}
               />
+              {chartMilestones.length > 0 && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1 mt-2 text-[11px] text-slate-400">
+                  {chartMilestones.map(m => (
+                    <span key={m.label} className="flex items-center gap-1.5">
+                      <span className={`w-2 h-2 rounded-full ${m.kind === 'notice' ? 'bg-amber-500' : 'bg-red-500'}`} />
+                      {m.label}
+                    </span>
+                  ))}
+                </div>
+              )}
               {!prevHasData && manualTarget == null && (
                 <p className="text-xs text-amber-700 border border-amber-200 rounded-lg px-3 py-2 mt-3">
                   No prior-year data — set an annual target with the pencil above to enable the plan, or{' '}
