@@ -3,7 +3,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { ForecastYear, Settings, ForecastOverride } from '@/types';
 import { pacingStatus } from '@/lib/pacing';
 import {
-  capRatePct, cashOnCashPct, dscr, dscrStatus, equityGain, noi,
+  breakEvenOccupancyPct, capRatePct, cashOnCashPct, dscr, dscrStatus,
+  equityGain, netAdr, noi, operatingExpenseRatioPct,
 } from '@/lib/returns';
 import { balanceAfterMonths, splitPiti } from '@/lib/mortgage';
 import InfoTip from '@/components/InfoTip';
@@ -351,7 +352,29 @@ export default function ForecastPage() {
     operatingExpenses: returnsRow.operatingExpenses,
     taxesInsurance: annualEscrow,
   }) : null;
+  const returnsCosts = returnsRow ? {
+    grossRevenue: returnsRow.grossRevenue,
+    platformFees: returnsRow.platformFees,
+    operatingExpenses: returnsRow.operatingExpenses,
+    taxesInsurance: annualEscrow,
+  } : null;
   const capRate = capRatePct(returnsNoi, propertyValue);
+  const oer = returnsCosts ? operatingExpenseRatioPct(returnsCosts) : null;
+
+  // What a night brings in, net of the platform's cut. The blended year takes
+  // its revenue from the part that has actually happened, because its nights
+  // only cover that part — a full year of revenue over ten months of nights
+  // would read as a far better rate than the property gets.
+  const nightsSold = returnsRow?.totalNights ?? 0;
+  const revenueForRate = returnsRow?.blended
+    ? (returnsRow.ytdGross ?? 0) - (returnsRow.ytdPlatformFees ?? 0)
+    : (returnsRow?.grossRevenue ?? 0) - (returnsRow?.platformFees ?? 0);
+  const ratePerNight = netAdr(revenueForRate, nightsSold);
+  const breakEven = breakEvenOccupancyPct(
+    (returnsRow?.operatingExpenses ?? 0) + (returnsRow?.piti ?? 0),
+    ratePerNight,
+  );
+  const occupancyNow = nightsSold > 0 ? (nightsSold / 365) * 100 : null;
   const coc = cashOnCashPct(returnsRow?.netIncome ?? 0, deployedCapital);
   const coverage = dscr(returnsNoi, annualDebtService);
   const coverageStatus = dscrStatus(coverage);
@@ -696,7 +719,7 @@ export default function ForecastPage() {
               ))}
             </div>
           </div>
-          <div className="grid grid-cols-2 lg:grid-cols-4">
+          <div className="grid grid-cols-2 lg:grid-cols-3">
             <ReturnTile
               label="Cap Rate"
               value={capRate != null ? `${capRate.toFixed(1)}%` : '—'}
@@ -716,6 +739,24 @@ export default function ForecastPage() {
               sub={coverageStatus.label}
               tone={coverage != null ? coverageStatus.color : undefined}
               tip="Net operating income over the principal and interest due — the figure a lender asks for when you refinance. Below 1.00 the property does not cover its own loan; most want 1.20 or better on a short let."
+            />
+            <ReturnTile
+              label="Operating Cost Ratio"
+              value={oer != null ? `${oer.toFixed(0)}%` : '—'}
+              sub={oer != null ? `${(100 - oer).toFixed(0)}% reaches NOI` : 'needs loan or escrow detail'}
+              tip="Everything it takes to run the place — platform fees, operating costs, property tax and insurance — as a share of what guests paid. The mortgage is left out, being a financing decision rather than a cost of operating, so what this does not take is exactly the NOI margin. Published short-let benchmarks usually quote this without platform fees; these are in it."
+            />
+            <ReturnTile
+              label="Break-even Occupancy"
+              value={breakEven != null ? `${breakEven.toFixed(0)}%` : '—'}
+              sub={breakEven == null ? 'needs nights sold and a rate'
+                : occupancyNow == null ? `at ${fmt(ratePerNight ?? 0)}/night`
+                : occupancyNow >= breakEven
+                  ? `running at ${occupancyNow.toFixed(0)}% — covered`
+                  : `running at ${occupancyNow.toFixed(0)}% — ${(breakEven - occupancyNow).toFixed(0)} pts short`}
+              tone={breakEven != null && occupancyNow != null && occupancyNow < breakEven
+                ? 'text-red-600' : undefined}
+              tip="The occupancy that covers everything, mortgage included, at the rate a night is currently bringing in net of platform fees. Above it the year is in profit; below it the year is funded from somewhere else. Cleaning rises with bookings, so a property well below this will find the real figure a little higher once the extra turnovers are paid for."
             />
             <ReturnTile
               label={`Equity in ${horizon} Years`}

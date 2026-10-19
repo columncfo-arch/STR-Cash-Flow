@@ -21,7 +21,13 @@ function sumExpenseDetail(detail: Record<string, number>): number {
   return Object.values(detail).reduce((s, v) => s + (v ?? 0), 0);
 }
 
-interface MonthActuals { grossRevenue: number; platformFees: number; operatingExpenses: number }
+interface MonthActuals {
+  grossRevenue: number;
+  platformFees: number;
+  operatingExpenses: number;
+  /** Only a whole year carries this; a single month is never asked for it. */
+  totalNights?: number;
+}
 
 function computeMonthActuals(
   allBookings: ReturnType<typeof Array.prototype.filter>[0][],
@@ -98,6 +104,9 @@ export async function GET(req: Request) {
       const yrExpenses = expensesForYear(allExpenses, yr);
       const manualExpenses = yrExpenses.filter(e => e.category !== 'refund').reduce((s, e) => s + e.amount, 0);
       actualsByYear.set(yr, {
+        // $0 bookings are cancellations; counting their nights would drag the
+        // rate per night down, as it does everywhere else
+        totalNights: yrBookings.filter(b => b.income > 0).reduce((s, b) => s + b.nights, 0),
         grossRevenue: gross,
         platformFees: svcFees + fastPayFees + taxRemitted,
         operatingExpenses: manualExpenses + cleaningAuto + ownerTaxes,
@@ -214,6 +223,7 @@ export async function GET(req: Request) {
       rows.push({
         year: yr,
         type,
+        totalNights: actualsByYear.get(yr)?.totalNights,
         grossRevenue,
         platformFees,
         operatingExpenses,

@@ -89,6 +89,51 @@ export function dscrStatus(ratio: number | null): { label: string; color: string
 }
 
 /**
+ * What every cost takes, as a share of what guests paid.
+ *
+ * Everything it takes to run the place — platform fees, operating costs,
+ * property tax and insurance — but not the mortgage, which is a financing
+ * decision rather than a cost of operating. So it is the complement of the NOI
+ * margin: what this does not take is what the property earns.
+ *
+ * Published short-let benchmarks usually quote this without platform fees,
+ * because they assume an owner who is not paying them. Fees are in here, which
+ * makes it read higher than those and makes it true.
+ */
+export function operatingExpenseRatioPct(year: YearCosts): number | null {
+  if (year.taxesInsurance == null || year.grossRevenue <= 0) return null;
+  const costs = year.platformFees + year.operatingExpenses + year.taxesInsurance;
+  return (costs / year.grossRevenue) * 100;
+}
+
+/** What a night actually brings in, once the platform has taken its cut. */
+export function netAdr(revenueNetOfFees: number, nights: number): number | null {
+  if (nights <= 0) return null;
+  return revenueNetOfFees / nights;
+}
+
+/**
+ * The occupancy at which the property covers everything, mortgage included.
+ *
+ * The one figure on this page an operator can act on directly: it converts a
+ * pile of annual costs into a number of nights, which is the thing they
+ * actually sell. Above it the year is in profit, below it the year is funded
+ * from somewhere else.
+ *
+ * Measured against the whole payment rather than the interest on it, because
+ * the question is what the property has to sell to stop needing money — and
+ * the bank wants the principal too.
+ *
+ * It takes the current cost structure as given. Cleaning rises with bookings,
+ * so a property far below its break-even will find the true figure a little
+ * higher than this once the extra turnovers are paid for.
+ */
+export function breakEvenOccupancyPct(annualCosts: number, ratePerNight: number | null): number | null {
+  if (ratePerNight == null || ratePerNight <= 0 || annualCosts <= 0) return null;
+  return (annualCosts / ratePerNight / 365) * 100;
+}
+
+/**
  * What the property is worth, and what is still owed on it, n years out.
  *
  * Appreciation compounds on the value; the balance comes from the amortisation

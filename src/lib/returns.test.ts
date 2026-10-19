@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
-  capRatePct, cashOnCashPct, dscr, dscrStatus, equityAt, equityGain, noi,
+  breakEvenOccupancyPct, capRatePct, cashOnCashPct, dscr, dscrStatus,
+  equityAt, equityGain, netAdr, noi, operatingExpenseRatioPct,
 } from '@/lib/returns';
 
 // A unit grossing $84k, paying 10% in platform fees, $14k of operating costs,
@@ -70,6 +71,59 @@ describe('debt service coverage', () => {
     it('is short below 1.0', () => expect(dscrStatus(0.99).label).toBe('Short'));
     it('says nothing when there is nothing to say', () => expect(dscrStatus(null).label).toBe('—'));
   });
+});
+
+describe('the operating expense ratio', () => {
+  it('is every running cost over what guests paid', () =>
+    // (8,400 + 14,000 + 7,200) / 84,000
+    expect(operatingExpenseRatioPct(year)).toBeCloseTo(35.24, 2));
+
+  // What it does not take is what the property earns, which is the only
+  // reading of it that reconciles with the NOI above
+  it('is the complement of the NOI margin', () => {
+    const oer = operatingExpenseRatioPct(year)!;
+    const margin = (noi(year)! / year.grossRevenue) * 100;
+    expect(oer + margin).toBeCloseTo(100, 6);
+  });
+
+  it('leaves the mortgage out, being a financing decision', () => {
+    // The same costs against the same revenue, whatever is owed
+    expect(operatingExpenseRatioPct(year)).toBe(operatingExpenseRatioPct({ ...year }));
+  });
+
+  it('reports nothing without an honest tax and insurance figure', () =>
+    expect(operatingExpenseRatioPct({ ...year, taxesInsurance: null })).toBeNull());
+
+  it('reports nothing on a year with no revenue', () =>
+    expect(operatingExpenseRatioPct({ ...year, grossRevenue: 0 })).toBeNull());
+});
+
+describe('break-even occupancy', () => {
+  it('turns a rate per night into a nightly rate', () =>
+    expect(netAdr(75_600, 280)).toBeCloseTo(270, 6));
+
+  it('reports no rate without nights sold', () => expect(netAdr(75_600, 0)).toBeNull());
+
+  it('is the nights needed to cover everything, over a year of them', () =>
+    // $54,000 of costs at $270 a night is 200 nights, or 54.8% of 365
+    expect(breakEvenOccupancyPct(54_000, 270)).toBeCloseTo(54.79, 2));
+
+  it('rises as costs rise', () =>
+    expect(breakEvenOccupancyPct(68_000, 270)!).toBeGreaterThan(breakEvenOccupancyPct(54_000, 270)!));
+
+  it('falls as the rate rises', () =>
+    expect(breakEvenOccupancyPct(54_000, 340)!).toBeLessThan(breakEvenOccupancyPct(54_000, 270)!));
+
+  // A property needing more than a full calendar is not covering its costs at
+  // any occupancy, and saying 100% would hide that
+  it('can exceed 100% where no occupancy would cover the costs', () =>
+    expect(breakEvenOccupancyPct(120_000, 270)!).toBeGreaterThan(100));
+
+  it('reports nothing without a rate to divide by', () =>
+    expect(breakEvenOccupancyPct(54_000, null)).toBeNull());
+
+  it('reports nothing for a property with no costs', () =>
+    expect(breakEvenOccupancyPct(0, 270)).toBeNull());
 });
 
 describe('equity', () => {

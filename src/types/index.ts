@@ -261,6 +261,9 @@ export interface ForecastYear {
   isManualPiti: boolean;
   isManualEntry: boolean;
   blended: boolean;          // current year: true = actuals + remainder forecast
+  /** Nights sold in the year, where it has any. Forecast years project revenue
+   *  but not the nights behind it, so they carry none. */
+  totalNights?: number;
   ytdGross?: number;         // breakdown: actual portion
   ytdPlatformFees?: number;
   ytdOpEx?: number;
