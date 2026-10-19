@@ -130,7 +130,11 @@ async function redisHashClear(key: string, ids: string[]): Promise<void> {
 // ─── File backend (local dev) ──────────────────────────────────────────────────
 
 const IS_VERCEL = Boolean(process.env.VERCEL);
-const BASE_DIR = IS_VERCEL ? '/tmp/str-data' : path.join(process.cwd(), 'data');
+// STR_DATA_DIR points the filesystem backend somewhere disposable. Nothing in
+// the app sets it; the tests do, so they can exercise migration and archiving
+// for real rather than against a stand-in for this module.
+const BASE_DIR = process.env.STR_DATA_DIR
+  ?? (IS_VERCEL ? '/tmp/str-data' : path.join(process.cwd(), 'data'));
 
 function userDir(userId: string) {
   return path.join(BASE_DIR, userId);
