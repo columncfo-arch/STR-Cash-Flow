@@ -295,10 +295,11 @@ export default function ForecastPage() {
   const finalEquity = equityData.length > 0 ? equityData[equityData.length - 1].equity : 0;
   const totalWealth = finalEquity + (finalRow?.cumulative ?? 0);
 
-  // ── Status strip ──────────────────────────────────────────────────────────
-  // Three verdicts rather than nine figures: when the capital comes back,
-  // whether the property pays its own way, and whether it beats the
-  // alternative the owner would otherwise have bought.
+  // ── Capital, over the horizon ─────────────────────────────────────────────
+  // When what was put in comes back, and whether the whole thing beats the
+  // alternative the owner would otherwise have bought. Both are questions
+  // about wealth rather than about a year, so they read beside the equity
+  // figures further down rather than above the returns.
 
   const deployedCapital = basis?.capitalDeployed ?? 0;
   const benchmarkPct = basis?.benchmarkPct ?? 8;
@@ -314,15 +315,9 @@ export default function ForecastPage() {
     }
     return null;
   })();
-  const paybackRecovered = (() => {
-    if (!finalRow) return 0;
-    const eq = equityData.find(e => e.year === String(finalRow.year));
-    return (eq ? eq.equity - currentEquity : 0) + finalRow.cumulative;
-  })();
-
-  // Cash flow: does the property cover its own costs, and if not yet, when.
-  const currentCashFlow = currentYearRow?.netIncome ?? 0;
-  const firstPositiveRow = enriched.find(r => r.netIncome > 0) ?? null;
+  // A "turns positive in 2024" once sat here, on a page shown in 2026: it
+  // searched the whole series for the first profitable year and found one in
+  // the past. The strip it served is gone, and so is the search.
 
   // Annualised total return, compared against the benchmark.
   const forecastYearSpan = finalRow && enriched.length > 0
@@ -450,81 +445,6 @@ export default function ForecastPage() {
           Forecast Settings
         </button>
         )}
-        </div>
-      </div>
-
-      {/* ── Status strip: the three questions this page exists to answer ── */}
-      <div className="bg-white border border-slate-200 rounded-xl px-5 py-4 shadow-sm mb-6">
-        <div className="flex items-start gap-4 sm:gap-6">
-
-          {/* Payback */}
-          <div className="min-w-0 flex-1">
-            <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Payback</p>
-            {deployedCapital <= 0 ? (
-              <>
-                <p className="text-xl font-bold text-slate-900 leading-tight mt-0.5">—</p>
-                <p className="text-[11px] text-slate-400 truncate">
-                  <button onClick={() => setConfigOpen(true)} className="text-emerald-600 underline">
-                    set capital deployed
-                  </button>
-                </p>
-              </>
-            ) : paybackYear ? (
-              <>
-                <p className="text-xl font-bold text-emerald-600 leading-tight mt-0.5">{paybackYear.year}</p>
-                <p className="text-[11px] text-slate-400 truncate">
-                  year {paybackYear.year - currentYear + 1} · {fmt(deployedCapital)} recovered
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-xl font-bold text-red-600 leading-tight mt-0.5">Not by {finalRow?.year}</p>
-                <p className="text-[11px] text-slate-400 truncate">
-                  {fmt(paybackRecovered)} of {fmt(deployedCapital)} recovered
-                </p>
-              </>
-            )}
-          </div>
-
-          {/* Cash flow */}
-          <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-            <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">Cash Flow</p>
-            <p className={`text-xl font-bold leading-tight mt-0.5 ${currentCashFlow >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
-              {currentCashFlow >= 0 ? 'Positive' : 'Negative'}
-            </p>
-            <p className="text-[11px] text-slate-400 truncate">
-              {currentCashFlow >= 0
-                ? `${fmt(currentCashFlow)} in ${currentYear}`
-                : firstPositiveRow
-                  ? `${fmt(currentCashFlow)} now · turns positive ${firstPositiveRow.year}`
-                  : `${fmt(currentCashFlow)} now · negative all forecast`}
-            </p>
-          </div>
-
-          {/* Return vs benchmark */}
-          <div className="min-w-0 flex-1 border-l border-slate-100 pl-4 sm:pl-6">
-            <div className="flex items-start justify-between gap-2">
-              <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold">vs Benchmark</p>
-              <button
-                onClick={() => setConfigOpen(true)}
-                className="text-slate-300 hover:text-slate-500 transition-colors shrink-0 -mt-0.5"
-                title="Set benchmark return"
-              >
-                <Pencil className="w-3 h-3" />
-              </button>
-            </div>
-            <p className={`text-xl font-bold leading-tight mt-0.5 ${returnStatus.color}`}>{returnStatus.label}</p>
-            <p className="text-[11px] text-slate-400 truncate">
-              {annualisedReturnPct != null
-                ? <>
-                    <span className={returnStatus.color}>
-                      {annualisedReturnPct >= 0 ? '' : '−'}{Math.abs(annualisedReturnPct).toFixed(1)}%/yr
-                    </span>
-                    {` vs ${benchmarkPct}% benchmark`}
-                  </>
-                : 'set capital deployed'}
-            </p>
-          </div>
         </div>
       </div>
 
@@ -945,6 +865,20 @@ export default function ForecastPage() {
               large
             />
           </div>
+
+          <p className="text-xs text-slate-400 mb-6">
+            {deployedCapital > 0 && (paybackYear
+              ? `${fmt(deployedCapital)} of capital back by ${paybackYear.year}, in year ${paybackYear.year - currentYear + 1}. `
+              : `${fmt(deployedCapital)} of capital is not back inside this projection. `)}
+            {annualisedReturnPct != null && (
+              <>
+                <span className={returnStatus.color}>
+                  {annualisedReturnPct >= 0 ? '' : '−'}{Math.abs(annualisedReturnPct).toFixed(1)}%/yr
+                </span>
+                {` against a ${benchmarkPct}% benchmark, counting equity and cash flow together.`}
+              </>
+            )}
+          </p>
 
           <div className="bg-white rounded-xl border border-slate-200 p-6 shadow-sm mb-6">
             <div className="flex items-start justify-between mb-1">
