@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
-import { loadBookings, loadExpenses, loadSettings } from '@/lib/storage';
+import { allScopes, loadBookings, loadExpenses, loadSettings, type Scope } from '@/lib/storage';
 import { requireScope, unauthorized } from '@/lib/auth';
 import { ForecastYear, Expense } from '@/types';
+import { basisFor, mergeBasis, mergeRows } from '@/lib/forecastAggregate';
 import { occursInMonth, occurrencesIn } from '@/lib/recurrence';
 import { getYear } from 'date-fns';
 
@@ -60,9 +61,8 @@ function computeMonthActuals(
   };
 }
 
-export async function GET(req: Request) {
-  try {
-    const { scope } = await requireScope();
+/** One property's forecast: its rows, and what its returns are measured on. */
+async function forecastFor(scope: Scope, horizon: number) {
     const [allBookings, allExpenses, settings] = await Promise.all([
       loadBookings(scope),
       loadExpenses(scope),
@@ -82,11 +82,9 @@ export async function GET(req: Request) {
       .map(([yr]) => parseInt(yr))
       .filter(yr => !isNaN(yr));
 
-    const { searchParams } = new URL(req.url);
     // How far out to project. Five years is the default because that is the
     // span an owner can hold assumptions for with a straight face; ten is
     // offered because a mortgage paydown curve says little over five.
-    const horizon = Math.min(10, Math.max(1, parseInt(searchParams.get('horizon') ?? '5') || 5));
     const futureYears = Array.from({ length: horizon }, (_, i) => currentYear + i + 1);
     const allYears = [...new Set([...historicalYears, ...manualYears, currentYear, ...futureYears])].sort();
 
@@ -248,7 +246,42 @@ export async function GET(req: Request) {
       prevOpEx = operatingExpenses;
     }
 
-    return NextResponse.json({ rows, settings });
+  return { rows, settings, basis: basisFor(settings, horizon) };
+}
+
+/**
+ * The forecast for the property in view, or for every unit added together.
+ *
+ * The portfolio is built from the same per-unit function rather than from a
+ * second set of arithmetic, so a figure here and the same figure on one
+ * property's page cannot drift apart.
+ */
+export async function GET(req: Request) {
+  try {
+    const { userId, account, scope } = await requireScope(req);
+    const { searchParams } = new URL(req.url);
+    // Five years is what an owner can hold assumptions for with a straight
+    // face; ten is offered because a paydown curve says little over five.
+    const horizon = Math.min(10, Math.max(1, parseInt(searchParams.get('horizon') ?? '5') || 5));
+    const wantsPortfolio = searchParams.get('property') === 'all';
+    const currentYear = new Date().getFullYear();
+
+    const properties = allScopes(userId, account);
+    if (!wantsPortfolio || properties.length < 2) {
+      const one = await forecastFor(scope, horizon);
+      return NextResponse.json({ ...one, horizon, properties: properties.map(p => p.property) });
+    }
+
+    const built = await Promise.all(properties.map(p => forecastFor(p.scope, horizon)));
+    return NextResponse.json({
+      rows: mergeRows(built.map(b => b.rows), currentYear),
+      // The currency and the property name come from the unit in view; nothing
+      // else on a portfolio reads from one unit's settings
+      settings: built[0].settings,
+      basis: mergeBasis(built.map(b => b.basis), horizon),
+      horizon,
+      properties: properties.map(p => p.property),
+    });
   } catch (e) {
     if (e instanceof Error && e.message === 'Unauthorized') return unauthorized();
     return NextResponse.json({ error: 'Failed to build forecast' }, { status: 500 });

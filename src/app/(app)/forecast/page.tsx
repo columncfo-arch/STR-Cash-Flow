@@ -1,12 +1,12 @@
 'use client';
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { ForecastYear, Settings, ForecastOverride } from '@/types';
+import type { ForecastBasis } from '@/lib/forecastAggregate';
 import { pacingStatus } from '@/lib/pacing';
 import {
   breakEvenOccupancyPct, capRatePct, cashOnCashPct, dscr, dscrStatus,
   equityGain, netAdr, noi, operatingExpenseRatioPct,
 } from '@/lib/returns';
-import { balanceAfterMonths, splitPiti } from '@/lib/mortgage';
 import InfoTip from '@/components/InfoTip';
 import { Pencil, Check, X, Plus, Trash2, TrendingUp } from 'lucide-react';
 import {
@@ -69,6 +69,10 @@ export default function ForecastPage() {
   // Five years is what an owner can hold assumptions for with a straight face;
   // ten is there because a paydown curve says little over five.
   const [horizon, setHorizon] = useState<5 | 10>(5);
+  // 'all' adds every unit together; otherwise the forecast is the one in view.
+  const [propertyView, setPropertyView] = useState<'one' | 'all'>('one');
+  const [properties, setProperties] = useState<{ id: string; name: string }[]>([]);
+  const [basis, setBasis] = useState<ForecastBasis | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
 
   const [editingYear, setEditingYear] = useState<number | null>(null);
@@ -97,18 +101,20 @@ export default function ForecastPage() {
 
   async function load() {
     const [fr, sr] = await Promise.all([
-      fetch(`/api/forecast?horizon=${horizon}`),
+      fetch(`/api/forecast?horizon=${horizon}${propertyView === 'all' ? '&property=all' : ''}`),
       fetch('/api/settings'),
     ]);
     const fd = await fr.json();
     const sd = await sr.json();
     setRows(fd.rows ?? []);
+    setBasis(fd.basis ?? null);
+    setProperties(fd.properties ?? []);
     setSettings(sd);
     setConfigDraft(sd);
   }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  useEffect(() => { load(); }, [horizon]);
+  useEffect(() => { load(); }, [horizon, propertyView]);
 
   // ── Row override (pencil edit) ──────────────────────────────────────────────
 
@@ -234,7 +240,6 @@ export default function ForecastPage() {
 
   const cashToDate = actualRows.reduce((s, r) => s + r.netIncome, 0);
   const projectedCash = forecastRows.reduce((s, r) => s + r.netIncome, 0);
-  const avgAnnual = actualRows.length ? cashToDate / actualRows.length : 0;
 
   // Wealth chart: split into actual (solid) vs forecast (lighter, dashed)
   const wealthData = enriched.map((r, i) => ({
@@ -254,18 +259,23 @@ export default function ForecastPage() {
     .reduce((s, [, v]) => s + (parseFloat(v) || 0), 0);
 
   const hasData = enriched.length > 0;
+  const isPortfolio = propertyView === 'all' && properties.length > 1;
 
   // ── Equity / Amortization ─────────────────────────────────────────────────
-  const propertyValue = settings?.propertyValue ?? 0;
-  const loanBalance = settings?.loanBalance ?? 0;
+  const propertyValue = basis?.propertyValue ?? 0;
+  const loanBalance = basis?.loanBalance ?? 0;
   const loanStructure = settings?.loanStructure ?? 'fixed';
-  const appreciationPct = configDraft.propertyAppreciationPct ?? settings?.propertyAppreciationPct ?? 0;
+  const appreciationPct = isPortfolio
+    ? (basis?.appreciationPct ?? 0)
+    : (configDraft.propertyAppreciationPct ?? settings?.propertyAppreciationPct ?? 0);
   const hasEquityData = propertyValue > 0 && loanBalance > 0;
 
   // The schedule lives in lib/mortgage, where the income statement reads it too —
   // the same loan should not amortise two different ways on two pages.
+  // Amortisation is summed by the API across however many loans there are,
+  // which a single Settings object cannot represent
   const projectedBalance = (yearsFromNow: number) =>
-    hasEquityData ? balanceAfterMonths(settings, yearsFromNow * 12) : 0;
+    hasEquityData ? (basis?.balanceAfter[yearsFromNow] ?? basis?.loanBalance ?? 0) : 0;
 
   const equityData = hasEquityData ? enriched.map(row => {
     const yearsFromNow = row.year - currentYear;
@@ -289,8 +299,8 @@ export default function ForecastPage() {
   // whether the property pays its own way, and whether it beats the
   // alternative the owner would otherwise have bought.
 
-  const deployedCapital = settings?.totalCapitalDeployed ?? 0;
-  const benchmarkPct = settings?.benchmarkReturnPct ?? 8;
+  const deployedCapital = basis?.capitalDeployed ?? 0;
+  const benchmarkPct = basis?.benchmarkPct ?? 8;
 
   // Payback: first year total value returned (equity gained since today plus
   // cumulative cash flow) covers the capital put in.
@@ -336,14 +346,10 @@ export default function ForecastPage() {
   //
   // The split of the payment is the whole game: tax and insurance live inside
   // PITI here, and net operating income is after them but before debt service.
-  const piti = splitPiti(settings ?? ({} as Settings));
-  const statedEscrow = (settings?.monthlyPropertyTax ?? 0) + (settings?.monthlyInsurance ?? 0);
-  // Only a figure that was derived from the loan, or stated outright, is good
-  // enough to build a cap rate on — otherwise there is no honest NOI to report
-  const annualEscrow = piti.derived ? piti.taxesInsurance * 12
-    : statedEscrow > 0 ? statedEscrow * 12
-    : null;
-  const annualDebtService = (piti.interest + piti.principal) * 12;
+  // Both figures are separated per unit and then summed, because tax, insurance
+  // and interest cannot be pulled apart from a total payment after the fact
+  const annualEscrow = basis?.annualEscrow ?? null;
+  const annualDebtService = basis?.annualDebtService ?? 0;
 
   const returnsRow = currentYearRow ?? finalRow;
   const returnsNoi = returnsRow ? noi({
@@ -398,13 +404,42 @@ export default function ForecastPage() {
       {/* ── Header ── */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-slate-900">Long Term Forecast</h1>
+          <h1 className="text-2xl font-bold text-slate-900">
+            {isPortfolio ? 'Portfolio Forecast' : 'Long Term Forecast'}
+          </h1>
           <p className="text-slate-500 text-sm mt-1">
+            {isPortfolio && `${properties.length} properties · `}
             {actualRows.length > 0
               ? `${actualRows.length} year${actualRows.length !== 1 ? 's' : ''} of actuals · ${forecastRows.length}-year projection`
               : `${forecastRows.length}-year projection`}
           </p>
         </div>
+        <div className="flex items-center gap-2">
+        {/* Only where there is more than one unit to add up */}
+        {properties.length > 1 && (
+          <div className="flex items-center gap-1.5">
+            {([
+              { id: 'one' as const, label: settings?.propertyName || 'This property' },
+              { id: 'all' as const, label: 'All properties' },
+            ]).map(opt => (
+              <button
+                key={opt.id}
+                onClick={() => setPropertyView(opt.id)}
+                aria-pressed={propertyView === opt.id}
+                className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors max-w-[11rem] truncate ${
+                  propertyView === opt.id
+                    ? 'bg-slate-900 text-white'
+                    : 'border border-slate-200 text-slate-600 hover:border-slate-300 bg-white'
+                }`}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {/* A setting belongs to one unit, so there is nothing for it to write
+            to while every unit is on screen */}
+        {!isPortfolio && (
         <button
           onClick={() => setConfigOpen(o => !o)}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm border transition-colors ${
@@ -414,6 +449,8 @@ export default function ForecastPage() {
           <TrendingUp className="w-4 h-4" />
           Forecast Settings
         </button>
+        )}
+        </div>
       </div>
 
       {/* ── Status strip: the three questions this page exists to answer ── */}
@@ -771,36 +808,6 @@ export default function ForecastPage() {
         </section>
       )}
 
-      {/* ── Hero KPI Cards ── */}
-      {hasData && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          <KpiCard
-            label="Cash Generated to Date"
-            value={fmt(cashToDate)}
-            sub={`${actualRows.length} actual year${actualRows.length !== 1 ? 's' : ''}`}
-            positive={cashToDate >= 0}
-            large
-          />
-          <KpiCard
-            label={`${currentYear} Net Cash Flow`}
-            value={currentYearRow ? fmt(currentYearRow.netIncome) : '—'}
-            sub={currentYearRow?.blended ? 'YTD actuals + projected remainder' : currentYearRow?.type === 'forecast' ? 'Projected' : 'Actual'}
-            positive={currentYearRow ? currentYearRow.netIncome >= 0 : null}
-          />
-          <KpiCard
-            label="Avg Annual Cash Flow"
-            value={actualRows.length ? fmt(avgAnnual) : '—'}
-            sub={actualRows.length ? `Avg across ${actualRows.length} actual year${actualRows.length !== 1 ? 's' : ''}` : 'No actuals yet'}
-            positive={avgAnnual >= 0}
-          />
-          <KpiCard
-            label={`${forecastRows.length}-Year Projected`}
-            value={fmt(projectedCash)}
-            sub="Additional from forecast years"
-            positive={projectedCash >= 0}
-          />
-        </div>
-      )}
 
       {/* ── Cumulative Cash Flow (Wealth Building) Chart ── */}
       {hasData && (
