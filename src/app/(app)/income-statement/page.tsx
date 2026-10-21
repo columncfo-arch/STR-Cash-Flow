@@ -201,6 +201,7 @@ export default function IncomeStatementPage() {
               .map(p => (
                 <Row key={p} label={platformLabel(p)} value={pnl.byPlatform[p].income} indent />
               ))}
+            {pnl.leaseRevenue > 0 && <Row label="Rent" value={pnl.leaseRevenue} indent />}
             {hasFees && <Row label="Platform Fees" value={pnl.platformFees} indent negative />}
             {hasFastPayFees && <Row label="Fast Pay Fees" value={pnl.fastPayFees} indent negative />}
             {hasTaxRemitted && <Row label="Tax Remitted by Platform" value={pnl.taxRemitted} indent negative />}
@@ -299,6 +300,7 @@ export default function IncomeStatementPage() {
       [],
       ['REVENUE'],
       ['Gross Revenue', pnl.grossRevenue.toFixed(2)],
+      ...(pnl.leaseRevenue > 0 ? [['Rent', pnl.leaseRevenue.toFixed(2)]] : []),
       ['Platform Fees', (-pnl.platformFees).toFixed(2)],
       ['Guest Refunds', (-pnl.refunds).toFixed(2)],
       ['Net Revenue', pnl.netRevenue.toFixed(2)],

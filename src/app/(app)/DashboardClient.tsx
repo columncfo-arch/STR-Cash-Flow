@@ -167,7 +167,7 @@ function PlatformTable({
 }
 
 type PnLData = Pick<MonthlyStatement,
-  'grossRevenue' | 'platformFees' | 'fastPayFees' | 'taxRemitted' | 'refunds' | 'netRevenue'
+  'grossRevenue' | 'leaseRevenue' | 'platformFees' | 'fastPayFees' | 'taxRemitted' | 'refunds' | 'netRevenue'
   | 'ownerTaxes' | 'totalOperatingExpenses' | 'operatingIncome' | 'piti'
   | 'mortgageInterest' | 'mortgagePrincipal' | 'mortgageTaxesInsurance' | 'netProfit' | 'netIncome'>;
 
@@ -186,6 +186,9 @@ function PnLTable({ m, fmt }: { m: PnLData; fmt: (n: number) => string }) {
   const otherOpEx = m.totalOperatingExpenses - m.ownerTaxes;
   const rows: { label: string; value: number; indent?: boolean; negative?: boolean; bold?: boolean; separator?: boolean; accent?: boolean }[] = [
     { label: 'Gross Revenue', value: m.grossRevenue },
+    // Rent is part of what came in, not a deduction from it — so it reads as a
+    // source alongside the platforms rather than as a cost
+    ...(m.leaseRevenue > 0 ? [{ label: 'Rent', value: m.leaseRevenue, indent: true }] : []),
     ...(m.platformFees > 0 ? [{ label: 'Platform Fees', value: m.platformFees, indent: true, negative: true }] : []),
     ...(m.fastPayFees > 0 ? [{ label: 'Fast Pay Fees', value: m.fastPayFees, indent: true, negative: true }] : []),
     ...(m.taxRemitted > 0 ? [{ label: 'Tax Retained by Platform', value: m.taxRemitted, indent: true, negative: true }] : []),
