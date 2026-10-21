@@ -133,6 +133,109 @@ export function breakEvenOccupancyPct(annualCosts: number, ratePerNight: number 
   return (annualCosts / ratePerNight / 365) * 100;
 }
 
+// ─── Reading a ratio ─────────────────────────────────────────────────────────
+//
+// A percentage on its own is a quiz. An owner looking at 7.9% has no way to
+// know whether that is a good year or a bad one, and the figure does the work
+// of informing them only once it sits against the range it could have been in.
+//
+// These bands are deliberately coarse. Four is enough to answer "should I be
+// pleased", and a finer scale would imply a precision that market convention
+// does not have.
+
+export type Tone = 'weak' | 'fair' | 'good' | 'strong';
+
+/** A band of a scale, running up to `upTo` from wherever the last one ended. */
+export interface Band {
+  upTo: number;
+  label: string;
+  tone: Tone;
+}
+
+/** The range a ratio is read against, and what each part of it means. */
+export interface Scale {
+  /** The ends of the drawn range. Values outside it sit at the edge. */
+  min: number;
+  max: number;
+  /** Ascending by value. The last band is open-ended. */
+  bands: Band[];
+}
+
+/**
+ * Where a figure sits on its scale, and what that is called.
+ *
+ * `pct` is its position along the drawn range, clamped — a property at a 19%
+ * cap rate sits at the right-hand end rather than off the chart.
+ */
+export function readScale(value: number | null, scale: Scale): { band: Band; pct: number } | null {
+  if (value == null || !isFinite(value)) return null;
+  const band = scale.bands.find(b => value < b.upTo) ?? scale.bands[scale.bands.length - 1];
+  const pct = Math.min(100, Math.max(0, ((value - scale.min) / (scale.max - scale.min)) * 100));
+  return { band, pct };
+}
+
+/**
+ * The scales themselves.
+ *
+ * Coverage is the only one of these the outside world agrees on, because
+ * lenders write it into covenants. The rest are conventions, and cap rate is
+ * the loosest of them — it is set by the local market more than by the
+ * building, so 5% is respectable in one city and poor in another. Treated here
+ * as a general guide and said so where it is shown.
+ *
+ * Where a low number is the good one — costs, and the occupancy needed to
+ * break even — the bands simply run the other way. The scale is always drawn
+ * left to right in ascending value, so the colour tells the reader which
+ * direction is which without a legend.
+ */
+export const SCALES = {
+  capRate: {
+    min: 0, max: 12,
+    bands: [
+      { upTo: 4, label: 'Weak', tone: 'weak' },
+      { upTo: 6, label: 'Fair', tone: 'fair' },
+      { upTo: 8, label: 'Good', tone: 'good' },
+      { upTo: Infinity, label: 'Strong', tone: 'strong' },
+    ],
+  },
+  cashOnCash: {
+    min: 0, max: 20,
+    bands: [
+      { upTo: 5, label: 'Weak', tone: 'weak' },
+      { upTo: 8, label: 'Fair', tone: 'fair' },
+      { upTo: 12, label: 'Good', tone: 'good' },
+      { upTo: Infinity, label: 'Strong', tone: 'strong' },
+    ],
+  },
+  coverage: {
+    min: 0.5, max: 2,
+    bands: [
+      { upTo: 1, label: 'Short', tone: 'weak' },
+      { upTo: 1.25, label: 'Thin', tone: 'fair' },
+      { upTo: 1.5, label: 'Comfortable', tone: 'good' },
+      { upTo: Infinity, label: 'Strong', tone: 'strong' },
+    ],
+  },
+  operatingCost: {
+    min: 20, max: 60,
+    bands: [
+      { upTo: 30, label: 'Lean', tone: 'strong' },
+      { upTo: 40, label: 'Typical', tone: 'good' },
+      { upTo: 50, label: 'Heavy', tone: 'fair' },
+      { upTo: Infinity, label: 'Eroding', tone: 'weak' },
+    ],
+  },
+  breakEven: {
+    min: 20, max: 100,
+    bands: [
+      { upTo: 50, label: 'Wide margin', tone: 'strong' },
+      { upTo: 65, label: 'Workable', tone: 'good' },
+      { upTo: 80, label: 'Tight', tone: 'fair' },
+      { upTo: Infinity, label: 'Fragile', tone: 'weak' },
+    ],
+  },
+} satisfies Record<string, Scale>;
+
 /**
  * What the property is worth, and what is still owed on it, n years out.
  *

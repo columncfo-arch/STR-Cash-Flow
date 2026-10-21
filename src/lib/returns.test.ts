@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   breakEvenOccupancyPct, capRatePct, cashOnCashPct, dscr, dscrStatus,
-  equityAt, equityGain, netAdr, noi, operatingExpenseRatioPct,
+  equityAt, equityGain, netAdr, noi, operatingExpenseRatioPct, readScale, SCALES,
 } from '@/lib/returns';
 
 // A unit grossing $84k, paying 10% in platform fees, $14k of operating costs,
@@ -124,6 +124,59 @@ describe('break-even occupancy', () => {
 
   it('reports nothing for a property with no costs', () =>
     expect(breakEvenOccupancyPct(0, 270)).toBeNull());
+});
+
+describe('reading a ratio against the range it could have been in', () => {
+  it('places a figure along the drawn range', () => {
+    const read = readScale(6, SCALES.capRate)!;   // halfway up a 0–12 scale
+    expect(read.pct).toBeCloseTo(50, 6);
+  });
+
+  it('clamps a figure past the end to the end', () =>
+    expect(readScale(19, SCALES.capRate)!.pct).toBe(100));
+
+  it('clamps a figure below the start to the start', () =>
+    expect(readScale(-4, SCALES.capRate)!.pct).toBe(0));
+
+  it('reports nothing for a figure that does not exist', () =>
+    expect(readScale(null, SCALES.capRate)).toBeNull());
+
+  it('names the band a figure falls in', () => {
+    expect(readScale(3.9, SCALES.capRate)!.band.label).toBe('Weak');
+    expect(readScale(5, SCALES.capRate)!.band.label).toBe('Fair');
+    expect(readScale(7.9, SCALES.capRate)!.band.label).toBe('Good');
+    expect(readScale(9, SCALES.capRate)!.band.label).toBe('Strong');
+  });
+
+  it('puts a boundary in the band above it', () =>
+    expect(readScale(4, SCALES.capRate)!.band.label).toBe('Fair'));
+
+  // Lenders write 1.20 into covenants, which is why this one is not a
+  // convention but a line
+  it('calls a loan uncovered below 1.00', () =>
+    expect(readScale(0.99, SCALES.coverage)!.band.tone).toBe('weak'));
+  it('calls 1.20 thin, which is what a lender calls it', () =>
+    expect(readScale(1.2, SCALES.coverage)!.band.label).toBe('Thin'));
+
+  describe('where a low figure is the good one', () => {
+    it('calls lean operating costs strong', () =>
+      expect(readScale(26, SCALES.operatingCost)!.band.tone).toBe('strong'));
+    it('calls heavy operating costs weak', () =>
+      expect(readScale(55, SCALES.operatingCost)!.band.tone).toBe('weak'));
+    it('calls a low break-even a wide margin', () =>
+      expect(readScale(42, SCALES.breakEven)!.band.tone).toBe('strong'));
+    it('calls a high break-even fragile', () =>
+      expect(readScale(88, SCALES.breakEven)!.band.tone).toBe('weak'));
+  });
+
+  describe('every scale is well formed', () => {
+    it.each(Object.entries(SCALES))('%s runs upward and ends open', (_name, scale) => {
+      const edges = scale.bands.map(b => b.upTo);
+      expect([...edges].sort((a, b) => a - b)).toEqual(edges);
+      expect(edges[edges.length - 1]).toBe(Infinity);
+      expect(scale.max).toBeGreaterThan(scale.min);
+    });
+  });
 });
 
 describe('equity', () => {

@@ -4,9 +4,10 @@ import { ForecastYear, Settings, ForecastOverride } from '@/types';
 import type { ForecastBasis } from '@/lib/forecastAggregate';
 import { pacingStatus } from '@/lib/pacing';
 import {
-  breakEvenOccupancyPct, capRatePct, cashOnCashPct, dscr, dscrStatus,
-  equityGain, netAdr, noi, operatingExpenseRatioPct,
+  breakEvenOccupancyPct, capRatePct, cashOnCashPct, dscr,
+  equityGain, netAdr, noi, operatingExpenseRatioPct, readScale, SCALES, type Scale,
 } from '@/lib/returns';
+import MetricScale, { TONE_TEXT } from '@/components/MetricScale';
 import InfoTip from '@/components/InfoTip';
 import { Pencil, Check, X, Plus, Trash2, TrendingUp } from 'lucide-react';
 import {
@@ -383,7 +384,6 @@ export default function ForecastPage() {
   const occupancyNow = nightsSold > 0 ? (nightsSold / 365) * 100 : null;
   const coc = cashOnCashPct(returnsRow?.netIncome ?? 0, deployedCapital);
   const coverage = dscr(returnsNoi, annualDebtService);
-  const coverageStatus = dscrStatus(coverage);
 
   // Equity gained over the horizon, split into the half that is contractual and
   // the half that is a forecast about a market nobody controls
@@ -761,26 +761,32 @@ export default function ForecastPage() {
               label="Cap Rate"
               value={capRate != null ? `${capRate.toFixed(1)}%` : '—'}
               sub={returnsNoi != null ? `${fmt(returnsNoi)} NOI` : 'needs loan or escrow detail'}
-              tip="Net operating income over what the property is worth — after operating costs, property tax and insurance, but before the mortgage. It ignores how the place was financed, which is what makes it the figure to compare against other buildings. Market rates are quoted net of management; running it yourself and taking no fee makes this read a little high."
+              scale={SCALES.capRate}
+              reading={capRate}
+              tip="Net operating income over what the property is worth — after operating costs, property tax and insurance, but before the mortgage. It ignores how the place was financed, which is what makes it the figure to compare against other buildings. Market rates are quoted net of management; running it yourself and taking no fee makes this read a little high. The scale is a general guide — cap rates are set by the local market more than by the building, so 5% is respectable in one city and poor in another."
             />
             <ReturnTile
               label="Cash on Cash"
               value={coc != null ? `${coc.toFixed(1)}%` : '—'}
               sub={deployedCapital > 0 ? `on ${fmt(deployedCapital)} invested` : 'set capital deployed'}
-              tone={coc != null && coc < 0 ? 'text-red-600' : undefined}
+              scale={SCALES.cashOnCash}
+              reading={coc}
               tip="This year's cash flow over the cash actually put in. Unlike cap rate it knows about the mortgage, so it is the one that answers what your money is earning."
             />
             <ReturnTile
               label="Debt Coverage"
               value={coverage != null ? `${coverage.toFixed(2)}×` : '—'}
-              sub={coverageStatus.label}
-              tone={coverage != null ? coverageStatus.color : undefined}
+              sub={annualDebtService > 0 ? `${fmt(annualDebtService)} of principal & interest` : 'no loan recorded'}
+              scale={SCALES.coverage}
+              reading={coverage}
               tip="Net operating income over the principal and interest due — the figure a lender asks for when you refinance. Below 1.00 the property does not cover its own loan; most want 1.20 or better on a short let."
             />
             <ReturnTile
               label="Operating Cost Ratio"
               value={oer != null ? `${oer.toFixed(0)}%` : '—'}
               sub={oer != null ? `${(100 - oer).toFixed(0)}% reaches NOI` : 'needs loan or escrow detail'}
+              scale={SCALES.operatingCost}
+              reading={oer}
               tip="Everything it takes to run the place — platform fees, operating costs, property tax and insurance — as a share of what guests paid. The mortgage is left out, being a financing decision rather than a cost of operating, so what this does not take is exactly the NOI margin. Published short-let benchmarks usually quote this without platform fees; these are in it."
             />
             <ReturnTile
@@ -791,8 +797,8 @@ export default function ForecastPage() {
                 : occupancyNow >= breakEven
                   ? `running at ${occupancyNow.toFixed(0)}% — covered`
                   : `running at ${occupancyNow.toFixed(0)}% — ${(breakEven - occupancyNow).toFixed(0)} pts short`}
-              tone={breakEven != null && occupancyNow != null && occupancyNow < breakEven
-                ? 'text-red-600' : undefined}
+              scale={SCALES.breakEven}
+              reading={breakEven}
               tip="The occupancy that covers everything, mortgage included, at the rate a night is currently bringing in net of platform fees. Above it the year is in profit; below it the year is funded from somewhere else. Cleaning rises with bookings, so a property well below this will find the real figure a little higher once the extra turnovers are paid for."
             />
             <ReturnTile
@@ -1393,21 +1399,36 @@ function TypeBadge({ type, manual, blended }: { type: ForecastYear['type']; manu
  * is an invitation to read it as the wrong one — a cap rate that quietly left
  * tax and insurance in would look like a good year.
  */
-function ReturnTile({ label, value, sub, tip, tone }: {
+function ReturnTile({ label, value, sub, tip, tone, scale, reading }: {
   label: string;
   value: string;
   sub: string;
   tip: string;
   tone?: string;
+  /** The range this figure is read against, where it has one. */
+  scale?: Scale;
+  /** The figure itself, for placing on that range. */
+  reading?: number | null;
 }) {
+  const read = scale ? readScale(reading ?? null, scale) : null;
   return (
     <div className="px-4 py-4 border-b border-slate-100 even:border-l even:border-slate-100 lg:border-b-0 lg:border-l lg:first:border-l-0">
       <p className="text-[11px] text-slate-400 uppercase tracking-wide font-semibold flex items-center gap-1">
         {label}
         <InfoTip label={label}>{tip}</InfoTip>
       </p>
-      <p className={`text-xl font-bold leading-tight mt-1 ${tone ?? 'text-slate-900'}`}>{value}</p>
+      <div className="flex items-baseline gap-2 mt-1">
+        <p className={`text-xl font-bold leading-tight ${tone ?? 'text-slate-900'}`}>{value}</p>
+        {/* The verdict rides beside the figure rather than under it, so the two
+            are read as one thing — a number and what it means. */}
+        {read && (
+          <span className={`text-[11px] font-semibold ${TONE_TEXT[read.band.tone]}`}>
+            {read.band.label}
+          </span>
+        )}
+      </div>
       <p className="text-[11px] text-slate-400 truncate mt-0.5">{sub}</p>
+      {scale && <MetricScale value={reading ?? null} scale={scale} label={label} />}
     </div>
   );
 }
