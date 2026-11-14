@@ -8,6 +8,8 @@ export interface HostexSyncResult {
   updated: number;
   total: number;
   deduped: number;
+  /** Stays removed because Hostex no longer reports them as live. */
+  cancelled?: number;
   /** Hostex units that match none of the properties on this account. */
   unassigned?: { hostexPropertyId: string; reservations: number }[];
   base: string;
@@ -136,7 +138,9 @@ export default function HostexConnect({ heading, subheading, onSynced }: Props) 
             <p className="text-sm text-emerald-800">
               Synced {result.total} reservation{result.total !== 1 ? 's' : ''} —{' '}
               {result.created} new, {result.updated} updated
-              {result.deduped > 0 && `, ${result.deduped} duplicate${result.deduped !== 1 ? 's' : ''} removed`}.
+              {result.deduped > 0 && `, ${result.deduped} duplicate${result.deduped !== 1 ? 's' : ''} removed`}
+              {!!result.cancelled && result.cancelled > 0 &&
+                `, ${result.cancelled} cancelled stay${result.cancelled !== 1 ? 's' : ''} cleared`}.
             </p>
             <p className="text-xs text-emerald-600 font-mono mt-1">via {result.base}</p>
             {/* Say which stays were left out rather than filing them against

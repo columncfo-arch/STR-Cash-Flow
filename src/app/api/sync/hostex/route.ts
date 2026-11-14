@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { requireScope, unauthorized, AuthError } from '@/lib/auth';
 import { loadSettings, loadBookings, replaceAllBookings, saveAccount, type Scope } from '@/lib/storage';
+import { coveredSpan, pruneCancelled, type CoveredSpan } from '@/lib/hostexSync';
 import { Booking, Platform } from '@/types';
 
 export const dynamic = 'force-dynamic';
@@ -189,8 +190,17 @@ export async function GET() {
  * property it belongs to. Dedup is per property by design: two units can of
  * course hold stays over the same dates, and collapsing those would delete real
  * bookings.
+ *
+ * `activeCodes` and `span` describe the whole account rather than this unit,
+ * because that is what decides whether a stored stay has been cancelled — see
+ * `pruneCancelled`.
  */
-async function syncIntoProperty(scope: Scope, active: HostexReservation[]) {
+async function syncIntoProperty(
+  scope: Scope,
+  active: HostexReservation[],
+  activeCodes: ReadonlySet<string>,
+  span: CoveredSpan | null,
+) {
   const existing = await loadBookings(scope);
   const now = new Date().toISOString();
   let created = 0;
@@ -281,6 +291,10 @@ async function syncIntoProperty(scope: Scope, active: HostexReservation[]) {
     }
   }
 
+  // Drop stays Hostex no longer reports as live, before the dedup below can
+  // let one of them absorb its own replacement's figures.
+  const { kept: live, cancelled } = pruneCancelled(existing, activeCodes, span);
+
   // Deduplicate by the stay itself — one unit cannot hold two bookings over
   // the same check-in/check-out pair, so a collision is the same reservation
   // recorded twice. Confirmation codes deliberately do NOT gate this: a CSV
@@ -288,10 +302,10 @@ async function syncIntoProperty(scope: Scope, active: HostexReservation[]) {
   // precisely the duplicates worth collapsing. The winner absorbs the loser's
   // fields, so a CSV row's cleaning/tax detail survives the merge.
   let deduped = 0;
-  const seen = new Map<string, number>(); // key → index in existing
+  const seen = new Map<string, number>(); // key → index in live
   const toRemove = new Set<number>();
-  for (let i = 0; i < existing.length; i++) {
-    const b = existing[i];
+  for (let i = 0; i < live.length; i++) {
+    const b = live[i];
     // Without both dates the stay isn't identified well enough to merge on.
     if (!b.checkIn || !b.checkOut) continue;
     const key = `${b.checkIn}|${b.checkOut}`;
@@ -300,7 +314,7 @@ async function syncIntoProperty(scope: Scope, active: HostexReservation[]) {
       seen.set(key, i);
       continue;
     }
-    const prev = existing[prevIdx];
+    const prev = live[prevIdx];
     // Prefer Hostex-sourced; otherwise prefer whichever has a confirmation code
     const keepNew = b.sourceId === 'hostex' || (!prev.confirmationCode && !!b.confirmationCode);
     const [keep, drop] = keepNew ? [b, prev] : [prev, b];
@@ -310,10 +324,10 @@ async function syncIntoProperty(scope: Scope, active: HostexReservation[]) {
     if (keepNew) seen.set(key, i);
     deduped++;
   }
-  const dedupedBookings = existing.filter((_, i) => !toRemove.has(i));
+  const dedupedBookings = live.filter((_, i) => !toRemove.has(i));
 
   await replaceAllBookings(scope, dedupedBookings);
-  return { created, updated, deduped };
+  return { created, updated, deduped, cancelled };
 }
 
 export async function POST() {
@@ -336,6 +350,19 @@ export async function POST() {
       const s = (r.status ?? '').toLowerCase();
       return s !== 'cancelled' && s !== 'canceled' && s !== 'denied' && s !== 'inquiry';
     });
+
+    // Every code Hostex still reports as live, anywhere on the account. Taken
+    // before the reservations are grouped, so a unit this app does not yet
+    // recognise still counts as live and its stays are never pruned.
+    const activeCodes = new Set<string>();
+    for (const r of active) {
+      if (r.reservation_code) activeCodes.add(r.reservation_code);
+      if (r.stay_code) activeCodes.add(r.stay_code);
+    }
+
+    // Built from the unfiltered result, so a cancelled reservation still counts
+    // as evidence that Hostex reported on its dates.
+    const span = coveredSpan(raw.map(r => r.check_in_date));
 
     // Which of our properties each Hostex unit belongs to.
     //
@@ -377,8 +404,21 @@ export async function POST() {
       }
     }
 
+    // A property whose every stay has been cancelled has no reservations left
+    // to group, and so would never be visited — leaving precisely the stale
+    // records the pruning step exists to remove. Properties a previous sync has
+    // already claimed are visited regardless, with nothing to merge.
+    for (const p of live) {
+      if (p.externalIds?.length && !groups.some(g => g.scope.propertyId === p.id)) {
+        groups.push({ scope: { userId, propertyId: p.id }, hostexIds: [], reservations: [] });
+      }
+    }
+
     const results = await Promise.all(
-      groups.map(async g => ({ ...g, ...(await syncIntoProperty(g.scope, g.reservations)) })),
+      groups.map(async g => ({
+        ...g,
+        ...(await syncIntoProperty(g.scope, g.reservations, activeCodes, span)),
+      })),
     );
 
     // Remember which Hostex unit each property answers to, so a second property
@@ -396,6 +436,7 @@ export async function POST() {
       created: results.reduce((t, r) => t + r.created, 0),
       updated: results.reduce((t, r) => t + r.updated, 0),
       deduped: results.reduce((t, r) => t + r.deduped, 0),
+      cancelled: results.reduce((t, r) => t + r.cancelled, 0),
       total: active.length,
       unassigned,
       base: HOSTEX_BASE,
