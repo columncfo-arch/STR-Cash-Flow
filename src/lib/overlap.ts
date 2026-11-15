@@ -42,6 +42,63 @@ export function overlaps(a: DatedStay, b: DatedStay): boolean {
  * cannot be placed on a calendar, and treating a blank check-out as midnight
  * would pair it with everything.
  */
+/** A stay whose channel is known, so a clash can be told apart from a ghost. */
+export interface ChannelStay extends DatedStay {
+  platform: string;
+}
+
+export interface ClashReport<T> {
+  /**
+   * Stays clashing only with others on their own channel. One channel cannot
+   * sell the same night twice, so this is almost always a reservation that was
+   * cancelled after it synced and never removed — a number to delete.
+   */
+  sameChannel: T[];
+  /**
+   * Stays clashing with one on a different channel. Two channels that do not
+   * share a calendar can and will sell the same night, so both guests really
+   * hold it. Deleting either row would hide the problem rather than fix it.
+   */
+  crossChannel: T[];
+}
+
+/**
+ * Clashing stays, split by whether the clash is real.
+ *
+ * The distinction is the whole point. An owner running one channel manager has
+ * only the first kind, and can treat every clash as bad data. An owner whose
+ * channels are driven by two systems that do not share a calendar has both, and
+ * the two call for opposite responses: one is deleted, the other is a double
+ * booking with two guests in it, where the figures are the least of the problem.
+ *
+ * Judged pair by pair rather than over a whole run. A long stay can chain two
+ * others together that never touch each other, and asking merely whether a run
+ * contains two channels would call that a double booking when no two stays in
+ * it actually collide. A stay clashing both ways is reported as cross-channel,
+ * that being the one worth looking at first.
+ */
+export function classifyClashes<T extends ChannelStay>(stays: readonly T[]): ClashReport<T> {
+  const crossChannel = new Set<T>();
+  const sameChannel = new Set<T>();
+
+  for (const cluster of overlapClusters(stays)) {
+    // Clusters are a handful of stays at most, so comparing every pair is
+    // cheaper than any index that would avoid it.
+    for (let i = 0; i < cluster.length; i++) {
+      for (let j = i + 1; j < cluster.length; j++) {
+        const [a, b] = [cluster[i], cluster[j]];
+        if (!overlaps(a, b)) continue;
+        const target = a.platform === b.platform ? sameChannel : crossChannel;
+        target.add(a);
+        target.add(b);
+      }
+    }
+  }
+
+  for (const stay of crossChannel) sameChannel.delete(stay);
+  return { sameChannel: [...sameChannel], crossChannel: [...crossChannel] };
+}
+
 export function overlapClusters<T extends DatedStay>(stays: readonly T[]): T[][] {
   const sorted = stays
     .filter(s => s.checkIn && s.checkOut && s.checkOut > s.checkIn)

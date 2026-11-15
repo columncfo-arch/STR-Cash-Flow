@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { overlapClusters, overlaps } from '@/lib/overlap';
+import { classifyClashes, overlapClusters, overlaps } from '@/lib/overlap';
 
 const stay = (checkIn: string, checkOut: string, guest = '') => ({ checkIn, checkOut, guest });
 
@@ -114,4 +114,72 @@ describe('finding the pile-ups on a calendar', () => {
         stay('2026-11-12', '2026-11-12'), stay('2026-11-11', '2026-11-13'),
       ])).toEqual([]));
   });
+});
+
+/**
+ * Telling a stale cancellation from a real double booking.
+ *
+ * An owner whose channels run through one manager only ever has the first kind.
+ * An owner running Airbnb through one system and VRBO through another, with no
+ * shared calendar between them, has both — and they call for opposite
+ * responses, so collapsing them into one warning helps nobody.
+ */
+describe('which clashes are real', () => {
+  const stay = (platform: string, checkIn: string, checkOut: string, id = '') =>
+    ({ platform, checkIn, checkOut, id });
+
+  it('calls a clash within one channel a stale record', () => {
+    const r = classifyClashes([
+      stay('airbnb', '2026-11-09', '2026-11-13', 'elias'),
+      stay('airbnb', '2026-11-12', '2026-11-15', 'ira'),
+    ]);
+    expect(r.sameChannel.map(s => s.id).sort()).toEqual(['elias', 'ira']);
+    expect(r.crossChannel).toEqual([]);
+  });
+
+  it('calls a clash across two channels a double booking', () => {
+    const r = classifyClashes([
+      stay('airbnb', '2026-11-09', '2026-11-13', 'elias'),
+      stay('vrbo', '2026-11-12', '2026-11-15', 'real-guest'),
+    ]);
+    expect(r.crossChannel.map(s => s.id).sort()).toEqual(['elias', 'real-guest']);
+    expect(r.sameChannel).toEqual([]);
+  });
+
+  it('leaves a cleanly turned-over calendar alone whatever the channels', () =>
+    expect(classifyClashes([
+      stay('airbnb', '2026-11-06', '2026-11-07'),
+      stay('vrbo', '2026-11-07', '2026-11-08'),
+    ])).toEqual({ sameChannel: [], crossChannel: [] }));
+
+  /**
+   * The reason this is judged pair by pair. A long stay chains the two short
+   * ones into one run, but those two never touch each other — so asking only
+   * whether the run holds two channels would report a double booking between
+   * stays that do not collide.
+   */
+  it('does not invent a clash between two stays that never touch', () => {
+    const r = classifyClashes([
+      stay('airbnb', '2026-11-01', '2026-11-20', 'long'),
+      stay('airbnb', '2026-11-03', '2026-11-04', 'early'),
+      stay('vrbo', '2026-11-17', '2026-11-18', 'late'),
+    ]);
+    // long collides with both; early and late never meet
+    expect(r.crossChannel.map(s => s.id).sort()).toEqual(['late', 'long']);
+    expect(r.sameChannel.map(s => s.id)).toEqual(['early']);
+  });
+
+  // The urgent reading wins: a stay that is both is one to look at first
+  it('reports a stay clashing both ways as the double booking', () => {
+    const r = classifyClashes([
+      stay('airbnb', '2026-11-10', '2026-11-16', 'middle'),
+      stay('airbnb', '2026-11-11', '2026-11-12', 'ghost'),
+      stay('vrbo', '2026-11-14', '2026-11-15', 'guest'),
+    ]);
+    expect(r.crossChannel.map(s => s.id).sort()).toEqual(['guest', 'middle']);
+    expect(r.sameChannel.map(s => s.id)).toEqual(['ghost']);
+  });
+
+  it('reports nothing for an empty calendar', () =>
+    expect(classifyClashes([])).toEqual({ sameChannel: [], crossChannel: [] }));
 });

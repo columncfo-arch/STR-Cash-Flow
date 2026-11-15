@@ -5,7 +5,7 @@ import PlatformBadge from '@/components/PlatformBadge';
 import { format } from 'date-fns';
 import { Pencil, Plus, X, Check, AlertTriangle, Download, Trash2 } from 'lucide-react';
 import { RANGE_PRESETS, presetRange, inRange, type RangePreset } from '@/lib/dateRange';
-import { overlapClusters } from '@/lib/overlap';
+import { classifyClashes } from '@/lib/overlap';
 
 const PLATFORM_OPTIONS: { value: Platform; label: string }[] = [
   { value: 'airbnb', label: 'Airbnb' },
@@ -262,15 +262,16 @@ export default function BookingsPage() {
    * Computed over every booking rather than the visible range, so a stay
    * clashing with one just outside the current filter is still marked.
    */
-  const clashing = useMemo(() => {
-    const ids = new Set<string>();
-    for (const cluster of overlapClusters(bookings)) {
-      for (const b of cluster) ids.add(b.id);
-    }
-    return ids;
+  const clashes = useMemo(() => {
+    const { sameChannel, crossChannel } = classifyClashes(bookings);
+    return {
+      stale: new Set(sameChannel.map(b => b.id)),
+      doubleBooked: new Set(crossChannel.map(b => b.id)),
+    };
   }, [bookings]);
 
-  const clashingVisible = visible.filter(b => clashing.has(b.id)).length;
+  const staleVisible = visible.filter(b => clashes.stale.has(b.id)).length;
+  const doubleVisible = visible.filter(b => clashes.doubleBooked.has(b.id)).length;
 
   return (
     <div className="max-w-5xl mx-auto overflow-x-hidden">
@@ -314,19 +315,34 @@ export default function BookingsPage() {
         </div>
       </div>
 
-      {clashingVisible > 0 && (
+      {doubleVisible > 0 && (
+        <div className="flex items-start gap-3 border border-red-200 bg-red-50 rounded-xl p-4 mb-4">
+          <AlertTriangle className="w-4 h-4 text-red-600 shrink-0 mt-0.5" />
+          <div className="text-sm text-slate-700 leading-relaxed">
+            <p className="font-medium text-red-900">
+              {doubleVisible} stay{doubleVisible !== 1 ? 's' : ''} shaded red hold nights a stay on another channel also holds
+            </p>
+            <p className="mt-1 text-xs">
+              Two channels have sold the same nights, which happens when they are driven by
+              systems that do not share a calendar. Both guests really booked — this is a
+              conversation to have with them, not a row to delete. Deleting one would only
+              hide it until someone arrives.
+            </p>
+          </div>
+        </div>
+      )}
+
+      {staleVisible > 0 && (
         <div className="flex items-start gap-3 border border-amber-200 bg-amber-50 rounded-xl p-4 mb-6">
           <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
           <div className="text-sm text-slate-700 leading-relaxed">
             <p className="font-medium text-amber-900">
-              {clashingVisible} stay{clashingVisible !== 1 ? 's' : ''} shaded below claim nights another stay already has
+              {staleVisible} stay{staleVisible !== 1 ? 's' : ''} shaded amber clash with another stay on the same channel
             </p>
             <p className="mt-1 text-xs">
-              One unit has one calendar, so these cannot all be real. Check the Platform column:
-              two rows on the same channel usually means a reservation that was cancelled after it
-              synced and never removed — delete it. Two rows on <em>different</em> channels means
-              both guests really booked those nights, which is a double booking to sort out with
-              them, not a number to fix here.
+              One channel cannot sell the same night twice, so one of these is almost certainly
+              a reservation cancelled after it synced and never removed. Delete it: until you do
+              it inflates that month’s revenue and its occupancy together.
             </p>
           </div>
         </div>
@@ -531,7 +547,9 @@ export default function BookingsPage() {
                       className={`border-b ${
                         isEditing
                           ? 'border-slate-200 bg-slate-50'
-                          : clashing.has(b.id)
+                          : clashes.doubleBooked.has(b.id)
+                          ? 'border-red-200 bg-red-50 hover:bg-red-100/70'
+                          : clashes.stale.has(b.id)
                           ? 'border-amber-200 bg-amber-50 hover:bg-amber-100/70'
                           : 'border-slate-50 hover:bg-slate-50'
                       }`}
@@ -626,7 +644,9 @@ export default function BookingsPage() {
                         {b.nights > 0 && b.income > 0 ? fmt(b.income / b.nights) : '—'}
                       </td>
                       <td className={`sticky right-0 px-4 py-3 text-right border-l border-slate-100 ${
-                        isEditing ? 'bg-slate-50' : clashing.has(b.id) ? 'bg-amber-50' : 'bg-white'
+                        isEditing ? 'bg-slate-50'
+                          : clashes.doubleBooked.has(b.id) ? 'bg-red-50'
+                          : clashes.stale.has(b.id) ? 'bg-amber-50' : 'bg-white'
                       }`}>
                         <div className="flex items-center justify-end gap-1">
                           {isEditing ? (
