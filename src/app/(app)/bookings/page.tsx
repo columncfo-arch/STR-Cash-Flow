@@ -1,10 +1,11 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Booking, Platform, Settings } from '@/types';
 import PlatformBadge from '@/components/PlatformBadge';
 import { format } from 'date-fns';
-import { Pencil, Plus, X, Check, AlertTriangle, Download } from 'lucide-react';
+import { Pencil, Plus, X, Check, AlertTriangle, Download, Trash2 } from 'lucide-react';
 import { RANGE_PRESETS, presetRange, inRange, type RangePreset } from '@/lib/dateRange';
+import { overlapClusters } from '@/lib/overlap';
 
 const PLATFORM_OPTIONS: { value: Platform; label: string }[] = [
   { value: 'airbnb', label: 'Airbnb' },
@@ -53,6 +54,9 @@ export default function BookingsPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [editState, setEditState] = useState<EditState | null>(null);
+  // Deleting a booking cannot be undone, so the row asks once before it goes.
+  const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const editStateRef = useRef(editState);
   editStateRef.current = editState;
   const [showAdd, setShowAdd] = useState(false);
@@ -123,6 +127,27 @@ export default function BookingsPage() {
   }
   function cancelEditSave() {
     if (saveTimerRef.current) { clearTimeout(saveTimerRef.current); saveTimerRef.current = null; }
+  }
+
+  /**
+   * Remove one booking for good.
+   *
+   * The row is dropped from the list directly rather than by reloading, so a
+   * stay deleted from a filtered view does not drag the whole page back to an
+   * unfiltered one underneath the reader.
+   */
+  async function deleteBooking(id: string) {
+    setDeleting(id);
+    try {
+      const res = await fetch(`/api/bookings/${id}`, { method: 'DELETE' });
+      if (!res.ok) throw new Error('Could not delete that booking.');
+      setBookings(prev => prev.filter(b => b.id !== id));
+      setConfirmDelete(null);
+    } catch (e) {
+      setLoadError(e instanceof Error ? e.message : 'Could not delete that booking.');
+    } finally {
+      setDeleting(null);
+    }
   }
 
   async function saveEdit(id: string) {
@@ -225,6 +250,28 @@ export default function BookingsPage() {
 
   const contactCount = visible.filter(b => b.email || b.phone).length;
 
+  /**
+   * Stays claiming a night another stay already has.
+   *
+   * A unit has one calendar, so these cannot all be real: either one is a
+   * cancellation nothing removed, or two channels have genuinely sold the same
+   * nights. Flagged here rather than left to be noticed, because an overlap
+   * reads as an ordinary busy week — it inflates the month's revenue and its
+   * occupancy together, and neither looks wrong enough on its own.
+   *
+   * Computed over every booking rather than the visible range, so a stay
+   * clashing with one just outside the current filter is still marked.
+   */
+  const clashing = useMemo(() => {
+    const ids = new Set<string>();
+    for (const cluster of overlapClusters(bookings)) {
+      for (const b of cluster) ids.add(b.id);
+    }
+    return ids;
+  }, [bookings]);
+
+  const clashingVisible = visible.filter(b => clashing.has(b.id)).length;
+
   return (
     <div className="max-w-5xl mx-auto overflow-x-hidden">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
@@ -266,6 +313,24 @@ export default function BookingsPage() {
           </button>
         </div>
       </div>
+
+      {clashingVisible > 0 && (
+        <div className="flex items-start gap-3 border border-amber-200 bg-amber-50 rounded-xl p-4 mb-6">
+          <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+          <div className="text-sm text-slate-700 leading-relaxed">
+            <p className="font-medium text-amber-900">
+              {clashingVisible} stay{clashingVisible !== 1 ? 's' : ''} shaded below claim nights another stay already has
+            </p>
+            <p className="mt-1 text-xs">
+              One unit has one calendar, so these cannot all be real. Check the Platform column:
+              two rows on the same channel usually means a reservation that was cancelled after it
+              synced and never removed — delete it. Two rows on <em>different</em> channels means
+              both guests really booked those nights, which is a double booking to sort out with
+              them, not a number to fix here.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Date range filter */}
       <div className="bg-white border border-slate-200 rounded-xl px-4 py-3 shadow-sm mb-6 flex flex-col lg:flex-row lg:items-center gap-3">
@@ -461,7 +526,16 @@ export default function BookingsPage() {
                 const hasContact = !!(b.email || b.phone);
                 return (
                   <>
-                    <tr key={b.id} className={`border-b ${isEditing ? 'border-slate-200 bg-slate-50' : 'border-slate-50 hover:bg-slate-50'}`}>
+                    <tr
+                      key={b.id}
+                      className={`border-b ${
+                        isEditing
+                          ? 'border-slate-200 bg-slate-50'
+                          : clashing.has(b.id)
+                          ? 'border-amber-200 bg-amber-50 hover:bg-amber-100/70'
+                          : 'border-slate-50 hover:bg-slate-50'
+                      }`}
+                    >
                       <td className="px-4 py-3">
                         {isEditing ? (
                           <select
@@ -551,7 +625,9 @@ export default function BookingsPage() {
                       <td className="px-4 py-3 text-right text-slate-500 text-xs">
                         {b.nights > 0 && b.income > 0 ? fmt(b.income / b.nights) : '—'}
                       </td>
-                      <td className="sticky right-0 bg-white px-4 py-3 text-right border-l border-slate-100">
+                      <td className={`sticky right-0 px-4 py-3 text-right border-l border-slate-100 ${
+                        isEditing ? 'bg-slate-50' : clashing.has(b.id) ? 'bg-amber-50' : 'bg-white'
+                      }`}>
                         <div className="flex items-center justify-end gap-1">
                           {isEditing ? (
                             <>
@@ -568,6 +644,25 @@ export default function BookingsPage() {
                                 onClick={() => { cancelEditSave(); setEditState(null); }}
                                 className="p-1.5 rounded hover:bg-slate-100 text-slate-400"
                                 title="Discard changes"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            </>
+                          ) : confirmDelete === b.id ? (
+                            <>
+                              <span className="text-xs text-slate-500 mr-1 whitespace-nowrap">Delete?</span>
+                              <button
+                                onClick={() => deleteBooking(b.id)}
+                                disabled={deleting === b.id}
+                                className="px-2 py-1 rounded bg-red-600 text-white text-xs hover:bg-red-700 disabled:opacity-60"
+                                title="Delete this booking for good"
+                              >
+                                {deleting === b.id ? 'Deleting…' : 'Yes'}
+                              </button>
+                              <button
+                                onClick={() => setConfirmDelete(null)}
+                                className="p-1.5 rounded hover:bg-slate-100 text-slate-400"
+                                title="Keep this booking"
                               >
                                 <X className="w-3.5 h-3.5" />
                               </button>
@@ -593,6 +688,13 @@ export default function BookingsPage() {
                                 title="Edit booking"
                               >
                                 <Pencil className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => { cancelEditSave(); setConfirmDelete(b.id); }}
+                                className="p-1.5 rounded hover:bg-red-50 text-slate-400 hover:text-red-600"
+                                title="Delete booking"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
                               </button>
                             </>
                           )}
