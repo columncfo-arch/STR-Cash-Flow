@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { Pencil, Plus, X, Check, AlertTriangle, Download, Trash2 } from 'lucide-react';
 import { RANGE_PRESETS, presetRange, inRange, type RangePreset } from '@/lib/dateRange';
 import { classifyClashes } from '@/lib/overlap';
+import { backupFilename, bookingsToCsv } from '@/lib/bookingCsv';
 
 const PLATFORM_OPTIONS: { value: Platform; label: string }[] = [
   { value: 'airbnb', label: 'Airbnb' },
@@ -174,8 +175,36 @@ export default function BookingsPage() {
     load();
   }
 
+  /** Hand the browser a file, used for both the contacts export and the backup. */
+  function download(csv: string, filename: string) {
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /**
+   * Wipe the books, after writing a copy of them out.
+   *
+   * The backup is not optional and is not a separate button to remember,
+   * because the thing being destroyed is partly unrecoverable: a stay synced
+   * from a channel manager comes back on the next sync, but one imported from a
+   * VRBO or Booking.com export exists here and nowhere else, as does every note
+   * and phone number entered by hand. Saving first costs a click nobody notices
+   * and is the difference between a mistake and a loss.
+   */
   async function clearAll() {
-    if (!confirm(`Delete ALL ${bookings.length} bookings? This cannot be undone.`)) return;
+    if (!confirm(
+      `Delete ALL ${bookings.length} bookings? This cannot be undone.\n\n`
+      + 'A CSV copy of every booking will be saved to your downloads first.\n\n'
+      + 'Bookings synced from Hostex come back on the next sync. Anything '
+      + 'imported from a VRBO or Booking.com export, and any note or contact '
+      + 'detail entered by hand, does not — the CSV is the only copy.'
+    )) return;
+    download(bookingsToCsv(bookings), backupFilename(new Date().toISOString()));
     await fetch('/api/bookings?all=true', { method: 'DELETE' });
     load();
   }
@@ -230,14 +259,10 @@ export default function BookingsPage() {
       alert('No guests with email or phone on record yet.');
       return;
     }
-    const csv = ['Name,Email,Phone,Check-in,Platform', ...rows].join('\n');
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `guest-contacts-${range.from || 'start'}_${range.to || 'end'}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    download(
+      ['Name,Email,Phone,Check-in,Platform', ...rows].join('\n'),
+      `guest-contacts-${range.from || 'start'}_${range.to || 'end'}.csv`,
+    );
   }
 
   // Filter on check-in, matching how the API's year/month params behave.
