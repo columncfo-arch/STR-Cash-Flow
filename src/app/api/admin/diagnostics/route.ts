@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import { requireScope, unauthorized, AuthError } from '@/lib/auth';
 import { loadBookings, loadLeads, loadExpenses, storageBackend } from '@/lib/storage';
 import { overlapClusters } from '@/lib/overlap';
+import { auditFees } from '@/lib/feeAudit';
 
 export const dynamic = 'force-dynamic';
 
@@ -95,6 +96,17 @@ export async function GET() {
       hostexUnits: Array.from(
         new Set(bookings.map(b => b.propertyId).filter((p): p is string => !!p)),
       ),
+
+      /**
+       * Whether each channel's cut is actually being taken out.
+       *
+       * Net revenue is gross less the fee, so a fee that never arrived does not
+       * read as a missing cost — it reads as a better month. `recordedRatePct`
+       * is what the books say; `impliedRatePct` is what the payouts say, over
+       * the same bookings. On Airbnb's host-only pricing both should sit near
+       * 15%. A `shortfall` above zero is fees being under-recorded, in dollars.
+       */
+      fees: auditFees(bookings),
 
       leadsBySource,
       earliestLead: leads.map(l => l.createdAt).sort()[0] ?? null,
