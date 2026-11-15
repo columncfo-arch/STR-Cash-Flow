@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { coveredSpan, isCancelled, pruneCancelled, type StoredStay } from '@/lib/hostexSync';
+import { isCancelled, pruneCancelled, type StoredStay } from '@/lib/hostexSync';
 
 /** A stay the sync wrote, in the books. */
 const synced = (over: Partial<StoredStay> = {}): StoredStay => ({
@@ -8,24 +8,6 @@ const synced = (over: Partial<StoredStay> = {}): StoredStay => ({
 
 const span = { from: '2026-01-04', to: '2027-02-20' };
 const live = new Set(['HM4K2P', 'HMXT91']);
-
-describe('the dates a fetch accounted for', () => {
-  it('runs from the first check-in to the last', () =>
-    expect(coveredSpan(['2026-06-01', '2026-01-04', '2027-02-20'])).toEqual(span));
-
-  it('ignores reservations with no check-in', () =>
-    expect(coveredSpan([undefined, '2026-06-01', '', '2026-08-01']))
-      .toEqual({ from: '2026-06-01', to: '2026-08-01' }));
-
-  it('is a single day for a single reservation', () =>
-    expect(coveredSpan(['2026-06-01'])).toEqual({ from: '2026-06-01', to: '2026-06-01' }));
-
-  // Nothing to go on means nothing gets deleted, which is the only safe
-  // reading of a fetch that returned nothing
-  it('is nothing at all for an empty account', () => expect(coveredSpan([])).toBeNull());
-  it('is nothing at all where no reservation carries a date', () =>
-    expect(coveredSpan([undefined, ''])).toBeNull());
-});
 
 describe('a stay Hostex no longer reports', () => {
   it('is cancelled when its code is gone from inside the covered span', () =>

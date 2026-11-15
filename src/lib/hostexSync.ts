@@ -14,6 +14,10 @@
 // the evidence is thin the record stays, because a stale booking is a visible
 // error an owner can report, while a deleted one is gone.
 
+import { withinSpan, type CoveredSpan } from '@/lib/span';
+
+export type { CoveredSpan };
+
 /** What this module needs to know about a stay already in the books. */
 export interface StoredStay {
   /** Which integration wrote it. Only the sync's own records are considered. */
@@ -22,35 +26,6 @@ export interface StoredStay {
   confirmationCode?: string;
   /** `YYYY-MM-DD`. Compared as a string, so no timezone can shift it. */
   checkIn: string;
-}
-
-/** The range of dates a fetch demonstrably reached. */
-export interface CoveredSpan {
-  from: string;
-  to: string;
-}
-
-/**
- * The span of check-in dates a fetch accounted for.
- *
- * Built from the *unfiltered* result, cancelled reservations included: a
- * cancelled reservation is still evidence that the API reported on its dates,
- * which is exactly the evidence needed to trust its silence elsewhere in the
- * span.
- *
- * Null where there is nothing to go on — an empty account, or a first sync
- * against a token with no reservations. Null means nothing is ever pruned,
- * which is the right answer when the fetch proves nothing.
- */
-export function coveredSpan(checkIns: readonly (string | undefined)[]): CoveredSpan | null {
-  let from = '';
-  let to = '';
-  for (const d of checkIns) {
-    if (!d) continue;
-    if (!from || d < from) from = d;
-    if (!to || d > to) to = d;
-  }
-  return from ? { from, to } : null;
 }
 
 /**
@@ -78,8 +53,7 @@ export function isCancelled(
   if (stay.sourceId !== 'hostex') return false;
   if (!stay.confirmationCode) return false;
   if (activeCodes.has(stay.confirmationCode)) return false;
-  if (!span || !stay.checkIn) return false;
-  return stay.checkIn >= span.from && stay.checkIn <= span.to;
+  return withinSpan(stay.checkIn, span);
 }
 
 /**

@@ -1,7 +1,8 @@
 import { NextResponse } from 'next/server';
 import { requireScope, unauthorized, AuthError } from '@/lib/auth';
 import { loadSettings, loadBookings, replaceAllBookings, saveAccount, type Scope } from '@/lib/storage';
-import { coveredSpan, pruneCancelled, type CoveredSpan } from '@/lib/hostexSync';
+import { pruneCancelled } from '@/lib/hostexSync';
+import { coveredSpan, type CoveredSpan } from '@/lib/span';
 import { Booking, Platform } from '@/types';
 
 export const dynamic = 'force-dynamic';
